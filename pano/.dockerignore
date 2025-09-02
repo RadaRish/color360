@@ -15,4 +15,3 @@ coverage
 *.log
 tests/
 scripts/
-package-lock.json
