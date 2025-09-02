@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест системы перетаскивания маркеров</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+        
+        .controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .status {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        #viewer-container {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h3>🎯 Тест перетаскивания маркеров</h3>
+        <button id="add-marker">➕ Добавить маркер</button>
+        <button id="reset-scene">🔄 Сброс сцены</button>
+    </div>
+    
+    <div class="status" id="status">
+        📊 Статус: Инициализация...
+    </div>
+    
+    <div id="viewer-container"></div>
+    
+    <script>
+        // Ждем загрузки A-Frame, затем тестируем координатный менеджер
+        document.addEventListener('DOMContentLoaded', () => {
+            // Дополнительная задержка для полной загрузки A-Frame
+            setTimeout(() => {
+                testCoordinateManager();
+            }, 1000);
+        });
+        
+        function testCoordinateManager() {
+            import('./core/coordinate_manager.js').then((module) => {
+                const CoordinateManager = module.default;
+                const statusEl = document.getElementById('status');
+            
+            function updateStatus(text) {
+                statusEl.innerHTML = text;
+                console.log(text);
+            }
+            
+            updateStatus('📐 CoordinateManager загружен');
+            
+            // Создаем простую A-Frame сцену для тестирования
+            const scene = document.createElement('a-scene');
+            scene.setAttribute('embedded', true);
+            scene.setAttribute('vr-mode-ui', 'enabled: false');
+            
+            // Добавляем камеру
+            const camera = document.createElement('a-camera');
+            camera.setAttribute('look-controls', 'enabled: true');
+            camera.setAttribute('wasd-controls', 'enabled: false');
+            camera.setAttribute('position', '0 0 0');
+            scene.appendChild(camera);
+            
+            // Добавляем небо (простой цвет)
+            const sky = document.createElement('a-sky');
+            sky.setAttribute('color', '#232323');
+            scene.appendChild(sky);
+            
+            // Добавляем сцену в контейнер
+            const container = document.getElementById('viewer-container');
+            container.appendChild(scene);
+            
+            updateStatus('🎭 A-Frame сцена создана');
+            
+            // Инициализируем координатный менеджер
+            const coordinateManager = new CoordinateManager();
+            
+            setTimeout(() => {
+                coordinateManager.initialize(scene);
+                updateStatus('✅ CoordinateManager инициализирован');
+                
+                // Создаем тестовый маркер
+                createTestMarker();
+            }, 1000);
+            
+            function createTestMarker() {
+                const marker = document.createElement('a-sphere');
+                marker.setAttribute('radius', '0.3');
+                marker.setAttribute('color', '#ff0000');
+                marker.setAttribute('position', '0 0 -5');
+                marker.id = 'test-marker';
+                
+                // Делаем маркер перетаскиваемым
+                coordinateManager.createDraggableMarker(marker, (newPosition) => {
+                    updateStatus(`🎯 Маркер перемещен в: x=${newPosition.x.toFixed(2)}, y=${newPosition.y.toFixed(2)}, z=${newPosition.z.toFixed(2)}`);
+                });
+                
+                scene.appendChild(marker);
+                updateStatus('📍 Тестовый маркер создан и настроен для перетаскивания');
+            }
+            
+            // Обработчики кнопок
+            document.getElementById('add-marker').addEventListener('click', () => {
+                const randomPos = {
+                    x: (Math.random() - 0.5) * 10,
+                    y: (Math.random() - 0.5) * 10,
+                    z: -3 - Math.random() * 5
+                };
+                
+                const marker = document.createElement('a-box');
+                marker.setAttribute('width', '0.5');
+                marker.setAttribute('height', '0.5');
+                marker.setAttribute('depth', '0.5');
+                marker.setAttribute('color', `#${Math.floor(Math.random()*16777215).toString(16)}`);
+                marker.setAttribute('position', `${randomPos.x} ${randomPos.y} ${randomPos.z}`);
+                marker.id = `marker-${Date.now()}`;
+                
+                coordinateManager.createDraggableMarker(marker, (newPosition) => {
+                    updateStatus(`🎲 Случайный маркер перемещен: x=${newPosition.x.toFixed(2)}, y=${newPosition.y.toFixed(2)}, z=${newPosition.z.toFixed(2)}`);
+                });
+                
+                scene.appendChild(marker);
+                updateStatus('🎲 Добавлен случайный маркер');
+            });
+            
+            document.getElementById('reset-scene').addEventListener('click', () => {
+                // Удаляем все маркеры
+                const markers = scene.querySelectorAll('a-sphere, a-box');
+                markers.forEach(marker => marker.remove());
+                updateStatus('🔄 Все маркеры удалены');
+                
+                // Создаем новый тестовый маркер
+                setTimeout(createTestMarker, 500);
+            });
+            
+            }).catch(error => {
+                console.error('Ошибка загрузки CoordinateManager:', error);
+                document.getElementById('status').innerHTML = '❌ Ошибка загрузки CoordinateManager: ' + error.message;
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тест кнопок зума</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        background: #1a1a1a;
+        color: white;
+        padding: 20px;
+      }
+      .test-section {
+        background: #333;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+      .zoom-controls {
+        display: flex;
+        gap: 10px;
+        margin: 20px 0;
+      }
+      button {
+        padding: 10px 20px;
+        background: #0066cc;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      button:hover {
+        background: #0055aa;
+      }
+      .log {
+        background: #222;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        font-family: monospace;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Тест кнопок зума</h1>
+
+    <div class="test-section">
+      <h2>Симуляция кнопок зума</h2>
+      <div class="zoom-controls">
+        <button id="zoom-in-btn">🔍+ Увеличить</button>
+        <button id="zoom-out-btn">🔍- Уменьшить</button>
+        <button id="zoom-reset-btn">🎯 Сброс</button>
+      </div>
+      <div>Текущий FOV: <span id="fov-display">80</span>°</div>
+    </div>
+
+    <div class="test-section">
+      <h2>Журнал событий</h2>
+      <div id="log" class="log"></div>
+      <button onclick="clearLog()">Очистить журнал</button>
+    </div>
+
+    <script>
+      let currentFov = 80;
+
+      function log(message) {
+        const logElement = document.getElementById("log");
+        const time = new Date().toLocaleTimeString();
+        logElement.innerHTML += `[${time}] ${message}<br>`;
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+
+      function updateFovDisplay() {
+        document.getElementById("fov-display").textContent =
+          currentFov.toFixed(1);
+      }
+
+      function clearLog() {
+        document.getElementById("log").innerHTML = "";
+      }
+
+      // Симуляция методов зума
+      const mockViewerManager = {
+        zoomIn: function () {
+          const zoomStep = 5;
+          const oldFov = currentFov;
+          currentFov = Math.max(10, currentFov - zoomStep);
+          updateFovDisplay();
+          log(
+            `🔍 Зум кнопкой +: FOV ${oldFov.toFixed(1)}° → ${currentFov.toFixed(1)}°`
+          );
+        },
+
+        zoomOut: function () {
+          const zoomStep = 5;
+          const oldFov = currentFov;
+          currentFov = Math.min(130, currentFov + zoomStep);
+          updateFovDisplay();
+          log(
+            `🔍 Зум кнопкой -: FOV ${oldFov.toFixed(1)}° → ${currentFov.toFixed(1)}°`
+          );
+        },
+
+        resetZoom: function () {
+          const oldFov = currentFov;
+          currentFov = 80;
+          updateFovDisplay();
+          log(`🔍 Сброс зума: FOV ${oldFov.toFixed(1)}° → 80.0°`);
+        },
+      };
+
+      // Подключение кнопок (как в main.js)
+      document.addEventListener("DOMContentLoaded", function () {
+        log("🚀 DOM загружен, подключаем кнопки...");
+
+        const zoomInBtn = document.getElementById("zoom-in-btn");
+        const zoomOutBtn = document.getElementById("zoom-out-btn");
+        const zoomResetBtn = document.getElementById("zoom-reset-btn");
+
+        if (zoomInBtn) {
+          zoomInBtn.onclick = () => {
+            log('🎯 Клик по кнопке "Увеличить"');
+            mockViewerManager.zoomIn();
+          };
+          log('✅ Кнопка "Увеличить" подключена');
+        } else {
+          log('❌ Кнопка "Увеличить" не найдена!');
+        }
+
+        if (zoomOutBtn) {
+          zoomOutBtn.onclick = () => {
+            log('🎯 Клик по кнопке "Уменьшить"');
+            mockViewerManager.zoomOut();
+          };
+          log('✅ Кнопка "Уменьшить" подключена');
+        } else {
+          log('❌ Кнопка "Уменьшить" не найдена!');
+        }
+
+        if (zoomResetBtn) {
+          zoomResetBtn.onclick = () => {
+            log('🎯 Клик по кнопке "Сброс"');
+            mockViewerManager.resetZoom();
+          };
+          log('✅ Кнопка "Сброс" подключена');
+        } else {
+          log('❌ Кнопка "Сброс" не найдена!');
+        }
+
+        log("🎉 Инициализация завершена");
+      });
+
+      // Тест клавиатурных сочетаний
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "+" || e.key === "=") {
+          log('⌨️ Нажата клавиша "+"');
+          mockViewerManager.zoomIn();
+        } else if (e.key === "-") {
+          log('⌨️ Нажата клавиша "-"');
+          mockViewerManager.zoomOut();
+        }
+      });
+
+      log("📋 Страница загружена. Тестируйте кнопки и клавиши +/-");
+    </script>
+  </body>
+</html>

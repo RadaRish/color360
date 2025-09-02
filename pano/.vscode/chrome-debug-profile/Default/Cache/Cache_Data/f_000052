@@ -1,0 +1,782 @@
+export default class HotspotManager {
+  constructor() {
+    this.viewerManager = null; // Будет установлено позже
+    this.hotspots = [];
+    this.sceneManager = null; // Будет установлено позже
+    // Реестр видео-URL для надежного восстановления между сценами/перезагрузками
+    this._videoRegistryKey = 'color_tour_video_registry';
+    this.videoRegistry = this.loadVideoRegistry();
+
+    // Реестр постеров (обложек) для видео-областей
+    this._posterRegistryKey = 'color_tour_video_posters';
+    this.posterRegistry = this.loadPosterRegistry();
+  }
+
+  setViewerManager(viewerManager) {
+    this.viewerManager = viewerManager;
+  }
+
+  setSceneManager(sceneManager) {
+    this.sceneManager = sceneManager;
+  }
+
+  addHotspot(scene, hotspotData) {
+    const id = `hotspot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log('🎯 Создаем хотспот с данными:', hotspotData);
+    console.log('🎯 Позиция в hotspotData:', hotspotData.position);
+
+    // Нормализуем позицию перед созданием хотспота
+    let normalizedPosition;
+    if (typeof hotspotData.position === 'string') {
+      const coords = hotspotData.position.split(' ').map(c => parseFloat(c) || 0);
+      normalizedPosition = { x: coords[0] || 0, y: coords[1] || 0, z: coords[2] || 0 };
+    } else if (hotspotData.position && typeof hotspotData.position === 'object') {
+      normalizedPosition = hotspotData.position;
+    } else {
+      normalizedPosition = { x: 0, y: 0, z: -5 };
+    }
+
+    const newHotspot = {
+      id,
+      sceneId: scene.id,
+      ...hotspotData,
+      position: normalizedPosition
+    };
+    console.log('🎯 Финальный хотспот:', newHotspot);
+    console.log('🎯 Позиция в newHotspot:', newHotspot.position);
+
+    this.hotspots.push(newHotspot);
+    scene.hotspots.push(newHotspot); // Также сохраняем в сцене для совместимости
+
+    this.viewerManager.createVisualMarker(newHotspot);
+
+    // Регистрируем videoUrl в реестре, если он уже задан
+    if (newHotspot.videoUrl && typeof newHotspot.videoUrl === 'string' && newHotspot.videoUrl.trim() !== '') {
+      this.registerVideoUrl(newHotspot.id, newHotspot.videoUrl);
+    }
+
+    // Автоматически сохраняем в localStorage
+    this.saveToStorage();
+
+    console.log('Хотспот добавлен:', newHotspot);
+  }
+
+  updateHotspot(hotspotId, data) {
+    const hotspot = this.findHotspotById(hotspotId);
+    if (!hotspot) return false;
+
+    Object.assign(hotspot, data);
+    this.viewerManager.updateVisualMarker(hotspot);
+
+    // Если обновился videoUrl — фиксируем его в реестре для будущего восстановления
+    if (data && typeof data.videoUrl === 'string' && data.videoUrl.trim() !== '') {
+      this.registerVideoUrl(hotspotId, data.videoUrl);
+    }
+
+    // Автоматически сохраняем в localStorage
+    this.saveToStorage();
+
+    console.log('Хотспот обновлен:', hotspot);
+    return true;
+  }
+
+  updateHotspotPosition(hotspotId, position) {
+    const hotspot = this.findHotspotById(hotspotId);
+    if (!hotspot) {
+      console.warn('Хотспот не найден для обновления позиции:', hotspotId);
+      return;
+    }
+
+    // Преобразуем позицию в правильный формат объекта для сохранения
+    let normalizedPosition;
+    if (position && typeof position === 'object') {
+      if (position.x !== undefined && position.y !== undefined && position.z !== undefined) {
+        // A-Frame позиция объект - извлекаем координаты
+        normalizedPosition = {
+          x: parseFloat(position.x) || 0,
+          y: parseFloat(position.y) || 0,
+          z: parseFloat(position.z) || 0
+        };
+      } else {
+        // Уже нормализованный объект
+        normalizedPosition = position;
+      }
+    } else if (typeof position === 'string') {
+      // Строковая позиция "x y z"
+      const coords = position.split(' ').map(c => parseFloat(c) || 0);
+      normalizedPosition = { x: coords[0] || 0, y: coords[1] || 0, z: coords[2] || 0 };
+    } else {
+      console.warn('💾 Неизвестный формат позиции:', position);
+      normalizedPosition = { x: 0, y: 0, z: -5 };
+    }
+
+    hotspot.position = normalizedPosition;
+    console.log('💾 Позиция хотспота обновлена:', hotspotId, normalizedPosition);
+    console.log('💾 Тип позиции:', typeof normalizedPosition, 'Конструктор:', normalizedPosition?.constructor?.name);
+    console.log('💾 Содержимое позиции:', JSON.stringify(normalizedPosition));
+
+    // Также обновляем в связанной сцене
+    if (this.sceneManager) {
+      const scene = this.sceneManager.getSceneById(hotspot.sceneId);
+      if (scene) {
+        const sceneHotspot = scene.hotspots.find(h => h.id === hotspotId);
+        if (sceneHotspot) {
+          sceneHotspot.position = normalizedPosition;
+        }
+      }
+    }
+
+    // Автоматически сохраняем в localStorage
+    this.saveToStorage();
+  }
+
+  removeHotspotById(hotspotId) {
+    const index = this.hotspots.findIndex(h => h.id === hotspotId);
+    if (index === -1) return;
+
+    const hotspot = this.hotspots[index];
+
+    // Удаляем из массива хотспотов
+    this.hotspots.splice(index, 1);
+
+    // Также удаляем из связанной сцены
+    if (this.sceneManager) {
+      const scene = this.sceneManager.getSceneById(hotspot.sceneId);
+      if (scene && scene.hotspots) {
+        const sceneIndex = scene.hotspots.findIndex(h => h.id === hotspotId);
+        if (sceneIndex !== -1) {
+          scene.hotspots.splice(sceneIndex, 1);
+        }
+      }
+    }
+
+    // Удаляем визуальный маркер
+    if (this.viewerManager) {
+      this.viewerManager.removeVisualMarker(hotspotId);
+    }
+
+    // Сохраняем изменения
+    this.saveToStorage();
+
+    console.log('Хотспот удален:', hotspotId);
+  }
+
+  editHotspot(hotspotId) {
+    const hotspot = this.findHotspotById(hotspotId);
+    if (!hotspot) {
+      console.warn('Хотспот не найден для редактирования:', hotspotId);
+      return;
+    }
+
+    // Вызываем глобальную функцию редактирования маркера
+    if (window.editMarker) {
+      window.editMarker(hotspotId);
+    } else {
+      console.warn('Функция editMarker не найдена');
+    }
+  }
+
+  removeHotspotByMarkerId(markerId) {
+    // Извлекаем ID хотспота из ID маркера
+    const hotspotId = markerId.replace('marker-', '');
+    this.removeHotspotById(hotspotId);
+  }
+
+  findHotspotById(id) {
+    const hotspot = this.hotspots.find(h => h.id === id);
+    if (hotspot && hotspot._needsVideoRestore && !hotspot.videoUrl) {
+      // Логируем о необходимости восстановления video URL
+      console.log(`🔄 Хотспот ${id} требует восстановления videoUrl`);
+      if (typeof hotspot._needsVideoRestore === 'string') {
+        console.log(`📁 Ожидаемый файл: ${hotspot._needsVideoRestore}`);
+      }
+    }
+    return hotspot;
+  }
+
+  findHotspotByMarkerId(markerId) {
+    const hotspotId = markerId.replace('marker-', '');
+    return this.findHotspotById(hotspotId);
+  }
+
+  getHotspotsForScene(sceneId) {
+    console.log('🔍 getHotspotsForScene вызван для сцены:', sceneId);
+    console.log('🔍 Все доступные маркеры:', this.hotspots);
+
+    // Загружаем из localStorage при каждом запросе для актуализации данных
+    this.loadFromStorage();
+
+    // ВАЖНО: фильтруем хотспоты строго по sceneId
+    const sceneHotspots = this.hotspots.filter(h => h.sceneId === sceneId);
+    console.log('🔍 Найдено маркеров для сцены', sceneId, ':', sceneHotspots.length);
+
+    if (sceneHotspots.length === 0) {
+      console.log('📋 Маркеры других сцен:', this.hotspots.filter(h => h.sceneId !== sceneId));
+    }
+
+    return sceneHotspots;
+  }
+
+  /**
+   * Очищает хотспоты, принадлежащие несуществующим сценам
+   */
+  cleanupOrphanedHotspots(validSceneIds) {
+    console.log('🧹 Очищаем хотспоты-сироты...');
+    console.log('✅ Валидные ID сцен:', validSceneIds);
+
+    const before = this.hotspots.length;
+    const orphanedHotspots = this.hotspots.filter(h => !validSceneIds.includes(h.sceneId));
+
+    if (orphanedHotspots.length > 0) {
+      console.log('🗑️ Найдены хотспоты-сироты для удаления:', orphanedHotspots.length);
+      orphanedHotspots.forEach(hotspot => {
+        console.log(`  🗑️ Удаляем хотспот "${hotspot.title}" (sceneId: ${hotspot.sceneId})`);
+      });
+
+      this.hotspots = this.hotspots.filter(h => validSceneIds.includes(h.sceneId));
+      this.saveToStorage();
+
+      console.log(`✅ Очистка завершена: было ${before}, стало ${this.hotspots.length}`);
+      return orphanedHotspots.length;
+    }
+
+    console.log('✅ Хотспоты-сироты не найдены');
+    return 0;
+  }
+
+  getHotspots() {
+    // Возвращаем все хотспоты
+    return this.hotspots || [];
+  }
+
+  loadHotspots(hotspotsData) {
+    this.hotspots = hotspotsData || [];
+    console.log('Загружено хотспотов:', this.hotspots.length);
+  }
+
+  getAllHotspots() {
+    return this.hotspots;
+  }
+
+  updateAllMarkersWithSettings(settings) {
+    this.hotspots.forEach(hotspot => {
+      if (!hotspot.size) {
+        hotspot.size = hotspot.type === 'hotspot' ? settings.hotspotSize : settings.infopointSize;
+      }
+      if (!hotspot.color) { // Если у хотспота нет индивидуального цвета
+        hotspot.color = hotspot.type === 'hotspot' ? settings.hotspotColor : settings.infopointColor;
+        if (this.viewerManager) {
+          this.viewerManager.updateVisualMarker(hotspot);
+        }
+      }
+    });
+  }
+
+  /**
+   * Сохраняет текущие хотспоты в localStorage
+   */
+  saveToStorage() {
+    try {
+      console.log('💾 Сохраняем хотспоты:', this.hotspots.length);
+
+      // РАДИКАЛЬНАЯ ОПТИМИЗАЦИЯ: сохраняем только критически важные данные
+      const hotspotsToSave = this.hotspots.map(hotspot => {
+        // Сохраняем только минимально необходимые поля
+        const minimizedHotspot = {
+          id: hotspot.id,
+          sceneId: hotspot.sceneId,
+          type: hotspot.type,
+          position: hotspot.position
+        };
+
+        // КРИТИЧЕСКИ ВАЖНО: Сохраняем цвет хотспота
+        if (hotspot.color && hotspot.color !== 'undefined') {
+          minimizedHotspot.color = hotspot.color;
+        }
+
+        // Сохраняем другие важные визуальные настройки
+        if (hotspot.size && hotspot.size !== 0.3) {
+          minimizedHotspot.size = hotspot.size;
+        }
+        if (hotspot.icon && hotspot.icon !== 'sphere') {
+          minimizedHotspot.icon = hotspot.icon;
+        }
+        if (hotspot.targetSceneId) {
+          minimizedHotspot.targetSceneId = hotspot.targetSceneId;
+        }
+
+        // Добавляем размеры только если они не дефолтные
+        if (hotspot.width && hotspot.width !== 2) {
+          minimizedHotspot.width = hotspot.width;
+        }
+        if (hotspot.height && hotspot.height !== 1.5) {
+          minimizedHotspot.height = hotspot.height;
+        }
+
+        // Видео размеры (для video-area и animated-object)
+        if (hotspot.videoWidth) minimizedHotspot.videoWidth = hotspot.videoWidth;
+        if (hotspot.videoHeight) minimizedHotspot.videoHeight = hotspot.videoHeight;
+
+        // Хромакей параметры для animated-object
+        if (hotspot.type === 'animated-object') {
+          if (hotspot.chromaEnabled) minimizedHotspot.chromaEnabled = !!hotspot.chromaEnabled;
+          if (hotspot.chromaColor) minimizedHotspot.chromaColor = hotspot.chromaColor;
+          if (hotspot.chromaSimilarity !== undefined) minimizedHotspot.chromaSimilarity = hotspot.chromaSimilarity;
+          if (hotspot.chromaSmoothness !== undefined) minimizedHotspot.chromaSmoothness = hotspot.chromaSmoothness;
+          if (hotspot.chromaThreshold !== undefined) minimizedHotspot.chromaThreshold = hotspot.chromaThreshold;
+        }
+
+        // Добавляем rotation только если он не нулевой
+        if (hotspot.rotation && (hotspot.rotation !== "0 0 0" && hotspot.rotation !== 0)) {
+          minimizedHotspot.rotation = hotspot.rotation;
+        }
+
+        // Добавляем title только если он есть и не пустой
+        if (hotspot.title && hotspot.title.trim()) {
+          minimizedHotspot.title = hotspot.title.substring(0, 50); // Ограничиваем длину
+        }
+
+        // ИСПРАВЛЕНИЕ: Сохраняем _originalData с исключенными большими полями
+        const excludedFields = ['videoUrl', 'videoData', 'thumbnail', 'poster', 'src', 'href', 'data', 'content', 'blob'];
+        const originalData = {};
+        let hasOriginalData = false;
+
+        excludedFields.forEach(field => {
+          if (hotspot.hasOwnProperty(field) && hotspot[field]) {
+            originalData[field] = hotspot[field];
+            hasOriginalData = true;
+            console.log(`💾 Сохраняем в _originalData: ${field} (размер: ${JSON.stringify(hotspot[field]).length} символов)`);
+          }
+        });
+
+        // Если есть большие данные для сохранения, сохраняем их в _originalData
+        if (hasOriginalData) {
+          minimizedHotspot._originalData = originalData;
+        }
+
+        // ВАЖНО: Сохраняем информацию о наличии videoUrl для восстановления
+        if (hotspot.videoUrl && hotspot.videoUrl.trim() !== '') {
+          // Сохраняем только имя файла или последние символы URL для идентификации
+          const urlParts = hotspot.videoUrl.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+          if (fileName.length < 100) { // Сохраняем короткие имена файлов
+            minimizedHotspot.videoFileName = fileName;
+          }
+          minimizedHotspot.hasVideo = true;
+        }
+
+        // Логирование для отладки размера данных
+        const originalSize = JSON.stringify(hotspot).length;
+        const optimizedSize = JSON.stringify(minimizedHotspot).length;
+        const reduction = ((originalSize - optimizedSize) / originalSize * 100).toFixed(1);
+
+        console.log(`💾 Минимизированный хотспот: ${hotspot.id}`);
+        console.log(`   Размер до: ${originalSize} символов`);
+        console.log(`   Размер после минимизации: ${optimizedSize} символов`);
+        console.log(`   Общее сжатие: ${reduction}%`);
+
+        return minimizedHotspot;
+      });
+
+      const dataToSave = JSON.stringify(hotspotsToSave);
+
+      // Проверяем размер данных
+      const sizeKB = (dataToSave.length / 1024).toFixed(2);
+      console.log(`💾 Размер оптимизированных данных: ${sizeKB} KB (было: 5653+ KB)`);
+
+      // Проверяем, что размер приемлемый (менее 2MB)
+      if (dataToSave.length > 2 * 1024 * 1024) {
+        console.warn('⚠️ Данные все еще слишком большие, дополнительная оптимизация...');
+        // Сохраняем только последние 30 хотспотов
+        const recentHotspots = hotspotsToSave.slice(-30);
+        const reducedData = JSON.stringify(recentHotspots);
+        console.log(`💾 Сохраняем только последние 30 хотспотов: ${(reducedData.length / 1024).toFixed(2)} KB`);
+        localStorage.setItem('color_tour_hotspots', reducedData);
+      } else {
+        localStorage.setItem('color_tour_hotspots', dataToSave);
+      }
+
+      console.log('💾 Хотспоты сохранены в localStorage (оптимизированная версия)');
+    } catch (error) {
+      if (error.name === 'QuotaExceededError') {
+        console.error('❌ localStorage переполнен! Пытаемся экстренную оптимизацию...');
+        this.handleQuotaExceeded();
+      } else {
+        console.error('❌ Ошибка сохранения хотспотов:', error);
+      }
+    }
+  }
+
+  /**
+   * Загружает реестр видео-URL из localStorage
+   */
+  loadVideoRegistry() {
+    try {
+      const raw = localStorage.getItem(this._videoRegistryKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      console.warn('⚠️ Не удалось загрузить реестр видео-URL, создаем новый:', e);
+      return {};
+    }
+  }
+
+  /**
+   * Загружает реестр постеров из localStorage
+   */
+  loadPosterRegistry() {
+    try {
+      const raw = localStorage.getItem(this._posterRegistryKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      console.warn('⚠️ Не удалось загрузить реестр постеров, создаем новый:', e);
+      return {};
+    }
+  }
+
+  /**
+   * Сохраняет реестр видео-URL в localStorage
+   */
+  saveVideoRegistry() {
+    try {
+      localStorage.setItem(this._videoRegistryKey, JSON.stringify(this.videoRegistry || {}));
+    } catch (e) {
+      console.warn('⚠️ Не удалось сохранить реестр видео-URL:', e);
+    }
+  }
+
+  /**
+   * Сохраняет реестр постеров в localStorage
+   */
+  savePosterRegistry() {
+    try {
+      localStorage.setItem(this._posterRegistryKey, JSON.stringify(this.posterRegistry || {}));
+    } catch (e) {
+      console.warn('⚠️ Не удалось сохранить реестр постеров:', e);
+    }
+  }
+
+  /**
+   * Регистрирует videoUrl для хотспота и синхронизирует базовые флаги
+   */
+  registerVideoUrl(hotspotId, videoUrl) {
+    if (!hotspotId || !videoUrl) return;
+
+    const fileName = (() => {
+      try {
+        const parts = String(videoUrl).split('/');
+        return parts[parts.length - 1] || String(videoUrl);
+      } catch {
+        return String(videoUrl);
+      }
+    })();
+
+    this.videoRegistry[hotspotId] = { url: videoUrl, fileName };
+    this.saveVideoRegistry();
+
+    // Синхронизируем в памяти хотспот
+    const hotspot = this.findHotspotById(hotspotId);
+    if (hotspot) {
+      hotspot.videoUrl = videoUrl;
+      hotspot.hasVideo = true;
+      hotspot.videoFileName = fileName;
+      if (hotspot._needsVideoRestore) delete hotspot._needsVideoRestore;
+    }
+  }
+
+  /**
+   * Регистрирует обложку (poster) как data URL или внешний URL
+   */
+  registerPoster(hotspotId, posterUrl) {
+    if (!hotspotId || !posterUrl) return;
+    this.posterRegistry[hotspotId] = { url: posterUrl, ts: Date.now() };
+    this.savePosterRegistry();
+
+    const hotspot = this.findHotspotById(hotspotId);
+    if (hotspot) {
+      hotspot.poster = posterUrl;
+    }
+  }
+
+  /**
+   * Возвращает обложку (poster) из реестра
+   */
+  getPoster(hotspotId) {
+    const entry = this.posterRegistry ? this.posterRegistry[hotspotId] : null;
+    return entry && entry.url ? entry.url : null;
+  }
+
+  /**
+   * Возвращает videoUrl из реестра для указанного хотспота
+   */
+  getVideoUrlFromRegistry(hotspotId) {
+    const entry = this.videoRegistry ? this.videoRegistry[hotspotId] : null;
+    return entry && entry.url ? entry.url : null;
+  }
+
+  /**
+   * Обрабатывает переполнение localStorage
+   */
+  handleQuotaExceeded() {
+    try {
+      console.log('⚠️ localStorage переполнен, выполняем автоматическую оптимизацию...');
+
+      // Автоматически очищаем все данные localStorage
+      localStorage.clear();
+      console.log('🧹 localStorage очищен');
+
+      // Сохраняем только последние 20 хотспотов в минимальном формате
+      const recentHotspots = this.hotspots.slice(-20).map(hotspot => ({
+        id: hotspot.id,
+        sceneId: hotspot.sceneId,
+        type: hotspot.type || 'video-area',
+        position: hotspot.position,
+        width: hotspot.width || 2,
+        height: hotspot.height || 1.5
+      }));
+
+      const emergencyData = JSON.stringify(recentHotspots);
+      console.log(`🆘 Автоматическое сохранение ${recentHotspots.length} последних хотспотов: ${(emergencyData.length / 1024).toFixed(2)} KB`);
+
+      localStorage.setItem('color_tour_hotspots', emergencyData);
+      console.log('💾 Автоматическое сохранение выполнено успешно');
+    } catch (retryError) {
+      console.error('❌ Ошибка при автоматическом сохранении:', retryError);
+    }
+  }
+
+  /**
+   * Загружает хотспоты из localStorage
+   */
+  loadFromStorage() {
+    try {
+      const stored = localStorage.getItem('color_tour_hotspots');
+      if (stored) {
+        this.hotspots = JSON.parse(stored);
+        console.log('📥 Хотспоты загружены из localStorage:', this.hotspots.length);
+
+        // Восстанавливаем исключенные поля из полных данных хотспотов
+        this.hotspots.forEach((hotspot, index) => {
+          console.log(`📥 Загруженный хотспот ${index + 1}: ${hotspot.id}`);
+          console.log(`   Позиция: ${JSON.stringify(hotspot.position)}`);
+
+          // Восстанавливаем недостающие поля из полных данных в памяти
+          this.restoreHotspotData(hotspot);
+        });
+
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('❌ Ошибка загрузки хотспотов:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Восстанавливает исключенные при сохранении поля хотспота
+   */
+  restoreHotspotData(hotspot) {
+    // Устанавливаем дефолтные значения для основных полей
+    if (!hotspot.width) hotspot.width = 2;
+    if (!hotspot.height) hotspot.height = 1.5;
+    if (!hotspot.rotation) hotspot.rotation = "0 0 0";
+    if (!hotspot.type) hotspot.type = "video-area";
+
+    // Восстанавливаем размеры видео если отсутствуют
+    if (hotspot.type === 'video-area') {
+      if (!hotspot.videoWidth) hotspot.videoWidth = 4;
+      if (!hotspot.videoHeight) hotspot.videoHeight = 3;
+    } else if (hotspot.type === 'animated-object') {
+      if (!hotspot.videoWidth) hotspot.videoWidth = 2;
+      if (!hotspot.videoHeight) hotspot.videoHeight = (2 * 9 / 16);
+      // Значения по умолчанию для хромакея
+      if (hotspot.chromaEnabled === undefined) hotspot.chromaEnabled = false;
+      if (!hotspot.chromaColor) hotspot.chromaColor = '#00ff00';
+      if (hotspot.chromaSimilarity === undefined) hotspot.chromaSimilarity = 0.4;
+      if (hotspot.chromaSmoothness === undefined) hotspot.chromaSmoothness = 0.1;
+      if (hotspot.chromaThreshold === undefined) hotspot.chromaThreshold = 0.0;
+    }
+
+    // КРИТИЧЕСКИ ВАЖНО: сохраняем оригинальный цвет перед восстановлением
+    const originalColor = hotspot.color;
+    console.log('🔍 Восстановление данных хотспота:', hotspot.id, 'оригинальный цвет:', originalColor);
+
+    // ИСПРАВЛЯЕМ: восстанавливаем цвета только если их действительно нет
+    const defaultSettings = this.getDefaultSettings();
+
+    // Проверяем, есть ли валидный цвет (включая стандартные цвета)
+    const hasValidColor = originalColor &&
+      originalColor !== 'undefined' &&
+      originalColor !== '' &&
+      originalColor !== null;
+
+    if (!hasValidColor) {
+      if (hotspot.type === 'hotspot') {
+        hotspot.color = defaultSettings?.hotspotColor || '#ff0000';
+      } else if (hotspot.type === 'info-point') {
+        hotspot.color = defaultSettings?.infopointColor || '#0066cc';
+      } else {
+        hotspot.color = '#ffcc00'; // Цвет по умолчанию для других типов
+      }
+      console.log('🎨 Восстановлен цвет по умолчанию для хотспота:', hotspot.id, hotspot.type, '->', hotspot.color);
+    } else {
+      // ВАЖНО: сохраняем оригинальный цвет
+      hotspot.color = originalColor;
+      console.log('✅ Сохранен оригинальный цвет хотспота:', hotspot.id, hotspot.type, '->', hotspot.color);
+    }
+
+    // Восстанавливаем другие визуальные свойства
+    if (!hotspot.textColor) hotspot.textColor = '#ffffff';
+    if (!hotspot.textSize) hotspot.textSize = '1';
+    if (!hotspot.textFamily) hotspot.textFamily = 'Arial, sans-serif';
+    if (hotspot.textBold === undefined) hotspot.textBold = false;
+    if (hotspot.textUnderline === undefined) hotspot.textUnderline = false;
+
+    // Проверяем, нужно ли восстановить videoUrl
+    if (hotspot.hasVideo && !hotspot.videoUrl) {
+      if (hotspot.videoFileName) {
+        // Помечаем для восстановления с информацией о файле
+        hotspot._needsVideoRestore = hotspot.videoFileName;
+        console.log(`⚠️ videoUrl отсутствует для хотспота ${hotspot.id} - файл: ${hotspot.videoFileName}`);
+      } else {
+        hotspot._needsVideoRestore = true;
+        console.log(`⚠️ videoUrl отсутствует для хотспота ${hotspot.id} - потребуется переустановка`);
+      }
+    }
+  }
+
+  /**
+   * Получает настройки по умолчанию (fallback если основная функция недоступна)
+   */
+  getDefaultSettings() {
+    if (window.viewerManager && typeof window.viewerManager.getDefaultSettings === 'function') {
+      return window.viewerManager.getDefaultSettings();
+    }
+
+    // Fallback настройки
+    return {
+      hotspotColor: '#ff0000',
+      infopointColor: '#0066cc',
+      hotspotSize: 0.3,
+      infopointSize: 0.25
+    };
+  }
+
+  /**
+   * Получает хотспот с восстановленными полными данными
+   */
+  getHotspotWithFullData(hotspotId) {
+    const hotspot = this.findHotspotById(hotspotId);
+    if (!hotspot) return null;
+
+    // Создаем копию хотспота для безопасности
+    const fullHotspot = { ...hotspot };
+
+    // СНАЧАЛА пробуем восстановить из реестра
+    if (!fullHotspot.videoUrl) {
+      const regUrl = this.getVideoUrlFromRegistry(hotspotId);
+      if (regUrl) {
+        fullHotspot.videoUrl = regUrl;
+        fullHotspot.hasVideo = true;
+        const parts = String(regUrl).split('/');
+        fullHotspot.videoFileName = parts[parts.length - 1] || undefined;
+        if (fullHotspot._needsVideoRestore) delete fullHotspot._needsVideoRestore;
+        console.log(`✅ videoUrl восстановлен из реестра для ${hotspotId}`);
+        return fullHotspot;
+      }
+    }
+
+    // ИСПРАВЛЕНИЕ: Восстанавливаем videoUrl из _originalData при наличии флага
+    if (fullHotspot._needsVideoRestore && !fullHotspot.videoUrl) {
+      console.log(`🔄 Восстановление videoUrl для хотспота ${hotspotId}`);
+
+      // Пытаемся найти оригинальные данные в памяти
+      const savedHotspots = JSON.parse(localStorage.getItem('color_tour_hotspots') || '[]');
+      const originalHotspot = savedHotspots.find(h => h.id === hotspotId);
+
+      if (originalHotspot && originalHotspot._originalData) {
+        // Восстанавливаем videoUrl из оригинальных данных
+        if (originalHotspot._originalData.videoUrl) {
+          fullHotspot.videoUrl = originalHotspot._originalData.videoUrl;
+          console.log(`✅ videoUrl восстановлен из _originalData для ${hotspotId}`);
+          // Сохраняем в реестр на будущее
+          this.registerVideoUrl(hotspotId, fullHotspot.videoUrl);
+        }
+
+        // Восстанавливаем другие исключенные поля
+        if (originalHotspot._originalData.videoData && !fullHotspot.videoData) {
+          fullHotspot.videoData = originalHotspot._originalData.videoData;
+          console.log(`✅ videoData восстановлен из _originalData для ${hotspotId}`);
+        }
+      } else {
+        // Если нет оригинальных данных, логируем предупреждение
+        console.warn(`⚠️ Не удалось найти _originalData для восстановления ${hotspotId}`);
+
+        if (typeof fullHotspot._needsVideoRestore === 'string') {
+          const fileName = fullHotspot._needsVideoRestore;
+          console.log(`📁 Ожидаемый файл: ${fileName} - требуется ручное восстановление`);
+        }
+      }
+
+      // Удаляем флаг восстановления
+      delete fullHotspot._needsVideoRestore;
+    }
+
+    return fullHotspot;
+  }
+
+  /**
+   * Автоматически восстанавливает видео без пользовательских подсказок
+   */
+  promptForVideoRestore(hotspot, expectedFileName) {
+    console.log(`🔄 Автоматическое восстановление видео для ${hotspot.id}`);
+    console.log(`📁 Ожидаемый файл: ${expectedFileName}`);
+
+    // Автоматически открываем редактор без подтверждения пользователя
+    this.editHotspot(hotspot.id);
+  }
+
+  /**
+   * Очищает все хотспоты
+   */
+  clearAll() {
+    this.hotspots = [];
+    localStorage.removeItem('color_tour_hotspots');
+    if (this.viewerManager) {
+      this.viewerManager.clearMarkers();
+    }
+    console.log('Все хотспоты очищены');
+  }
+
+  /**
+   * Диагностика размера localStorage (вызывать в консоли браузера)
+   */
+  static checkStorageSize() {
+    let total = 0;
+    const results = {};
+
+    for (let key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        const size = localStorage[key].length;
+        total += size;
+        results[key] = `${(size / 1024).toFixed(2)} KB`;
+      }
+    }
+
+    console.log('📊 Анализ localStorage:');
+    console.log(`📏 Общий размер: ${(total / 1024).toFixed(2)} KB`);
+    console.log('📋 По ключам:', results);
+
+    // Примерная оценка лимита (обычно 5-10 MB)
+    const estimatedLimit = 5 * 1024 * 1024; // 5 MB в байтах
+    const usage = (total / estimatedLimit * 100).toFixed(2);
+    console.log(`⚡ Использовано примерно: ${usage}% от лимита`);
+
+    return { total, results, usage };
+  }
+}
+
+// Добавляем глобальную функцию для быстрой диагностики
+window.checkStorageSize = HotspotManager.checkStorageSize;

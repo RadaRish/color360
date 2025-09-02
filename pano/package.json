@@ -1,0 +1,42 @@
+{
+  "name": "panorama-tour-editor",
+  "version": "1.0.0",
+  "description": "Приложение для создания и редактирования панорамных туров",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "npm run serve",
+    "dev": "live-server --port=5500 --host=localhost --watch=. --open=/index.html",
+    "lint": "eslint **/*.js --fix",
+    "format": "prettier --write **/*.{js,css,html,json}",
+    "validate": "html-validate index.html",
+    "build": "npm run lint && npm run format && npm run validate",
+    "serve": "python -m http.server 5500"
+  },
+  "keywords": [
+    "panorama",
+    "360",
+    "virtual-tour",
+    "photo-sphere-viewer"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.3",
+    "html-validate": "^8.5.0",
+    "live-server": "^1.2.2"
+  },
+  "dependencies": {
+    "@photo-sphere-viewer/core": "^5.0.0",
+    "@photo-sphere-viewer/markers-plugin": "^5.0.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

@@ -1,0 +1,29 @@
+{
+    "recommendations": [
+        "ms-vscode.vscode-js-debug",
+        "ritwickdey.liveserver",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-json",
+        "formulahendry.auto-rename-tag",
+        "bradlc.vscode-tailwindcss",
+        "christian-kohler.path-intellisense",
+        "visualstudioexptteam.vscodeintellicode",
+        "ms-vscode.vscode-typescript-next",
+        "firefox-devtools.vscode-firefox-debug",
+        "wallabyjs.console-ninja",
+        "dbaeumer.vscode-eslint",
+        "htmlhint.vscode-htmlhint",
+        "zignd.html-css-class-completion",
+        "formulahendry.code-runner",
+        "ms-vscode.live-server",
+        "christian-kohler.npm-intellisense",
+        "bradlc.vscode-tailwindcss",
+        "pranaygp.vscode-css-peek",
+        "ritwickdey.live-sass",
+        "ms-vscode.references-view"
+    ],
+    "unwantedRecommendations": [
+        "ms-vscode.vscode-typescript",
+        "hookyqr.beautify"
+    ]
+}

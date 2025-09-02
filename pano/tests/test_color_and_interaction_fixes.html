@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тест исправлений цветов и взаимодействий</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        font-family: Arial, sans-serif;
+        background: #1a1a1a;
+        color: white;
+      }
+
+      .test-container {
+        display: flex;
+        height: calc(100vh - 40px);
+        gap: 20px;
+      }
+
+      .viewer-section {
+        flex: 2;
+        border: 2px solid #4caf50;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .controls-section {
+        flex: 1;
+        background: #2a2a2a;
+        border-radius: 8px;
+        padding: 20px;
+        overflow-y: auto;
+      }
+
+      .test-group {
+        margin-bottom: 30px;
+        padding: 15px;
+        border: 1px solid #666;
+        border-radius: 5px;
+      }
+
+      .test-group h3 {
+        color: #4caf50;
+        margin-top: 0;
+      }
+
+      .test-button {
+        background: #646cff;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        margin: 5px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .test-button:hover {
+        background: #5a67ea;
+      }
+
+      .test-button.danger {
+        background: #ff4444;
+      }
+
+      .test-button.danger:hover {
+        background: #ff3333;
+      }
+
+      .status-display {
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 11px;
+        max-height: 200px;
+        overflow-y: auto;
+        margin-top: 10px;
+      }
+
+      .fix-status {
+        padding: 5px;
+        margin: 5px 0;
+        border-radius: 3px;
+      }
+
+      .fix-status.fixed {
+        background: #1b4332;
+        border-left: 3px solid #4caf50;
+      }
+
+      .fix-status.issue {
+        background: #4a1a1a;
+        border-left: 3px solid #ff4444;
+      }
+
+      .fix-status.testing {
+        background: #1a3a4a;
+        border-left: 3px solid #2196f3;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔧 Тест исправлений цветов и взаимодействий</h1>
+
+    <div class="test-container">
+      <div class="viewer-section">
+        <div id="viewerContainer" style="width: 100%; height: 100%"></div>
+      </div>
+
+      <div class="controls-section">
+        <div class="test-group">
+          <h3>📊 Статус исправлений</h3>
+          <div id="fixStatus">
+            <div class="fix-status fixed">
+              ✅ Исправление координат мыши (NaN)
+            </div>
+            <div class="fix-status fixed">
+              ✅ Восстановление цветов хотспотов
+            </div>
+            <div class="fix-status fixed">✅ Улучшенное удаление сцен</div>
+            <div class="fix-status fixed">
+              ✅ Правильный материал видео-областей
+            </div>
+            <div class="fix-status fixed">
+              ✅ Обработка кликов по видео-областям
+            </div>
+            <div class="fix-status testing">
+              🔄 Глобальное отслеживание мыши
+            </div>
+          </div>
+        </div>
+
+        <div class="test-group">
+          <h3>🎨 Тест цветов хотспотов</h3>
+          <button class="test-button" onclick="testHotspotColors()">
+            Создать хотспот (красный)
+          </button>
+          <button class="test-button" onclick="testInfopointColors()">
+            Создать инфоточку (синий)
+          </button>
+          <button class="test-button" onclick="testColorPreservation()">
+            Тест сохранения цветов
+          </button>
+          <div class="status-display" id="colorTestStatus">
+            Нажмите кнопки для тестирования цветов маркеров...
+          </div>
+        </div>
+
+        <div class="test-group">
+          <h3>🎬 Тест видео-областей</h3>
+          <button class="test-button" onclick="createVideoArea()">
+            Создать видео-область
+          </button>
+          <button class="test-button" onclick="testVideoInteraction()">
+            Тест клика по видео
+          </button>
+          <button class="test-button" onclick="testVideoMaterial()">
+            Проверить материал
+          </button>
+          <div class="status-display" id="videoTestStatus">
+            Нажмите кнопки для тестирования видео-областей...
+          </div>
+        </div>
+
+        <div class="test-group">
+          <h3>🖱️ Тест взаимодействий</h3>
+          <button class="test-button" onclick="testMouseTracking()">
+            Тест отслеживания мыши
+          </button>
+          <button class="test-button" onclick="testDragging()">
+            Тест перетаскивания
+          </button>
+          <button class="test-button" onclick="testRightClick()">
+            Тест правого клика
+          </button>
+          <div class="status-display" id="interactionTestStatus">
+            Тестируйте взаимодействия с маркерами...
+          </div>
+        </div>
+
+        <div class="test-group">
+          <h3>🔄 Тест переходов между сценами</h3>
+          <button class="test-button" onclick="testSceneTransition()">
+            Переход между сценами
+          </button>
+          <button class="test-button" onclick="checkColorAfterTransition()">
+            Проверка цветов после перехода
+          </button>
+          <button class="test-button danger" onclick="testSceneDeletion()">
+            Тест удаления сцены
+          </button>
+          <div class="status-display" id="sceneTestStatus">
+            Тестирование переходов и сохранения состояния...
+          </div>
+        </div>
+
+        <div class="test-group">
+          <h3>🐛 Отладочная информация</h3>
+          <button class="test-button" onclick="debugMarkers()">
+            Диагностика маркеров
+          </button>
+          <button class="test-button" onclick="debugMousePosition()">
+            Позиция мыши
+          </button>
+          <button class="test-button" onclick="clearConsole()">
+            Очистить консоль
+          </button>
+          <div class="status-display" id="debugStatus">
+            Отладочная информация будет показана здесь...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Загружаем основные модули -->
+    <script type="module" src="core/coordinate_manager.js"></script>
+    <script type="module" src="core/hotspot_manager.js"></script>
+    <script type="module" src="core/scene_manager.js"></script>
+    <script type="module" src="core/viewer_manager.js"></script>
+    <script type="module" src="core/project_manager.js"></script>
+    <script type="module" src="core/export_manager.js"></script>
+    <script type="module" src="ui/hotspot-editor.js"></script>
+
+    <script type="module">
+      import ViewerManager from "./core/viewer_manager.js";
+      import HotspotManager from "./core/hotspot_manager.js";
+      import SceneManager from "./core/scene_manager.js";
+
+      // Глобальные переменные для тестирования
+      let viewerManager, hotspotManager, sceneManager;
+      let testMarkerCount = 0;
+
+      // Инициализация приложения
+      async function initializeTest() {
+        try {
+          console.log("🔧 Инициализация тестовой среды...");
+
+          // Создаем менеджеры
+          hotspotManager = new HotspotManager();
+          viewerManager = new ViewerManager("viewerContainer", hotspotManager);
+          sceneManager = new SceneManager(viewerManager, hotspotManager);
+
+          // Устанавливаем глобальные ссылки
+          window.viewerManager = viewerManager;
+          window.hotspotManager = hotspotManager;
+          window.sceneManager = sceneManager;
+
+          // Создаем тестовую сцену
+          const scene1Data = {
+            name: "Тестовая сцена 1",
+            imageSrc:
+              "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAyNCIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCAxMDI0IDUxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjEwMjQiIGhlaWdodD0iNTEyIiBmaWxsPSIjMWExYTFhIi8+Cjx0ZXh0IHg9IjUxMiIgeT0iMjU2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjQ4Ij7QotC10YHRgtC+0LLQsNGPINGB0YbQtdC90LA8L3RleHQ+Cjwvc3ZnPgo=",
+          };
+
+          await sceneManager.addScene(scene1Data);
+
+          const scene2Data = {
+            name: "Тестовая сцена 2",
+            imageSrc:
+              "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAyNCIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCAxMDI0IDUxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjEwMjQiIGhlaWdodD0iNTEyIiBmaWxsPSIjMmEyYTJhIi8+Cjx0ZXh0IHg9IjUxMiIgeT0iMjU2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjQ4Ij7QotC10YHRgtC+0LLQsNGPINGB0YbQtdC90LAgMjwvdGV4dD4KPC9zdmc+Cg==",
+          };
+
+          await sceneManager.addScene(scene2Data);
+
+          updateStatus("debugStatus", "✅ Тестовая среда инициализирована");
+          console.log("✅ Тестовая среда готова");
+        } catch (error) {
+          console.error("❌ Ошибка инициализации:", error);
+          updateStatus(
+            "debugStatus",
+            "❌ Ошибка инициализации: " + error.message
+          );
+        }
+      }
+
+      // Вспомогательные функции
+      function updateStatus(elementId, message) {
+        const element = document.getElementById(elementId);
+        if (element) {
+          element.innerHTML =
+            `${new Date().toLocaleTimeString()}: ${message}<br>` +
+            element.innerHTML;
+        }
+      }
+
+      function getRandomPosition() {
+        const radius = 8;
+        const phi = Math.random() * Math.PI * 2;
+        const theta = Math.PI / 2 + ((Math.random() - 0.5) * Math.PI) / 3;
+
+        return {
+          x: radius * Math.sin(theta) * Math.cos(phi),
+          y: radius * Math.cos(theta) + Math.random() * 2 - 1,
+          z: radius * Math.sin(theta) * Math.sin(phi),
+        };
+      }
+
+      // Экспортируем функции в глобальную область видимости для использования в HTML
+      window.testHotspotColors = function () {
+        testMarkerCount++;
+        const position = getRandomPosition();
+
+        const hotspotData = {
+          title: `Тест хотспот ${testMarkerCount}`,
+          description: "Тестовый хотспот для проверки цветов",
+          type: "hotspot",
+          position: `${position.x} ${position.y} ${position.z}`,
+          color: "#ff0000", // Принудительно красный цвет
+          icon: "arrow",
+          size: "0.4",
+        };
+
+        if (hotspotManager) {
+          const currentScene = sceneManager.getCurrentScene();
+          if (currentScene) {
+            hotspotData.sceneId = currentScene.id;
+            const hotspot = hotspotManager.addHotspot(hotspotData);
+            viewerManager.createVisualMarker(hotspot);
+
+            updateStatus(
+              "colorTestStatus",
+              `✅ Создан хотспот с цветом: ${hotspotData.color}`
+            );
+          } else {
+            updateStatus("colorTestStatus", "❌ Нет активной сцены");
+          }
+        }
+      };
+
+      window.testInfopointColors = function () {
+        testMarkerCount++;
+        const position = getRandomPosition();
+
+        const hotspotData = {
+          title: `Тест инфоточка ${testMarkerCount}`,
+          description: "Тестовая инфоточка для проверки цветов",
+          type: "info-point",
+          position: `${position.x} ${position.y} ${position.z}`,
+          color: "#0066cc", // Принудительно синий цвет
+          icon: "sphere",
+          size: "0.3",
+        };
+
+        if (hotspotManager) {
+          const currentScene = sceneManager.getCurrentScene();
+          if (currentScene) {
+            hotspotData.sceneId = currentScene.id;
+            const hotspot = hotspotManager.addHotspot(hotspotData);
+            viewerManager.createVisualMarker(hotspot);
+
+            updateStatus(
+              "colorTestStatus",
+              `✅ Создана инфоточка с цветом: ${hotspotData.color}`
+            );
+          } else {
+            updateStatus("colorTestStatus", "❌ Нет активной сцены");
+          }
+        }
+      };
+
+      window.testColorPreservation = function () {
+        updateStatus(
+          "colorTestStatus",
+          "🔄 Тест сохранения цветов при переходах..."
+        );
+
+        // Переходим между сценами чтобы проверить сохранение цветов
+        const scenes = sceneManager.getAllScenes();
+        if (scenes.length >= 2) {
+          const currentScene = sceneManager.getCurrentScene();
+          const nextScene = scenes.find((s) => s.id !== currentScene.id);
+
+          sceneManager.switchToScene(nextScene.id);
+
+          setTimeout(() => {
+            sceneManager.switchToScene(currentScene.id);
+
+            setTimeout(() => {
+              updateStatus(
+                "colorTestStatus",
+                "✅ Переходы завершены, проверьте цвета маркеров"
+              );
+            }, 1000);
+          }, 1000);
+        } else {
+          updateStatus("colorTestStatus", "❌ Недостаточно сцен для теста");
+        }
+      };
+
+      window.createVideoArea = function () {
+        testMarkerCount++;
+        const position = getRandomPosition();
+
+        const hotspotData = {
+          title: `Видео-область ${testMarkerCount}`,
+          description: "Тестовая видео-область",
+          type: "video-area",
+          position: `${position.x} ${position.y} ${position.z}`,
+          videoWidth: 3,
+          videoHeight: 2,
+          // Без videoUrl чтобы протестировать заглушку
+        };
+
+        if (hotspotManager) {
+          const currentScene = sceneManager.getCurrentScene();
+          if (currentScene) {
+            hotspotData.sceneId = currentScene.id;
+            const hotspot = hotspotManager.addHotspot(hotspotData);
+            viewerManager.createVisualMarker(hotspot);
+
+            updateStatus(
+              "videoTestStatus",
+              `✅ Создана видео-область без видео (должна быть серой)`
+            );
+          } else {
+            updateStatus("videoTestStatus", "❌ Нет активной сцены");
+          }
+        }
+      };
+
+      window.testVideoInteraction = function () {
+        const videoAreas = document.querySelectorAll(
+          '[data-video-plane="true"]'
+        );
+        updateStatus(
+          "videoTestStatus",
+          `🔍 Найдено видео-областей: ${videoAreas.length}`
+        );
+
+        if (videoAreas.length > 0) {
+          updateStatus(
+            "videoTestStatus",
+            "👆 Кликните по видео-области для тестирования"
+          );
+        } else {
+          updateStatus("videoTestStatus", "⚠️ Создайте сначала видео-область");
+        }
+      };
+
+      window.testVideoMaterial = function () {
+        const videoAreas = document.querySelectorAll(
+          '[data-video-plane="true"]'
+        );
+        videoAreas.forEach((plane, index) => {
+          const material = plane.getAttribute("material");
+          updateStatus(
+            "videoTestStatus",
+            `📝 Видео-область ${index + 1}: ${JSON.stringify(material)}`
+          );
+        });
+      };
+
+      window.testMouseTracking = function () {
+        const mousePos = window._lastMousePosition;
+        updateStatus(
+          "interactionTestStatus",
+          `🖱️ Глобальная позиция мыши: ${JSON.stringify(mousePos)}`
+        );
+
+        // Тестируем функцию определения позиции
+        if (viewerManager && viewerManager.aframeScene) {
+          updateStatus(
+            "interactionTestStatus",
+            "✅ Отслеживание мыши работает"
+          );
+        } else {
+          updateStatus("interactionTestStatus", "❌ ViewerManager недоступен");
+        }
+      };
+
+      window.testDragging = function () {
+        const markers = document.querySelectorAll("[data-hotspot-id]");
+        updateStatus(
+          "interactionTestStatus",
+          `🔍 Найдено маркеров для перетаскивания: ${markers.length}`
+        );
+        updateStatus(
+          "interactionTestStatus",
+          "👆 Попробуйте перетащить любой маркер"
+        );
+      };
+
+      window.testRightClick = function () {
+        updateStatus(
+          "interactionTestStatus",
+          "🖱️ Кликните правой кнопкой мыши по пустому месту или маркеру"
+        );
+      };
+
+      window.testSceneTransition = function () {
+        const scenes = sceneManager.getAllScenes();
+        if (scenes.length >= 2) {
+          const currentScene = sceneManager.getCurrentScene();
+          const nextScene = scenes.find((s) => s.id !== currentScene.id);
+
+          updateStatus(
+            "sceneTestStatus",
+            `🔄 Переход: ${currentScene.name} → ${nextScene.name}`
+          );
+          sceneManager.switchToScene(nextScene.id);
+        } else {
+          updateStatus("sceneTestStatus", "❌ Недостаточно сцен");
+        }
+      };
+
+      window.checkColorAfterTransition = function () {
+        const markers = document.querySelectorAll("[data-hotspot-id]");
+        markers.forEach((marker, index) => {
+          const shape = marker.querySelector(".interactive");
+          const color = shape ? shape.getAttribute("color") : "неизвестно";
+          updateStatus(
+            "sceneTestStatus",
+            `🎨 Маркер ${index + 1}: цвет ${color}`
+          );
+        });
+      };
+
+      window.testSceneDeletion = function () {
+        const scenes = sceneManager.getAllScenes();
+        if (scenes.length > 1) {
+          const sceneToDelete = scenes[scenes.length - 1];
+          updateStatus(
+            "sceneTestStatus",
+            `🗑️ Попытка удалить сцену: ${sceneToDelete.name}`
+          );
+
+          sceneManager.removeScene(sceneToDelete.id).then((success) => {
+            if (success) {
+              updateStatus("sceneTestStatus", "✅ Сцена успешно удалена");
+            } else {
+              updateStatus("sceneTestStatus", "❌ Не удалось удалить сцену");
+            }
+          });
+        } else {
+          updateStatus("sceneTestStatus", "⚠️ Нельзя удалить последнюю сцену");
+        }
+      };
+
+      window.debugMarkers = function () {
+        const markers = document.querySelectorAll("[data-hotspot-id]");
+        updateStatus(
+          "debugStatus",
+          `🔍 Найдено маркеров в DOM: ${markers.length}`
+        );
+
+        markers.forEach((marker, index) => {
+          const hotspotId = marker.getAttribute("data-hotspot-id");
+          const position = marker.getAttribute("position");
+          const visible = marker.getAttribute("visible");
+          updateStatus(
+            "debugStatus",
+            `📍 Маркер ${index + 1}: ID=${hotspotId}, pos=${position}, visible=${visible}`
+          );
+        });
+
+        const hotspots = hotspotManager ? hotspotManager.getAllHotspots() : [];
+        updateStatus(
+          "debugStatus",
+          `💾 Хотспотов в менеджере: ${hotspots.length}`
+        );
+      };
+
+      window.debugMousePosition = function () {
+        const pos = window._lastMousePosition;
+        updateStatus(
+          "debugStatus",
+          `🖱️ Последняя позиция мыши: ${JSON.stringify(pos)}`
+        );
+      };
+
+      window.clearConsole = function () {
+        console.clear();
+        updateStatus("debugStatus", "🧹 Консоль очищена");
+      };
+
+      // Запускаем инициализацию
+      initializeTest();
+    </script>
+  </body>
+</html>

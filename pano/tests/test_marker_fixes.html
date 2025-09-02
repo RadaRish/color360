@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тест исправлений маркеров</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/@aframe/environment-component@1.3.0/dist/aframe-environment-component.min.js"></script>
+    <link rel="stylesheet" href="styles/photo-sphere-viewer.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="container">
+      <a-scene id="aframe-scene" embedded style="height: 100vh">
+        <a-assets>
+          <img id="panorama" src="panoramas/demo.svg" crossorigin="anonymous" />
+        </a-assets>
+
+        <a-sky src="#panorama" rotation="0 0 0"></a-sky>
+      </a-scene>
+
+      <!-- UI элементы -->
+      <div id="controls">
+        <h3>Тест исправлений маркеров</h3>
+        <button id="test-create-marker">Создать тестовый маркер</button>
+        <button id="test-create-video">Создать видео-область</button>
+        <div id="debug-info"></div>
+      </div>
+    </div>
+
+    <!-- Подключение модулей -->
+    <script type="module" src="core/coordinate_manager.js"></script>
+    <script type="module" src="core/hotspot_manager.js"></script>
+    <script type="module" src="core/scene_manager.js"></script>
+    <script type="module" src="core/viewer_manager.js"></script>
+    <script type="module" src="ui/scene_list.js"></script>
+    <script type="module" src="ui/hotspot-editor.js"></script>
+
+    <script type="module">
+      import ViewerManager from "./core/viewer_manager.js";
+      import HotspotManager from "./core/hotspot_manager.js";
+      import SceneManager from "./core/scene_manager.js";
+
+      let viewerManager;
+      let hotspotManager;
+      let sceneManager;
+
+      // Ждем загрузки A-Frame
+      document.querySelector("a-scene").addEventListener("loaded", () => {
+        console.log("🎬 A-Frame сцена загружена");
+
+        // Инициализируем менеджеры
+        const scene = document.querySelector("a-scene");
+
+        sceneManager = new SceneManager();
+        hotspotManager = new HotspotManager();
+        viewerManager = new ViewerManager(scene, hotspotManager, sceneManager);
+
+        // Делаем доступными глобально для тестирования
+        window.viewerManager = viewerManager;
+        window.hotspotManager = hotspotManager;
+        window.sceneManager = sceneManager;
+
+        console.log("✅ Все менеджеры инициализированы");
+
+        // Обработчик создания тестового маркера
+        document
+          .getElementById("test-create-marker")
+          .addEventListener("click", () => {
+            console.log("🎯 Создаем тестовый маркер");
+
+            const testHotspot = {
+              id: "test-marker-" + Date.now(),
+              type: "info",
+              title: "Тестовый маркер",
+              description: "Проверка исправлений",
+              position: { x: 0, y: 0, z: -5 },
+            };
+
+            try {
+              viewerManager.addHotspot(testHotspot);
+              console.log("✅ Тестовый маркер создан без ошибок");
+              updateDebugInfo("Тестовый маркер создан успешно");
+            } catch (error) {
+              console.error("❌ Ошибка создания маркера:", error);
+              updateDebugInfo("Ошибка создания маркера: " + error.message);
+            }
+          });
+
+        // Обработчик создания видео-области
+        document
+          .getElementById("test-create-video")
+          .addEventListener("click", () => {
+            console.log("🎬 Создаем тестовую видео-область");
+
+            const testVideo = {
+              id: "test-video-" + Date.now(),
+              type: "video-area",
+              title: "Тестовая видео-область",
+              position: { x: 2, y: 0, z: -5 },
+              videoWidth: 4,
+              videoHeight: 3,
+            };
+
+            try {
+              viewerManager.createVideoArea(testVideo);
+              console.log("✅ Тестовая видео-область создана без ошибок");
+              updateDebugInfo("Тестовая видео-область создана успешно");
+            } catch (error) {
+              console.error("❌ Ошибка создания видео-области:", error);
+              updateDebugInfo(
+                "Ошибка создания видео-области: " + error.message
+              );
+            }
+          });
+      });
+
+      function updateDebugInfo(message) {
+        const debugDiv = document.getElementById("debug-info");
+        debugDiv.innerHTML +=
+          "<p>" + new Date().toLocaleTimeString() + ": " + message + "</p>";
+      }
+
+      // Отслеживаем ошибки JavaScript
+      window.addEventListener("error", (e) => {
+        console.error("❌ JavaScript ошибка:", e.error);
+        updateDebugInfo("JavaScript ошибка: " + e.message);
+      });
+    </script>
+
+    <style>
+      #controls {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        z-index: 1000;
+        max-width: 300px;
+      }
+
+      #controls button {
+        display: block;
+        width: 100%;
+        margin: 5px 0;
+        padding: 8px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      #controls button:hover {
+        background: #0056b3;
+      }
+
+      #debug-info {
+        margin-top: 10px;
+        font-size: 12px;
+        max-height: 200px;
+        overflow-y: auto;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 8px;
+        border-radius: 4px;
+      }
+
+      #debug-info p {
+        margin: 2px 0;
+      }
+    </style>
+  </body>
+</html>

@@ -1,0 +1,559 @@
+// UI-компонент: редактор хотспотов
+export default class HotspotEditor {
+  constructor(modalId) {
+    this.modalId = modalId;
+    this.modal = document.getElementById(modalId);
+    this.form = this.modal?.querySelector('#hotspot-form');
+    this.isEditMode = false; // Флаг режима редактирования
+    this.editingHotspot = null; // Редактируемый маркер
+    this.setupEventHandlers();
+  }
+
+  setupEventHandlers() {
+    if (!this.modal || !this.form) return;
+
+    // Закрытие модального окна
+    const closeBtn = this.modal.querySelector('.close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.hide());
+    }
+
+    // Закрытие при клике вне модального окна
+    this.modal.addEventListener('click', (e) => {
+      if (e.target === this.modal) {
+        this.hide();
+      }
+    });
+
+    // Закрытие по клавише Escape (обработчик добавляется при show и удаляется при hide)
+    this.escapeHandler = (e) => {
+      if (e.key === 'Escape') {
+  // close editor via Esc
+        this.hide();
+      }
+    };
+
+    // Обработка отправки формы
+    this.form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleSubmit();
+    });
+
+    // Кнопка "Установить по умолчанию"
+    const setDefaultBtn = this.form.querySelector('#set-as-default-btn');
+    if (setDefaultBtn) {
+      setDefaultBtn.addEventListener('click', () => {
+        this.setAsDefault();
+      });
+    }
+
+    // Удален слайдер для размера текста — используется select
+
+    // Удален слайдер для размера маркера — используется select
+  }
+
+  show(options = {}) {
+    return new Promise((resolve) => {
+      this.resolve = resolve;
+      this.isEditMode = false;
+      this.editingHotspot = null;
+
+      const { type = 'hotspot', values = {}, scenes = [] } = options;
+
+      // Запоминаем текущий тип для проверок в handleSubmit
+      this.currentType = type;
+
+      // Настраиваем заголовок
+      const title = this.modal.querySelector('#hotspot-editor-title');
+      if (title) {
+        const titleText = type === 'hotspot' ? 'Настроить хотспот' :
+          type === 'info-point' ? 'Настроить инфоточку' :
+            type === 'animated-object' ? 'Настроить анимированный объект' :
+              'Настроить видео-область';
+        title.textContent = titleText;
+      }
+
+      // Заполняем форму
+      this.populateForm(values, scenes, type);
+
+      // Показываем/скрываем поля в зависимости от типа
+      this.toggleFieldsByType(type);
+
+      // Добавляем обработчик Esc
+      document.addEventListener('keydown', this.escapeHandler);
+
+      // Показываем модальное окно
+      this.modal.style.display = 'flex';
+    });
+  }
+
+  /**
+   * Показывает редактор в режиме редактирования существующего маркера
+   */
+  showEditMode(hotspot) {
+    return new Promise((resolve) => {
+      this.resolve = resolve;
+      this.isEditMode = true;
+      this.editingHotspot = hotspot;
+
+      // Настраиваем заголовок для режима редактирования
+      const title = this.modal.querySelector('#hotspot-editor-title');
+      if (title) {
+        const typeText = hotspot.type === 'hotspot' ? 'хотспота' : (hotspot.type === 'info-point' ? 'инфоточки' : (hotspot.type === 'animated-object' ? 'анимированный объект' : 'видео-область'));
+        title.textContent = `Редактировать ${typeText}`;
+      }
+
+      // Получаем список сцен (если нужно)
+      const scenes = window.app?.sceneManager?.getAllScenes() || [];
+
+      // Заполняем форму данными маркера
+      this.populateForm(hotspot, scenes, hotspot.type);
+
+      // Показываем/скрываем поля в зависимости от типа
+      this.toggleFieldsByType(hotspot.type);
+
+      // Добавляем обработчик Esc
+      document.addEventListener('keydown', this.escapeHandler);
+
+      // Показываем модальное окно
+      this.modal.style.display = 'flex';
+
+  // editor opened for hotspot
+    });
+  }
+
+  hide() {
+    this.modal.style.display = 'none';
+
+    // Удаляем обработчик Esc
+    document.removeEventListener('keydown', this.escapeHandler);
+
+    if (this.resolve) {
+      this.resolve(null); // Отмена
+      this.resolve = null;
+    }
+  }
+
+  populateForm(values, scenes, type) {
+    // Загружаем настройки по умолчанию для данного типа
+    const defaults = this.loadDefaults(type);
+
+    // Заполняем основные поля
+    const titleInput = this.form.querySelector('#hotspot-title');
+    const descriptionInput = this.form.querySelector('#hotspot-description');
+    const targetSceneSelect = this.form.querySelector('#hotspot-target-scene');
+
+    if (titleInput) titleInput.value = values.title || '';
+    if (descriptionInput) descriptionInput.value = values.description || '';
+
+    // Заполняем список сцен для хотспотов
+    if (targetSceneSelect && type === 'hotspot') {
+      targetSceneSelect.innerHTML = '<option value="">Выберите сцену</option>';
+      scenes.forEach(scene => {
+        const option = document.createElement('option');
+        option.value = scene.id;
+        option.textContent = scene.name.replace(/\.[^.]+$/, '');
+        if (values.targetSceneId === scene.id) {
+          option.selected = true;
+        }
+        targetSceneSelect.appendChild(option);
+      });
+    }
+
+    // Заполняем поля стилизации текста (для hotspot и info-point)
+    if (type === 'info-point' || type === 'hotspot') {
+      const textColorInput = this.form.querySelector('#hotspot-text-color');
+      const textSizeInput = this.form.querySelector('#hotspot-text-size');
+      const textFamilySelect = this.form.querySelector('#hotspot-text-family');
+      const textBoldInput = this.form.querySelector('#hotspot-text-bold');
+      const textUnderlineInput = this.form.querySelector('#hotspot-text-underline');
+
+      if (textColorInput) textColorInput.value = values.textColor || defaults.textColor;
+      if (textSizeInput) textSizeInput.value = values.textSize || defaults.textSize;
+      if (textFamilySelect) textFamilySelect.value = values.textFamily || defaults.textFamily || 'Arial, sans-serif';
+      if (textBoldInput) textBoldInput.checked = !!(values.textBold ?? defaults.textBold);
+      if (textUnderlineInput) textUnderlineInput.checked = !!(values.textUnderline ?? defaults.textUnderline);
+    }
+
+    // Заполняем поля настройки маркера (для всех типов) с использованием настроек по умолчанию
+    const markerColorInput = this.form.querySelector('#hotspot-marker-color');
+    const markerSizeInput = this.form.querySelector('#hotspot-marker-size');
+    const markerSizeValue = this.form.querySelector('#marker-size-value');
+    const markerIconSelect = this.form.querySelector('#hotspot-marker-icon');
+    const customIconGroup = this.form.querySelector('#custom-icon-group');
+    const customIconPreview = this.form.querySelector('#custom-icon-preview');
+    const customIconImg = this.form.querySelector('#custom-icon-img');
+
+    if (markerColorInput) {
+      markerColorInput.value = values.color || defaults.markerColor;
+    }
+    if (markerSizeInput) markerSizeInput.value = values.size || defaults.markerSize;
+    if (markerIconSelect) {
+      markerIconSelect.value = values.icon || defaults.markerIcon;
+
+      // Показываем группу пользовательской иконки если выбрана custom
+      if (customIconGroup) {
+        customIconGroup.style.display = (values.icon || defaults.markerIcon) === 'custom' ? 'block' : 'none';
+      }
+    }
+
+    // Загружаем пользовательскую иконку если есть
+    if (values.customIconData && customIconImg && customIconPreview) {
+      customIconImg.src = values.customIconData;
+      customIconPreview.style.display = 'flex';
+    } else if (customIconPreview) {
+      customIconPreview.style.display = 'none';
+    }
+
+    // Заполняем поля видео-области и анимированного объекта
+    if (type === 'video-area' || type === 'animated-object') {
+      const videoSourceSelect = this.form.querySelector('#hotspot-video-source');
+      const videoUrlInput = this.form.querySelector('#hotspot-video-url');
+      const videoWidthInput = this.form.querySelector('#hotspot-video-width');
+      const videoHeightInput = this.form.querySelector('#hotspot-video-height');
+
+      if (videoSourceSelect) videoSourceSelect.value = values.videoSource || '';
+      if (videoUrlInput) videoUrlInput.value = values.videoUrl || '';
+      if (videoWidthInput) videoWidthInput.value = values.videoWidth || (type === 'animated-object' ? '2' : '4');
+      if (videoHeightInput) videoHeightInput.value = values.videoHeight || (type === 'animated-object' ? String((2 * 9 / 16).toFixed(2)) : '3');
+
+      // Параметры хромакея только для animated-object
+      if (type === 'animated-object') {
+        const chromaEnabled = this.form.querySelector('#hotspot-chroma-enabled');
+        const chromaColor = this.form.querySelector('#hotspot-chroma-color');
+        const chromaSimilarity = this.form.querySelector('#hotspot-chroma-similarity');
+        const chromaSmoothness = this.form.querySelector('#hotspot-chroma-smoothness');
+        const chromaThreshold = this.form.querySelector('#hotspot-chroma-threshold');
+
+        if (chromaEnabled) chromaEnabled.checked = !!values.chromaEnabled;
+        if (chromaColor) chromaColor.value = values.chromaColor || '#00ff00';
+        if (chromaSimilarity) chromaSimilarity.value = values.chromaSimilarity ?? 0.4;
+        if (chromaSmoothness) chromaSmoothness.value = values.chromaSmoothness ?? 0.1;
+        if (chromaThreshold) chromaThreshold.value = values.chromaThreshold ?? 0.0;
+      }
+    }
+  }
+
+  toggleFieldsByType(type) {
+    const targetSceneGroup = this.form.querySelector('.form-group-target-scene');
+    const textStyleGroups = this.form.querySelectorAll('.form-group-text-style');
+    const markerStyleGroups = this.form.querySelectorAll('.form-group-marker-style');
+    const videoGroups = this.form.querySelectorAll('.form-group-video');
+    const videoSizeGroups = this.form.querySelectorAll('.form-group-video-size');
+    const chromaGroups = this.form.querySelectorAll('.form-group-chroma');
+
+    if (targetSceneGroup) {
+      targetSceneGroup.style.display = type === 'hotspot' ? 'block' : 'none';
+    }
+
+    textStyleGroups.forEach(group => {
+      group.style.display = (type === 'info-point' || type === 'hotspot') ? 'block' : 'none';
+    });
+
+    // Видео поля показываем для video-area и animated-object
+    const showVideo = (type === 'video-area' || type === 'animated-object');
+    videoGroups.forEach(group => {
+      group.style.display = showVideo ? 'block' : 'none';
+    });
+
+    videoSizeGroups.forEach(group => {
+      group.style.display = showVideo ? 'block' : 'none';
+    });
+
+    // Параметры хромакея только для animated-object
+    chromaGroups.forEach(group => {
+      group.style.display = type === 'animated-object' ? 'block' : 'none';
+    });
+
+    // Поля настройки маркера доступны для hotspot и info-point, но не для video-area
+    markerStyleGroups.forEach(group => {
+      group.style.display = type !== 'video-area' ? 'block' : 'none';
+    });
+  }
+
+  async handleSubmit() {
+    const formData = new FormData(this.form);
+    const data = {
+      title: formData.get('title'),
+      description: formData.get('description'),
+      targetSceneId: formData.get('targetSceneId') || null,
+      textColor: formData.get('textColor') || '#ffffff',
+      textSize: formData.get('textSize') || '1',
+      textFamily: formData.get('textFamily') || 'Arial, sans-serif',
+      textBold: !!formData.get('textBold'),
+      textUnderline: !!formData.get('textUnderline'),
+      color: formData.get('markerColor'),
+      size: formData.get('markerSize'),
+      icon: formData.get('markerIcon') || (this.currentType === 'hotspot' ? 'arrow' : 'sphere')
+    };
+
+    // Обработка видео-области
+    const videoSource = formData.get('videoSource');
+    const videoWidth = formData.get('videoWidth');
+    const videoHeight = formData.get('videoHeight');
+
+    // ПРОВЕРКА: для video-area/animated-object источник видео ОБЯЗАТЕЛЕН
+    if ((this.currentType === 'video-area' || this.currentType === 'animated-object') && !videoSource) {
+      console.warn('❌ Для видео-области необходимо выбрать источник видео!');
+      return;
+    }
+
+    if (videoSource) {
+      data.videoSource = videoSource;
+      data.videoWidth = parseFloat(videoWidth) || 4;
+      data.videoHeight = parseFloat(videoHeight) || 3;
+
+      if (videoSource === 'file') {
+        // Обработка локального файла
+        const videoFileInput = this.form.querySelector('#hotspot-video-file');
+        if (videoFileInput && videoFileInput.files[0]) {
+          const file = videoFileInput.files[0];
+          const reader = new FileReader();
+
+          const videoData = await new Promise((resolve) => {
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+          });
+
+          data.videoData = videoData;
+          data.videoUrl = videoData; // Используем Data URL
+        } else {
+          console.warn('Пожалуйста, выберите видеофайл');
+          return;
+        }
+      } else if (videoSource === 'url') {
+        // Обработка онлайн URL
+        const videoUrl = formData.get('videoUrl');
+        if (videoUrl) {
+          data.videoUrl = videoUrl;
+
+          // Валидация URL
+          if (!this.isValidVideoUrl(videoUrl, videoSource)) {
+            console.warn('Пожалуйста, введите корректную ссылку на видео');
+            return;
+          }
+        } else {
+          console.warn('Пожалуйста, введите ссылку на видео');
+          return;
+        }
+      }
+    }    // Обработка пользовательской иконки
+    if (data.icon === 'custom') {
+      const customIconInput = this.form.querySelector('#hotspot-custom-icon');
+      const customIconImg = this.form.querySelector('#custom-icon-img');
+
+      if (customIconInput && customIconInput.files[0]) {
+        // Новый файл загружен
+        const file = customIconInput.files[0];
+        const reader = new FileReader();
+
+        const imageData = await new Promise((resolve) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsDataURL(file);
+        });
+
+        data.customIconData = imageData;
+      } else if (customIconImg && customIconImg.src && customIconImg.src.startsWith('data:')) {
+        // Используем существующую загруженную иконку
+        data.customIconData = customIconImg.src;
+      } else {
+        // Нет пользовательской иконки
+        console.warn('Пожалуйста, выберите изображение для пользовательской иконки');
+        return;
+      }
+    }
+
+    // Хромакей параметры для animated-object
+    if (this.currentType === 'animated-object') {
+      data.chromaEnabled = !!formData.get('chromaEnabled');
+      data.chromaColor = formData.get('chromaColor') || '#00ff00';
+      data.chromaSimilarity = parseFloat(formData.get('chromaSimilarity'));
+      data.chromaSmoothness = parseFloat(formData.get('chromaSmoothness'));
+      data.chromaThreshold = parseFloat(formData.get('chromaThreshold'));
+    }
+
+    // Валидация
+    if (!data.title.trim()) {
+      console.warn('Пожалуйста, введите название');
+      return;
+    }
+
+    // Если это режим редактирования, обновляем существующий маркер
+    if (this.isEditMode && this.editingHotspot) {
+      if (window.app && window.app.hotspotManager) {
+        const success = window.app.hotspotManager.updateHotspot(this.editingHotspot.id, data);
+        if (success) {
+          // hotspot updated
+
+          // Возвращаем обновленные данные
+          if (this.resolve) {
+            this.resolve({ ...this.editingHotspot, ...data });
+            this.resolve = null;
+          }
+        } else {
+          console.error('Ошибка при обновлении маркера');
+          return;
+        }
+      }
+    } else {
+      // Обычный режим создания - возвращаем данные
+      if (this.resolve) {
+        this.resolve(data);
+        this.resolve = null;
+      }
+    }
+
+    this.hide();
+  }
+
+  isValidVideoUrl(url, source) {
+    if (source === 'url') {
+      // Проверяем, что это валидный URL
+      try {
+        new URL(url);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return true; // Для других источников всегда true
+  }
+
+  /**
+   * Сохраняет текущие настройки формы как настройки по умолчанию
+   */
+  setAsDefault() {
+    const formData = new FormData(this.form);
+    const currentSettings = {
+      textColor: formData.get('textColor') || '#ffffff',
+      textSize: formData.get('textSize') || '1',
+      textFamily: formData.get('textFamily') || 'Arial, sans-serif',
+      textBold: !!formData.get('textBold'),
+      textUnderline: !!formData.get('textUnderline'),
+      markerColor: formData.get('markerColor') || '#00ff00',
+      markerSize: formData.get('markerSize') || '0.3',
+      markerIcon: formData.get('markerIcon') || 'arrow'
+    };
+
+    // Сохраняем в localStorage отдельно для каждого типа
+    const storageKey = `${this.currentType || 'hotspot'}_defaults`;
+    localStorage.setItem(storageKey, JSON.stringify(currentSettings));
+
+    // Показываем уведомление
+    this.showNotification('Настройки сохранены как настройки по умолчанию! ⭐');
+  }
+
+  /**
+   * Загружает настройки по умолчанию для указанного типа
+   */
+  loadDefaults(type) {
+    const storageKey = `${type}_defaults`;
+    const savedDefaults = localStorage.getItem(storageKey);
+
+    if (savedDefaults) {
+      try {
+        return JSON.parse(savedDefaults);
+      } catch (error) {
+        console.warn('Ошибка загрузки настроек по умолчанию:', error);
+      }
+    }
+
+    // Возвращаем стандартные настройки по умолчанию
+    return this.getStandardDefaults(type);
+  }
+
+  /**
+   * Возвращает стандартные настройки по умолчанию для типа
+   */
+  getStandardDefaults(type) {
+    switch (type) {
+      case 'hotspot':
+        return {
+          textColor: '#ffffff',
+          textSize: '1',
+          textFamily: 'Arial, sans-serif',
+          textBold: false,
+          textUnderline: false,
+          markerColor: '#00ff00',
+          markerSize: '0.3',
+          markerIcon: 'arrow'
+        };
+      case 'info-point':
+        return {
+          textColor: '#ffffff',
+          textSize: '1',
+          textFamily: 'Arial, sans-serif',
+          textBold: false,
+          textUnderline: false,
+          markerColor: '#ffcc00',
+          markerSize: '0.3',
+          markerIcon: 'sphere'
+        };
+      case 'video-area':
+        return {
+          textColor: '#ffffff',
+          textSize: '1',
+          textFamily: 'Arial, sans-serif',
+          textBold: false,
+          textUnderline: false,
+          markerColor: '#ff6600',
+          markerSize: '0.3',
+          markerIcon: 'cube'
+        };
+      default:
+        return {
+          textColor: '#ffffff',
+          textSize: '1',
+          textFamily: 'Arial, sans-serif',
+          textBold: false,
+          textUnderline: false,
+          markerColor: '#00ff00',
+          markerSize: '0.3',
+          markerIcon: 'arrow'
+        };
+    }
+  }
+
+  /**
+   * Показывает временное уведомление
+   */
+  showNotification(message) {
+    // Создаем элемент уведомления
+    const notification = document.createElement('div');
+    notification.className = 'default-settings-notification';
+    notification.textContent = message;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4CAF50;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 10000;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+    `;
+
+    // Добавляем в документ
+    document.body.appendChild(notification);
+
+    // Анимация появления
+    setTimeout(() => {
+      notification.style.transform = 'translateX(0)';
+    }, 100);
+
+    // Удаляем через 3 секунды
+    setTimeout(() => {
+      notification.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }, 3000);
+  }
+}

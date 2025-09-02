@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Генератор анимации (WebM) для «Анимированный объект»</title>
+    <style>
+      :root {
+        --bg: #0b0b10;
+        --fg: #e8e8f0;
+        --muted: #8a8a98;
+        --accent: #4caf50;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Arial,
+          sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        margin: 0;
+        padding: 24px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 12px;
+      }
+      p {
+        color: var(--muted);
+        margin: 6px 0 14px;
+      }
+      .card {
+        background: #14141d;
+        border: 1px solid #1f2030;
+        border-radius: 12px;
+        padding: 16px;
+        max-width: 920px;
+      }
+      .row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      input[type="number"],
+      input[type="color"] {
+        background: #0f1018;
+        border: 1px solid #2a2b3d;
+        color: var(--fg);
+        padding: 8px 10px;
+        border-radius: 8px;
+        min-width: 110px;
+      }
+      input[type="checkbox"] {
+        transform: translateY(1px);
+      }
+      button {
+        background: var(--accent);
+        color: white;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      canvas,
+      video {
+        width: 256px;
+        height: 256px;
+        background: #000;
+        border-radius: 10px;
+        border: 1px solid #26273a;
+      }
+      .preview {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .row .spacer {
+        flex: 1;
+      }
+      .mono {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Генератор анимации (WebM) для маркера «Анимированный объект»</h1>
+      <p>
+        Создает короткий WebM с зелёным фоном (под хромакей) и анимированным
+        красным кружком. Можно скачать и использовать как видео-файл для
+        маркера.
+      </p>
+
+      <div class="row" style="margin-bottom: 12px">
+        <label>
+          Ширина (px)
+          <input id="w" type="number" value="256" min="16" max="1024" />
+        </label>
+        <label>
+          Высота (px)
+          <input id="h" type="number" value="256" min="16" max="1024" />
+        </label>
+        <label>
+          Длительность (сек)
+          <input id="dur" type="number" value="2" min="1" max="10" step="0.5" />
+        </label>
+        <label>
+          FPS
+          <input id="fps" type="number" value="30" min="5" max="60" />
+        </label>
+        <label>
+          Цвет фона (хромакей)
+          <input id="bg" type="color" value="#00ff00" />
+        </label>
+        <label>
+          Цвет объекта
+          <input id="fg" type="color" value="#ff3b3b" />
+        </label>
+        <label>
+          Пульсация
+          <input id="pulse" type="checkbox" checked />
+        </label>
+        <div class="spacer"></div>
+        <button id="gen">Создать и скачать WebM</button>
+      </div>
+
+      <div class="preview">
+        <div>
+          <div class="hint">Превью Canvas (рисуется в реальном времени)</div>
+          <canvas id="cnv" width="256" height="256"></canvas>
+        </div>
+        <div>
+          <div class="hint">Сгенерированное видео (WebM)</div>
+          <video id="out" controls loop playsinline muted></video>
+          <div class="hint">
+            <a id="download" download="animated-object-test.webm"
+              >Скачать файл</a
+            >
+          </div>
+        </div>
+      </div>
+
+      <p class="hint">
+        Подсказка: зелёный фон (#00ff00) подходит для хромакея. В настройках
+        маркера включите хромакей и задайте близкий цвет/порог.
+      </p>
+      <p class="hint">
+        MIME: <span class="mono">video/webm; codecs=vp9,opus</span> (браузер
+        может выбрать доступный кодек автоматически).
+      </p>
+    </div>
+
+    <script>
+      const els = {
+        w: document.getElementById("w"),
+        h: document.getElementById("h"),
+        dur: document.getElementById("dur"),
+        fps: document.getElementById("fps"),
+        bg: document.getElementById("bg"),
+        fg: document.getElementById("fg"),
+        pulse: document.getElementById("pulse"),
+        gen: document.getElementById("gen"),
+        cnv: document.getElementById("cnv"),
+        out: document.getElementById("out"),
+        download: document.getElementById("download"),
+      };
+
+      // Простая демо-анимация — красный круг по круговой траектории, опционально пульсирует
+      function drawFrame(ctx, t, w, h, bg, fg, pulse) {
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
+        const cx = w / 2,
+          cy = h / 2; // центр
+        const R = Math.min(w, h) * 0.3; // радиус траектории
+        const rBase = Math.min(w, h) * 0.12; // базовый радиус кружка
+        const angle = t * 2 * Math.PI; // один цикл за 1s при t∈[0,1]
+        const x = cx + Math.cos(angle) * R;
+        const y = cy + Math.sin(angle) * R;
+        const r = pulse
+          ? rBase * (0.7 + (0.3 * (1 + Math.sin(angle * 2))) / 2)
+          : rBase;
+        ctx.fillStyle = fg;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Рисуем превью постоянно, чтобы было видно будущую анимацию
+      (function previewLoop() {
+        const ctx = els.cnv.getContext("2d");
+        let start = performance.now();
+        function tick(now) {
+          const w = Number(els.w.value || 256);
+          const h = Number(els.h.value || 256);
+          if (els.cnv.width !== w) els.cnv.width = w;
+          if (els.cnv.height !== h) els.cnv.height = h;
+          const t = ((now - start) / 1000) % 1; // нормализованное время [0..1)
+          drawFrame(
+            ctx,
+            t,
+            w,
+            h,
+            els.bg.value,
+            els.fg.value,
+            els.pulse.checked
+          );
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      })();
+
+      async function generateWebM() {
+        const w = Number(els.w.value || 256);
+        const h = Number(els.h.value || 256);
+        const duration = Number(els.dur.value || 2);
+        const fps = Number(els.fps.value || 30);
+        const bg = els.bg.value;
+        const fg = els.fg.value;
+        const pulse = els.pulse.checked;
+
+        // Подготовим временный canvas-источник для записи
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        const stream = canvas.captureStream(fps);
+
+        const supports = [
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm;codecs=vp9",
+          "video/webm;codecs=vp8",
+          "video/webm",
+        ];
+        const mimeType =
+          supports.find(MediaRecorder.isTypeSupported) || "video/webm";
+        const recorder = new MediaRecorder(stream, {
+          mimeType,
+          videoBitsPerSecond: 800_000,
+        });
+
+        const chunks = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size) chunks.push(e.data);
+        };
+        const stopped = new Promise((res) => (recorder.onstop = res));
+
+        // Рендер анимации синхронно с записью
+        let frames = 0;
+        const totalFrames = Math.ceil(duration * fps);
+        let start = performance.now();
+        function renderFrame(now) {
+          const t = frames / totalFrames; // [0..1]
+          drawFrame(ctx, t, w, h, bg, fg, pulse);
+          frames++;
+          if (frames < totalFrames) {
+            // Поддерживаем целевой FPS
+            const elapsed = now - start;
+            const target = (frames * 1000) / fps;
+            const delay = Math.max(0, target - elapsed);
+            setTimeout(() => requestAnimationFrame(renderFrame), delay);
+          } else {
+            recorder.stop();
+          }
+        }
+
+        // Старт
+        recorder.start();
+        requestAnimationFrame(renderFrame);
+        await stopped;
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+
+        // Превью и скачивание
+        els.out.src = url;
+        els.out.play().catch(() => {});
+        els.download.href = url;
+        +els.download.setAttribute(
+          "download",
+          `animated-object-${w}x${h}-${duration}s.webm`
+        );
+      }
+
+      els.gen.addEventListener("click", async () => {
+        els.gen.disabled = true;
+        els.gen.textContent = "Генерация...";
+        try {
+          await generateWebM();
+        } catch (e) {
+          alert("Ошибка генерации: " + (e && e.message ? e.message : e));
+          console.error(e);
+        } finally {
+          els.gen.disabled = false;
+          els.gen.textContent = "Создать и скачать WebM";
+        }
+      });
+    </script>
+  </body>
+</html>

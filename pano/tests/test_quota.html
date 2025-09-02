@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест localStorage Quota</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-section h3 { margin-top: 0; color: #333; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 3px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #results { margin-top: 20px; min-height: 200px; background: #f8f9fa; padding: 15px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Тест localStorage Quota Management</h1>
+    
+    <div class="test-section">
+        <h3>Проверка размера localStorage</h3>
+        <button onclick="checkStorageSize()">Проверить размер</button>
+        <button onclick="clearStorage()">Очистить localStorage</button>
+        <div id="size-info" class="status info">Нажмите "Проверить размер" для анализа</div>
+    </div>
+
+    <div class="test-section">
+        <h3>Симуляция большого количества хотспотов</h3>
+        <button onclick="createManyHotspots(50)">Создать 50 хотспотов</button>
+        <button onclick="createManyHotspots(100)">Создать 100 хотспотов</button>
+        <button onclick="testQuotaExceeded()">Симулировать переполнение</button>
+    </div>
+
+    <div class="test-section">
+        <h3>Тест оптимизированного сохранения</h3>
+        <button onclick="testOptimizedSave()">Тест минимального сохранения</button>
+        <button onclick="testEmergencySave()">Тест экстренного сохранения</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            results.innerHTML += `<div class="status ${type}">[${timestamp}] ${message}</div>`;
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function getStorageSize() {
+            let total = 0;
+            for (let key in localStorage) {
+                if (localStorage.hasOwnProperty(key)) {
+                    total += localStorage[key].length + key.length;
+                }
+            }
+            return total;
+        }
+
+        function formatBytes(bytes) {
+            return `${(bytes / 1024).toFixed(2)} KB (${bytes} bytes)`;
+        }
+
+        function checkStorageSize() {
+            const size = getStorageSize();
+            const quota = 5 * 1024 * 1024; // 5MB typical quota
+            const percentage = (size / quota * 100).toFixed(1);
+            
+            const sizeInfo = document.getElementById('size-info');
+            sizeInfo.innerHTML = `
+                <strong>Размер localStorage:</strong> ${formatBytes(size)}<br>
+                <strong>Использовано:</strong> ${percentage}% от ~5MB<br>
+                <strong>Свободно:</strong> ${formatBytes(quota - size)}
+            `;
+            
+            if (size > quota * 0.8) {
+                sizeInfo.className = 'status error';
+            } else if (size > quota * 0.5) {
+                sizeInfo.className = 'status info';
+            } else {
+                sizeInfo.className = 'status success';
+            }
+
+            log(`localStorage размер: ${formatBytes(size)} (${percentage}%)`, 'info');
+        }
+
+        function clearStorage() {
+            localStorage.clear();
+            log('localStorage очищен', 'success');
+            checkStorageSize();
+        }
+
+        function createManyHotspots(count) {
+            const hotspots = [];
+            
+            for (let i = 0; i < count; i++) {
+                hotspots.push({
+                    id: `hotspot_${i}`,
+                    sceneId: `scene_${i % 10}`,
+                    type: 'video-area',
+                    position: { x: Math.random() * 100, y: Math.random() * 100 },
+                    width: 2 + Math.random() * 3,
+                    height: 1.5 + Math.random() * 2,
+                    title: `Хотспот ${i}`,
+                    description: `Описание для хотспота номер ${i}. Это тестовые данные для проверки размера localStorage.`,
+                    timestamp: Date.now(),
+                    additionalData: {
+                        author: 'Test User',
+                        category: 'test',
+                        metadata: {
+                            version: '1.0',
+                            created: new Date().toISOString(),
+                            tags: ['test', 'hotspot', 'demo']
+                        }
+                    }
+                });
+            }
+
+            try {
+                localStorage.setItem('color_tour_hotspots', JSON.stringify(hotspots));
+                log(`Создано ${count} хотспотов. Размер данных: ${formatBytes(JSON.stringify(hotspots).length)}`, 'success');
+                checkStorageSize();
+            } catch (error) {
+                log(`Ошибка при создании ${count} хотспотов: ${error.message}`, 'error');
+                testQuotaExceeded();
+            }
+        }
+
+        function testQuotaExceeded() {
+            log('Симуляция QuotaExceededError...', 'info');
+            
+            // Создаем очень большой объект для переполнения
+            const bigData = 'x'.repeat(1024 * 1024); // 1MB строка
+            
+            try {
+                for (let i = 0; i < 10; i++) {
+                    localStorage.setItem(`big_data_${i}`, bigData);
+                }
+                log('Переполнение не достигнуто', 'info');
+            } catch (error) {
+                if (error.name === 'QuotaExceededError') {
+                    log('QuotaExceededError обнаружен! Тестируем обработку...', 'error');
+                    handleQuotaExceeded();
+                } else {
+                    log(`Другая ошибка: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        function handleQuotaExceeded() {
+            try {
+                const hotspots = JSON.parse(localStorage.getItem('color_tour_hotspots') || '[]');
+                log(`Найдено ${hotspots.length} хотспотов перед экстренным сохранением`, 'info');
+                
+                const confirm = window.confirm(
+                    'Хранилище браузера переполнено!\n\n' +
+                    `У вас ${hotspots.length} хотспотов, что слишком много для сохранения.\n` +
+                    'Хотите сохранить только последние 20 хотспотов?\n\n' +
+                    '(Остальные будут потеряны при перезагрузке)'
+                );
+
+                if (confirm) {
+                    localStorage.clear();
+                    log('localStorage очищен для экстренного сохранения', 'info');
+                    
+                    const recentHotspots = hotspots.slice(-20).map(hotspot => ({
+                        id: hotspot.id,
+                        sceneId: hotspot.sceneId,
+                        type: hotspot.type || 'video-area',
+                        position: hotspot.position,
+                        width: hotspot.width || 2,
+                        height: hotspot.height || 1.5
+                    }));
+
+                    const emergencyData = JSON.stringify(recentHotspots);
+                    localStorage.setItem('color_tour_hotspots', emergencyData);
+                    
+                    log(`Экстренное сохранение: ${recentHotspots.length} хотспотов, размер: ${formatBytes(emergencyData.length)}`, 'success');
+                    checkStorageSize();
+                } else {
+                    log('Пользователь отказался от экстренного сохранения', 'info');
+                }
+            } catch (retryError) {
+                log(`Ошибка при экстренном сохранении: ${retryError.message}`, 'error');
+            }
+        }
+
+        function testOptimizedSave() {
+            // Создаем хотспоты с большим количеством данных
+            const bloatedHotspots = [];
+            for (let i = 0; i < 30; i++) {
+                bloatedHotspots.push({
+                    id: `test_${i}`,
+                    sceneId: `scene_${i}`,
+                    type: 'video-area',
+                    position: { x: i * 10, y: i * 5 },
+                    width: 2,
+                    height: 1.5,
+                    title: `Тестовый хотспот ${i}`,
+                    description: 'Очень длинное описание с множеством деталей и дополнительной информацией, которая может быть не критична для основной функциональности.',
+                    videoUrl: 'data:video/mp4;base64,' + 'x'.repeat(1000), // Симуляция base64
+                    thumbnail: 'data:image/jpeg;base64,' + 'y'.repeat(500),
+                    metadata: {
+                        created: new Date().toISOString(),
+                        modified: new Date().toISOString(),
+                        version: '1.0',
+                        author: 'Test User',
+                        tags: ['test', 'demo', 'example'],
+                        additionalInfo: 'Дополнительная информация'.repeat(50)
+                    }
+                });
+            }
+
+            const originalSize = JSON.stringify(bloatedHotspots).length;
+            log(`Исходный размер 30 хотспотов: ${formatBytes(originalSize)}`, 'info');
+
+            // Оптимизированное сохранение
+            const optimizedHotspots = bloatedHotspots.map(hotspot => ({
+                id: hotspot.id,
+                sceneId: hotspot.sceneId,
+                type: hotspot.type,
+                position: hotspot.position,
+                width: hotspot.width,
+                height: hotspot.height
+            }));
+
+            const optimizedSize = JSON.stringify(optimizedHotspots).length;
+            const reduction = ((originalSize - optimizedSize) / originalSize * 100).toFixed(1);
+            
+            log(`Оптимизированный размер: ${formatBytes(optimizedSize)}`, 'success');
+            log(`Сжатие: ${reduction}% (экономия ${formatBytes(originalSize - optimizedSize)})`, 'success');
+
+            localStorage.setItem('color_tour_hotspots', JSON.stringify(optimizedHotspots));
+            checkStorageSize();
+        }
+
+        function testEmergencySave() {
+            // Создаем 100 хотспотов для теста экстренного сохранения
+            createManyHotspots(100);
+            
+            setTimeout(() => {
+                log('Запуск теста экстренного сохранения...', 'info');
+                handleQuotaExceeded();
+            }, 1000);
+        }
+
+        // Инициализация
+        window.onload = function() {
+            log('Тест localStorage quota management загружен', 'success');
+            checkStorageSize();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,2616 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <meta
+      name="description"
+      content="Панорамный тур - Редактор для создания 360° виртуальных туров"
+    />
+    <meta name="keywords" content="panorama, 360, virtual tour, photo sphere" />
+    <title>Панорамный тур - Редактор</title>
+
+    <!-- Google Fonts для поддержки кириллицы -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&subset=cyrillic&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- A-Frame для простого панорамного отображения -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+      :root {
+        font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        font-weight: 400;
+        color-scheme: dark;
+        color: rgba(255, 255, 255, 0.87);
+        background-color: #242424;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: #1a1a1a;
+      }
+
+      .app-container {
+        display: block;
+        height: 100vh;
+        position: relative;
+      }
+
+      #sidebar {
+        width: 300px;
+        background: rgba(26, 26, 26, 0.85);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        transition: transform 0.3s ease;
+        z-index: 1000;
+        backdrop-filter: blur(15px);
+      }
+
+      #sidebar.hide {
+        transform: translateX(-100%);
+      }
+
+      #sidebar-toggle {
+        position: fixed;
+        left: 300px;
+        top: 20px;
+        background: rgba(26, 26, 26, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.87);
+        padding: 12px 8px;
+        border-radius: 0 8px 8px 0;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+        z-index: 1001;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(15px);
+        box-shadow:
+          2px 0 12px rgba(0, 0, 0, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        min-width: 30px;
+        text-align: center;
+      }
+
+      #sidebar-toggle:hover {
+        background: rgba(100, 108, 255, 0.8);
+        border-color: rgba(100, 108, 255, 0.6);
+        transform: scale(1.05);
+        box-shadow:
+          3px 0 15px rgba(0, 0, 0, 0.5),
+          0 0 20px rgba(100, 108, 255, 0.4);
+      }
+
+      .panel {
+        flex-grow: 1;
+        padding: 20px;
+        border-bottom: 1px solid #333;
+        overflow-y: auto;
+      }
+
+      .panel h2 {
+        margin: 0 0 15px 0;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 16px;
+        font-weight: 500;
+      }
+
+      .panel:last-child {
+        border-bottom: none;
+      }
+
+      .panel .button-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .panel button {
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.87);
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+      }
+
+      .panel button:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .panel button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .panel button.primary {
+        background: #646cff;
+        border-color: #646cff;
+      }
+
+      .panel button.primary:hover:not(:disabled) {
+        background: #535bf2;
+        border-color: #535bf2;
+      }
+
+      .panel input[type="file"] {
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.87);
+      }
+
+      #scene-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      #scene-list li {
+        padding: 8px 12px;
+        margin: 4px 0;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 14px;
+      }
+
+      #scene-list li:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      #scene-list li.active {
+        background: rgba(100, 108, 255, 0.2);
+        border-color: #646cff;
+        color: #646cff;
+      }
+
+      #viewer-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+        z-index: 1;
+      }
+
+      .custom-context-menu {
+        position: fixed;
+        background: rgba(26, 26, 26, 0.95);
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 4px 0;
+        z-index: 10000;
+        min-width: 180px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      }
+
+      .custom-context-menu button {
+        display: block;
+        width: 100%;
+        padding: 8px 16px;
+        border: none;
+        background: none;
+        color: rgba(255, 255, 255, 0.87);
+        font-size: 14px;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .custom-context-menu button:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .custom-context-menu button.danger {
+        color: #ff6b6b;
+      }
+
+      .custom-context-menu button.danger:hover {
+        background: rgba(255, 107, 107, 0.1);
+      }
+
+      .sidebar-header {
+        padding: 20px;
+        border-bottom: 1px solid #333;
+      }
+
+      .sidebar-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        padding-bottom: 0; /* Убираем нижний отступ */
+        display: flex;
+        flex-direction: column;
+      }
+
+      .sidebar-footer {
+        padding: 16px;
+        border-top: 1px solid #333;
+        background: rgba(20, 20, 20, 0.8); /* Более темный фон для футера */
+        border-radius: 0; /* Убираем скругления */
+      }
+
+      #scene-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .scene-item {
+        position: relative;
+        padding: 12px 16px;
+        margin: 4px 0;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        user-select: none;
+      }
+
+      .scene-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .scene-item.selected {
+        background: rgba(100, 108, 255, 0.2);
+        border-color: #646cff;
+      }
+
+      .scene-item.dragging {
+        opacity: 0.5;
+        transform: rotate(2deg);
+      }
+
+      .scene-item.drag-over {
+        border-color: #646cff;
+        background: rgba(100, 108, 255, 0.1);
+      }
+
+      .scene-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .scene-name {
+        flex: 1;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.87);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .scene-menu-btn {
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 16px;
+        line-height: 1;
+        transition: all 0.2s ease;
+      }
+
+      .scene-menu-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      #viewer-container {
+        flex: 1;
+        position: relative;
+        background: #000;
+        overflow: hidden;
+        transition: margin-left 0.3s ease;
+      }
+
+      /* Когда панель скрыта, viewer занимает всю ширину */
+      #sidebar.hide + #viewer-container {
+        margin-left: 0;
+      }
+
+      #futuristic-progress {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        padding: 40px 50px;
+        z-index: 10001;
+        display: none;
+        flex-direction: column;
+        gap: 25px;
+        min-width: 400px;
+        align-items: center;
+        backdrop-filter: none;
+        box-shadow: none;
+      }
+
+      .color-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        perspective: 1000px;
+        position: relative;
+      }
+
+      .logo-letter {
+        font-size: 72px;
+        font-weight: 600;
+        font-family: "Arial", "Helvetica", sans-serif;
+        text-shadow:
+          0 0 30px currentColor,
+          0 0 60px currentColor,
+          2px 2px 0px rgba(0, 0, 0, 0.5),
+          4px 4px 0px rgba(0, 0, 0, 0.3),
+          6px 6px 0px rgba(0, 0, 0, 0.2),
+          8px 8px 0px rgba(0, 0, 0, 0.1),
+          10px 10px 20px rgba(0, 0, 0, 0.4);
+        transform-style: preserve-3d;
+        animation: letterFloat 3s ease-in-out infinite;
+        transition: all 0.3s ease;
+        filter: drop-shadow(0 0 15px currentColor);
+      }
+
+      .letter-c {
+        color: #ff6b6b;
+        animation-delay: 0s;
+        background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .letter-o {
+        color: #4ecdc4;
+        animation-delay: 0.2s;
+        background: linear-gradient(45deg, #4ecdc4, #44a08d);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .letter-l {
+        color: #45b7d1;
+        animation-delay: 0.4s;
+        background: linear-gradient(45deg, #45b7d1, #667eea);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .letter-o2 {
+        color: #f093fb;
+        animation-delay: 0.6s;
+        background: linear-gradient(45deg, #f093fb, #f5576c);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .letter-r {
+        color: #feca57;
+        animation-delay: 0.8s;
+        background: linear-gradient(45deg, #feca57, #ff9ff3);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      @keyframes letterFloat {
+        0%,
+        100% {
+          transform: translateY(0px) rotateX(0deg) rotateY(0deg) translateZ(0px);
+          filter: brightness(1) blur(0px) drop-shadow(0 0 15px currentColor);
+        }
+        25% {
+          transform: translateY(-15px) rotateX(15deg) rotateY(8deg)
+            translateZ(20px);
+          filter: brightness(1.4) blur(0px) drop-shadow(0 0 25px currentColor);
+        }
+        50% {
+          transform: translateY(-30px) rotateX(0deg) rotateY(-8deg)
+            translateZ(40px);
+          filter: brightness(1.6) blur(1px) drop-shadow(0 0 35px currentColor);
+        }
+        75% {
+          transform: translateY(-15px) rotateX(-15deg) rotateY(8deg)
+            translateZ(20px);
+          filter: brightness(1.3) blur(0px) drop-shadow(0 0 25px currentColor);
+        }
+      }
+
+      .color-logo::before {
+        display: none;
+      }
+
+      #futuristic-progress .label {
+        color: rgba(255, 255, 255, 0.95);
+        font-size: 14px;
+        text-align: center;
+        font-weight: 500;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+        letter-spacing: 0.3px;
+        margin-top: 20px;
+        background: linear-gradient(
+          90deg,
+          #ff6b6b,
+          #4ecdc4,
+          #45b7d1,
+          #f093fb,
+          #feca57
+        );
+        background-size: 300% 100%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: labelGlow 6s linear infinite;
+      }
+
+      @keyframes labelGlow {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
+      }
+
+      button {
+        border-radius: 8px;
+        border: 1px solid transparent;
+        padding: 0.6em 1.2em;
+        font-size: 1em;
+        font-weight: 500;
+        font-family: inherit;
+        background-color: #1a1a1a;
+        color: rgba(255, 255, 255, 0.87);
+        cursor: pointer;
+        transition: all 0.25s ease;
+        margin: 4px;
+      }
+
+      button:hover {
+        border-color: #646cff;
+        background-color: rgba(100, 108, 255, 0.1);
+      }
+
+      button:focus,
+      button:focus-visible {
+        outline: 2px solid #646cff;
+        outline-offset: 2px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .btn-primary {
+        background-color: #646cff;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background-color: #535bf2;
+      }
+
+      .btn-secondary {
+        background-color: #28a745;
+        color: white;
+      }
+
+      .btn-secondary:hover {
+        background-color: #218838;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .toolbar-main {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+
+      .icon-btn {
+        min-width: 36px !important;
+        width: 36px !important;
+        padding: 8px !important;
+        font-size: 16px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 6px !important;
+        color: rgba(255, 255, 255, 0.87) !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+      }
+
+      .icon-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-color: rgba(255, 255, 255, 0.2) !important;
+        transform: scale(1.05) !important;
+      }
+
+      /* Современные стили для SVG иконок */
+      .modern-icon-btn {
+        min-width: 44px !important;
+        width: 44px !important;
+        height: 44px !important;
+        padding: 12px !important;
+        background: linear-gradient(
+          135deg,
+          rgba(100, 108, 255, 0.1),
+          rgba(139, 92, 246, 0.1)
+        ) !important;
+        border: 1px solid rgba(100, 108, 255, 0.2) !important;
+        border-radius: 12px !important;
+        backdrop-filter: blur(10px) !important;
+        position: relative !important;
+        overflow: hidden !important;
+      }
+
+      .modern-icon-btn::before {
+        content: "" !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        background: linear-gradient(
+          135deg,
+          rgba(100, 108, 255, 0.15),
+          rgba(139, 92, 246, 0.15)
+        ) !important;
+        opacity: 0 !important;
+        transition: opacity 0.3s ease !important;
+        border-radius: 11px !important;
+      }
+
+      .modern-icon-btn:hover::before {
+        opacity: 1 !important;
+      }
+
+      .modern-icon-btn:hover {
+        background: linear-gradient(
+          135deg,
+          rgba(100, 108, 255, 0.2),
+          rgba(139, 92, 246, 0.2)
+        ) !important;
+        border-color: rgba(100, 108, 255, 0.4) !important;
+        transform: translateY(-2px) scale(1.02) !important;
+        box-shadow: 0 8px 20px rgba(100, 108, 255, 0.3) !important;
+      }
+
+      .modern-icon-btn:active {
+        transform: translateY(0) scale(0.98) !important;
+        transition: all 0.1s ease !important;
+      }
+
+      .modern-icon-btn svg {
+        width: 20px !important;
+        height: 20px !important;
+        color: rgba(255, 255, 255, 0.9) !important;
+        transition: all 0.3s ease !important;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3)) !important;
+        z-index: 1 !important;
+        position: relative !important;
+      }
+
+      .modern-icon-btn:hover svg {
+        color: #ffffff !important;
+        transform: scale(1.1) !important;
+        filter: drop-shadow(0 4px 8px rgba(100, 108, 255, 0.4)) !important;
+      }
+
+      /* Специальные цвета для разных типов кнопок */
+      #save-project.modern-icon-btn {
+        background: linear-gradient(
+          135deg,
+          rgba(76, 175, 80, 0.1),
+          rgba(56, 142, 60, 0.1)
+        ) !important;
+        border-color: rgba(76, 175, 80, 0.2) !important;
+      }
+
+      #save-project.modern-icon-btn:hover {
+        background: linear-gradient(
+          135deg,
+          rgba(76, 175, 80, 0.2),
+          rgba(56, 142, 60, 0.2)
+        ) !important;
+        border-color: rgba(76, 175, 80, 0.4) !important;
+        box-shadow: 0 8px 20px rgba(76, 175, 80, 0.3) !important;
+      }
+
+      #export-btn.modern-icon-btn {
+        background: linear-gradient(
+          135deg,
+          rgba(255, 152, 0, 0.1),
+          rgba(245, 124, 0, 0.1)
+        ) !important;
+        border-color: rgba(255, 152, 0, 0.2) !important;
+      }
+
+      #export-btn.modern-icon-btn:hover {
+        background: linear-gradient(
+          135deg,
+          rgba(255, 152, 0, 0.2),
+          rgba(245, 124, 0, 0.2)
+        ) !important;
+        border-color: rgba(255, 152, 0, 0.4) !important;
+        box-shadow: 0 8px 20px rgba(255, 152, 0, 0.3) !important;
+      }
+
+      #cleanup-btn.modern-icon-btn,
+      #clear-camera-view-btn.modern-icon-btn {
+        background: linear-gradient(
+          135deg,
+          rgba(244, 67, 54, 0.1),
+          rgba(211, 47, 47, 0.1)
+        ) !important;
+        border-color: rgba(244, 67, 54, 0.2) !important;
+      }
+
+      #cleanup-btn.modern-icon-btn:hover,
+      #clear-camera-view-btn.modern-icon-btn:hover {
+        background: linear-gradient(
+          135deg,
+          rgba(244, 67, 54, 0.2),
+          rgba(211, 47, 47, 0.2)
+        ) !important;
+        border-color: rgba(244, 67, 54, 0.4) !important;
+        box-shadow: 0 8px 20px rgba(244, 67, 54, 0.3) !important;
+      }
+
+      /* Стили для современной кнопки загрузки */
+      .modern-upload-btn {
+        background: linear-gradient(135deg, #646cff, #8b5cf6) !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 14px 20px !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.5px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        position: relative !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 12px rgba(100, 108, 255, 0.3) !important;
+        transition: all 0.3s ease !important;
+      }
+
+      .modern-upload-btn::before {
+        content: "" !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: -100% !important;
+        width: 100% !important;
+        height: 100% !important;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        ) !important;
+        transition: left 0.6s ease !important;
+      }
+
+      .modern-upload-btn:hover::before {
+        left: 100% !important;
+      }
+
+      .modern-upload-btn:hover {
+        background: linear-gradient(135deg, #535bf2, #7c3aed) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 25px rgba(100, 108, 255, 0.4) !important;
+      }
+
+      .modern-upload-btn:active {
+        transform: translateY(0) !important;
+        box-shadow: 0 4px 12px rgba(100, 108, 255, 0.3) !important;
+      }
+
+      .modern-upload-btn svg {
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3)) !important;
+      }
+
+      h2 {
+        margin: 0 0 16px 0;
+        font-size: 1.2em;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      /* Стили для модального окна редактора хотспотов */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 10001;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background-color: rgba(0, 0, 0, 0.75);
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(8px);
+      }
+
+      .modal-content {
+        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+        margin: auto;
+        padding: 0;
+        border: 1px solid rgba(100, 108, 255, 0.3);
+        width: 90%;
+        max-width: 460px;
+        max-height: 92vh;
+        border-radius: 16px;
+        position: relative;
+        box-shadow:
+          0 20px 50px rgba(0, 0, 0, 0.8),
+          0 0 20px rgba(100, 108, 255, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .modal-header {
+        background: linear-gradient(135deg, #646cff 0%, #7c3aed 100%);
+        padding: 8px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: relative;
+      }
+
+      .modal-header::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+          45deg,
+          transparent 30%,
+          rgba(255, 255, 255, 0.1) 50%,
+          transparent 70%
+        );
+        animation: shimmer 3s ease-in-out infinite;
+      }
+
+      @keyframes shimmer {
+        0%,
+        100% {
+          opacity: 0;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      #hotspot-editor-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: white;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        position: relative;
+        z-index: 1;
+      }
+
+      .close-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: normal;
+        transition: all 0.2s ease;
+        position: relative;
+        z-index: 1;
+      }
+
+      .close-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+      }
+
+      .modal-body {
+        padding: 12px;
+        overflow-y: auto;
+        flex: 1;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(100, 108, 255, 0.3) transparent;
+      }
+
+      .modal-body::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .modal-body::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .modal-body::-webkit-scrollbar-thumb {
+        background: rgba(100, 108, 255, 0.3);
+        border-radius: 3px;
+      }
+
+      .modal-body::-webkit-scrollbar-thumb:hover {
+        background: rgba(100, 108, 255, 0.5);
+      }
+
+      #hotspot-form .form-group {
+        margin-bottom: 6px;
+      }
+
+      #hotspot-form .form-section {
+        margin-bottom: 6px;
+        position: relative;
+      }
+
+      #hotspot-form .section-divider {
+        margin: 8px 0;
+        position: relative;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+      }
+
+      /* Скрываем лишние разделители в конце формы */
+      #hotspot-form .form-section:last-of-type + .section-divider,
+      #hotspot-form .section-divider:last-of-type {
+        display: none;
+      }
+
+      #hotspot-form .form-section::before {
+        display: none;
+      }
+
+      #hotspot-form .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #646cff;
+        margin: 0 0 6px 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      #hotspot-form .section-title::before {
+        content: "";
+        width: 4px;
+        height: 4px;
+        background: linear-gradient(135deg, #646cff, #7c3aed);
+        border-radius: 50%;
+        box-shadow: 0 0 6px rgba(100, 108, 255, 0.4);
+      }
+
+      #hotspot-form label {
+        display: block;
+        margin-bottom: 3px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      #hotspot-form input[type="text"],
+      #hotspot-form textarea,
+      #hotspot-form select,
+      #hotspot-form input[type="color"],
+      #hotspot-form input[type="range"],
+      #hotspot-form input[type="number"] {
+        width: 100%;
+        padding: 6px 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 12px;
+        transition: all 0.2s ease;
+        box-sizing: border-box;
+      }
+
+      #hotspot-form input[type="text"]:focus,
+      #hotspot-form textarea:focus,
+      #hotspot-form select:focus,
+      #hotspot-form input[type="number"]:focus {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: #646cff;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.2);
+      }
+
+      #hotspot-form input[type="color"] {
+        height: 32px;
+        padding: 2px;
+        cursor: pointer;
+        border-radius: 8px;
+      }
+
+      #hotspot-form input[type="color"]::-webkit-color-swatch {
+        border: none;
+        border-radius: 4px;
+      }
+
+      #hotspot-form input[type="range"] {
+        margin-bottom: 5px;
+        background: transparent;
+      }
+
+      #hotspot-form input[type="range"]::-webkit-slider-track {
+        background: rgba(255, 255, 255, 0.1);
+        height: 6px;
+        border-radius: 3px;
+      }
+
+      #hotspot-form input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #646cff, #7c3aed);
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      }
+
+      #hotspot-form textarea {
+        resize: vertical;
+        min-height: 50px;
+        font-family: inherit;
+      }
+
+      #hotspot-form select {
+        cursor: pointer;
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .checkbox-group {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 6px;
+      }
+
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+      }
+
+      .checkbox-item input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+        transform: scale(1.1);
+        accent-color: #646cff;
+      }
+
+      #hotspot-form input[type="file"] {
+        border: 2px dashed rgba(100, 108, 255, 0.3);
+        padding: 16px;
+        text-align: center;
+        cursor: pointer;
+        border-radius: 12px;
+        transition: all 0.3s ease;
+        background: rgba(100, 108, 255, 0.05);
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 13px;
+      }
+
+      #hotspot-form input[type="file"]:hover {
+        border-color: #646cff;
+        background: rgba(100, 108, 255, 0.1);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .custom-icon-preview {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        margin-top: 8px;
+      }
+
+      .custom-icon-preview img {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+      }
+
+      .form-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-top: 12px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .form-actions .btn-secondary {
+        background: linear-gradient(135deg, #6c757d, #495057);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .form-actions .btn-secondary:hover {
+        background: linear-gradient(135deg, #5a6268, #343a40);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      }
+
+      .form-actions .btn-primary {
+        background: linear-gradient(135deg, #646cff, #7c3aed);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .form-actions .btn-primary::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        transition: left 0.6s ease;
+      }
+
+      .form-actions .btn-primary:hover::before {
+        left: 100%;
+      }
+
+      .form-actions .btn-primary:hover {
+        background: linear-gradient(135deg, #535bf2, #6d28d9);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(100, 108, 255, 0.4);
+      }
+
+      .help-text {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-top: 4px;
+        line-height: 1.4;
+      }
+
+      .help-text strong {
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      /* Стили для настроек приложения */
+      .settings-container {
+        padding: 10px 0;
+      }
+
+      .settings-group {
+        margin-bottom: 20px;
+      }
+
+      .settings-group:last-child {
+        margin-bottom: 0;
+      }
+
+      .settings-group h4 {
+        margin: 0 0 15px 0;
+        color: #646cff;
+        font-size: 16px;
+        font-weight: 600;
+        text-align: center;
+      }
+
+      .settings-group label {
+        display: block;
+        margin-bottom: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 14px;
+      }
+
+      .settings-group input[type="color"],
+      .settings-group input[type="range"] {
+        margin-right: 10px;
+      }
+
+      .settings-divider {
+        margin: 20px 0;
+        position: relative;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+      }
+
+      /* Мобильная адаптация */
+      @media (max-width: 768px) {
+        #sidebar {
+          width: 100vw;
+          transform: translateX(-100%);
+          transition: transform 0.3s ease;
+        }
+
+        #sidebar.show {
+          transform: translateX(0);
+        }
+
+        #sidebar-toggle {
+          left: 10px;
+          top: 10px;
+          z-index: 1002;
+          background: rgba(26, 26, 26, 0.95);
+          border: 2px solid #646cff;
+          border-radius: 8px;
+          padding: 8px 12px;
+          font-size: 16px;
+        }
+
+        .modal-content {
+          width: 95vw;
+          max-width: none;
+          max-height: 95vh;
+          margin: 2.5vh auto;
+        }
+
+        .modal-header {
+          padding: 10px 12px;
+        }
+
+        #hotspot-editor-title {
+          font-size: 16px;
+        }
+
+        .modal-body {
+          padding: 8px;
+        }
+
+        .form-row {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+
+        .form-actions {
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .form-actions .btn-primary,
+        .form-actions .btn-secondary {
+          width: 100%;
+          padding: 12px;
+          font-size: 14px;
+        }
+
+        .checkbox-group {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+        }
+
+        .settings-container {
+          padding: 8px 0;
+        }
+
+        .settings-group label {
+          font-size: 16px;
+          margin-bottom: 16px;
+        }
+
+        input[type="range"] {
+          height: 40px;
+        }
+
+        input[type="color"] {
+          height: 44px !important;
+          width: 100px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        body {
+          font-size: 14px;
+        }
+
+        .panel {
+          padding: 12px;
+        }
+
+        .panel h2 {
+          font-size: 14px;
+        }
+
+        .panel button {
+          padding: 12px;
+          font-size: 16px;
+          touch-action: manipulation;
+        }
+
+        #hotspot-editor-title {
+          font-size: 14px;
+        }
+
+        .modal-body {
+          padding: 6px;
+        }
+
+        #hotspot-form input,
+        #hotspot-form textarea,
+        #hotspot-form select {
+          padding: 10px 8px;
+          font-size: 16px;
+          min-height: 44px;
+        }
+
+        #hotspot-form textarea {
+          min-height: 60px;
+        }
+
+        .settings-group h4 {
+          font-size: 18px;
+        }
+      }
+
+      /* Touch-friendly improvements */
+      @media (hover: none) and (pointer: coarse) {
+        button,
+        .btn-primary,
+        .btn-secondary {
+          min-height: 44px;
+          font-size: 16px;
+        }
+
+        input,
+        select,
+        textarea {
+          min-height: 44px;
+          font-size: 16px;
+        }
+
+        .close-btn {
+          width: 44px;
+          height: 44px;
+          font-size: 20px;
+        }
+      }
+      /* Стили для окна загрузки панорам */
+      #drop-zone {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.75);
+        display: none !important;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        backdrop-filter: blur(8px);
+        animation: modalFadeIn 0.3s ease-out;
+      }
+
+      #drop-zone.show {
+        display: flex !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        z-index: 99999 !important;
+        background: rgba(0, 0, 0, 0.75) !important;
+        backdrop-filter: blur(8px) !important;
+      }
+
+      #drop-zone.hide {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.1s ease;
+      }
+
+      @keyframes modalFadeIn {
+        from {
+          opacity: 0;
+          backdrop-filter: blur(0px);
+        }
+        to {
+          opacity: 1;
+          backdrop-filter: blur(8px);
+        }
+      }
+
+      #drop-area {
+        background: linear-gradient(
+          135deg,
+          rgba(45, 45, 45, 0.95) 0%,
+          rgba(35, 35, 35, 0.95) 100%
+        );
+        border: 2px solid rgba(100, 108, 255, 0.3);
+        border-radius: 20px;
+        padding: 48px 40px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.87);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        min-width: 420px;
+        max-width: 520px;
+        position: relative;
+        overflow: hidden;
+        box-shadow:
+          0 20px 50px rgba(0, 0, 0, 0.8),
+          0 0 30px rgba(100, 108, 255, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(20px);
+      }
+
+      #drop-area::before {
+        content: "";
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: linear-gradient(
+          45deg,
+          #646cff,
+          #7c3aed,
+          #ec4899,
+          #f59e0b,
+          #10b981
+        );
+        background-size: 400% 400%;
+        border-radius: 20px;
+        opacity: 0;
+        z-index: -1;
+        animation: gradientShift 6s ease infinite;
+        transition: opacity 0.3s ease;
+      }
+
+      #drop-area:hover::before {
+        opacity: 0.7;
+      }
+
+      @keyframes gradientShift {
+        0%,
+        100% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+      }
+
+      #drop-area:hover {
+        border-color: #7c3aed;
+        background: linear-gradient(135deg, #1f1f1f 0%, #333333 100%);
+        transform: translateY(-4px) scale(1.02);
+        box-shadow:
+          0 25px 60px rgba(0, 0, 0, 0.9),
+          0 0 40px rgba(124, 58, 237, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      }
+
+      #drop-area.drag-over {
+        border-color: #10b981;
+        background: linear-gradient(
+          135deg,
+          rgba(16, 185, 129, 0.1) 0%,
+          rgba(16, 185, 129, 0.05) 100%
+        );
+        transform: translateY(-6px) scale(1.05);
+        box-shadow:
+          0 30px 70px rgba(0, 0, 0, 0.9),
+          0 0 50px rgba(16, 185, 129, 0.6),
+          inset 0 2px 0 rgba(255, 255, 255, 0.2);
+      }
+
+      .upload-icon {
+        margin-bottom: 20px;
+        opacity: 0.7;
+        transition: all 0.3s ease;
+      }
+
+      .upload-icon svg {
+        width: 64px;
+        height: 64px;
+        stroke: #646cff;
+        filter: drop-shadow(0 4px 8px rgba(100, 108, 255, 0.3));
+      }
+
+      #drop-area:hover .upload-icon {
+        opacity: 1;
+        transform: translateY(-2px) scale(1.1);
+      }
+
+      #drop-area:hover .upload-icon svg {
+        stroke: #7c3aed;
+        filter: drop-shadow(0 6px 12px rgba(124, 58, 237, 0.4));
+      }
+
+      #drop-area h3 {
+        margin: 0 0 12px 0;
+        font-size: 24px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.95);
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .upload-description {
+        margin: 0 0 24px 0;
+        font-size: 16px;
+        color: rgba(255, 255, 255, 0.7);
+        line-height: 1.5;
+      }
+
+      .upload-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .upload-divider {
+        text-align: center;
+        margin: 8px 0;
+        position: relative;
+      }
+
+      .upload-divider::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        z-index: 1;
+      }
+
+      .upload-divider span {
+        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+        padding: 4px 16px;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.6);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        position: relative;
+        z-index: 2;
+        display: inline-block;
+      }
+
+      .upload-info {
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .info-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .info-icon {
+        font-size: 16px;
+        opacity: 0.8;
+      }
+
+      .btn-primary {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 16px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 12px;
+        border: none;
+        background: linear-gradient(135deg, #646cff 0%, #7c3aed 100%);
+        color: white;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+        box-shadow:
+          0 4px 12px rgba(100, 108, 255, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      }
+
+      .btn-primary::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        transition: left 0.5s ease;
+      }
+
+      .btn-primary:hover::before {
+        left: 100%;
+      }
+
+      .btn-primary:hover {
+        background: linear-gradient(135deg, #535bf2 0%, #6d28d9 100%);
+        transform: translateY(-2px);
+        box-shadow:
+          0 8px 25px rgba(100, 108, 255, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+
+      .btn-primary svg {
+        width: 20px;
+        height: 20px;
+        stroke-width: 2;
+      }
+
+      .upload-btn {
+        /* Наследует стили от .btn-primary */
+      }
+
+      .btn-secondary {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 14px 20px;
+        font-size: 15px;
+        font-weight: 500;
+        border-radius: 10px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        background: rgba(128, 128, 128, 0.3);
+        color: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+      }
+
+      .btn-secondary:hover {
+        border-color: rgba(128, 128, 128, 0.5);
+        background: rgba(128, 128, 128, 0.4);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(128, 128, 128, 0.3);
+      }
+
+      .btn-secondary svg {
+        width: 20px;
+        height: 20px;
+        stroke-width: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Кнопка переключения панели (независимая) -->
+      <button id="sidebar-toggle" type="button">⮜</button>
+
+      <!-- Боковая панель -->
+      <aside id="sidebar">
+        <!-- Список сцен наверху -->
+        <div class="sidebar-content">
+          <!-- Кнопка добавления панорамы вверху -->
+          <div class="toolbar" style="margin-bottom: 16px">
+            <button
+              id="open-upload"
+              type="button"
+              class="btn-primary modern-upload-btn"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                style="margin-right: 8px"
+              >
+                <path
+                  d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="17,8 12,3 7,8"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <line
+                  x1="12"
+                  y1="3"
+                  x2="12"
+                  y2="15"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+              Добавить панораму
+            </button>
+          </div>
+
+          <h3>Сцены</h3>
+          <ul id="scene-list"></ul>
+        </div>
+
+        <!-- Все кнопки внизу -->
+        <div class="sidebar-footer">
+          <!-- Сохранение, экспорт и полный экран в один ряд -->
+          <div class="toolbar">
+            <button
+              id="save-project"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Сохранить"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="17,21 17,13 7,13 7,21"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="7,3 7,8 15,8"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              id="export-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Экспорт"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="7,10 12,15 17,10"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <line
+                  x1="12"
+                  y1="15"
+                  x2="12"
+                  y2="3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+            <button
+              id="fullscreen-btn"
+              type="button"
+              title="Полный экран"
+              class="icon-btn modern-icon-btn"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              id="set-camera-view-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Установить вид камеры для сцены"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <polygon
+                  points="23,7 16,12 23,17"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  fill="currentColor"
+                />
+                <rect
+                  x="1"
+                  y="5"
+                  width="15"
+                  height="14"
+                  rx="2"
+                  ry="2"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              id="clear-camera-view-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Очистить вид камеры для сцены"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <polyline
+                  points="3,6 5,6 21,6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <line
+                  x1="10"
+                  y1="11"
+                  x2="10"
+                  y2="17"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <line
+                  x1="14"
+                  y1="11"
+                  x2="14"
+                  y2="17"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+            <button
+              id="settings-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Настройки"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+                <path
+                  d="M12 1v6m0 6v6m11-7h-6m-6 0H1m10.5-3a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              id="cleanup-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Очистить хотспоты-сироты"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M3 6h18l-2 13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L3 6Z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <line
+                  x1="10"
+                  y1="11"
+                  x2="10"
+                  y2="17"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <line
+                  x1="14"
+                  y1="11"
+                  x2="14"
+                  y2="17"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Основная область просмотра -->
+      <main id="viewer-container"></main>
+    </div>
+
+    <!-- Модальное окно загрузки -->
+    <div id="drop-zone">
+      <div id="drop-area">
+        <div class="upload-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <polyline
+              points="17,8 12,3 7,8"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <line
+              x1="12"
+              y1="3"
+              x2="12"
+              y2="15"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <h3>Добавить панорамы</h3>
+        <p class="upload-description">
+          Перетащите файлы изображений сюда или выберите файлы
+        </p>
+        <div class="upload-buttons">
+          <button
+            type="button"
+            class="btn-primary upload-btn"
+            onclick="document.getElementById('file-input').click()"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="14,2 14,8 20,8"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <line
+                x1="16"
+                y1="13"
+                x2="8"
+                y2="13"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+              <line
+                x1="16"
+                y1="17"
+                x2="8"
+                y2="17"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+              <polyline
+                points="10,9 9,9 8,9"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Выбрать панорамы
+          </button>
+          <div class="upload-divider"></div>
+          <button id="load-project-btn" type="button" class="btn-secondary">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="14,2 14,8 20,8"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <line
+                x1="16"
+                y1="13"
+                x2="8"
+                y2="13"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+              <line
+                x1="16"
+                y1="17"
+                x2="8"
+                y2="17"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+            Загрузить проект
+          </button>
+        </div>
+        <div class="upload-info">
+          <div class="info-item">
+            <span class="info-icon">📸</span>
+            <span>Поддерживаемые форматы: JPG, PNG, WEBP</span>
+          </div>
+          <div class="info-item">
+            <span class="info-icon">📁</span>
+            <span>Можно загружать несколько файлов одновременно</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Скрытые элементы -->
+    <input
+      type="file"
+      id="file-input"
+      multiple
+      accept="image/*"
+      class="hidden"
+    />
+    <input type="file" id="load-file" accept=".json" class="hidden" />
+
+    <!-- Прогресс-бар -->
+    <div id="futuristic-progress">
+      <div class="color-logo">
+        <span class="logo-letter letter-c" data-letter="C">C</span>
+        <span class="logo-letter letter-o" data-letter="o">o</span>
+        <span class="logo-letter letter-l" data-letter="l">l</span>
+        <span class="logo-letter letter-o2" data-letter="o">o</span>
+        <span class="logo-letter letter-r" data-letter="R">R</span>
+      </div>
+      <span class="label" data-text="Загрузка панорам..."
+        >Загрузка панорам...</span
+      >
+    </div>
+
+    <!-- Модальное окно редактора хотспотов -->
+    <div id="hotspot-editor-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="hotspot-editor-title">Настроить точку</h3>
+          <button class="close-btn" type="button">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <form id="hotspot-form">
+            <!-- Основные настройки -->
+            <div class="form-section">
+              <div class="form-group form-group-title">
+                <label for="hotspot-title">Название</label>
+                <input
+                  type="text"
+                  id="hotspot-title"
+                  name="title"
+                  required
+                  placeholder="Введите название..."
+                />
+              </div>
+
+              <div class="form-group form-group-description">
+                <label for="hotspot-description">Описание</label>
+                <textarea
+                  id="hotspot-description"
+                  name="description"
+                  rows="3"
+                  placeholder="Опишите точку..."
+                ></textarea>
+              </div>
+
+              <div class="form-group form-group-target-scene">
+                <label for="hotspot-target-scene">Сцена для перехода</label>
+                <select id="hotspot-target-scene" name="targetSceneId">
+                  <option value="">Выберите сцену...</option>
+                </select>
+              </div>
+            </div>
+            <!-- Оформление текста -->
+            <div class="form-section form-group-text-style">
+              <div class="section-title">🎨 Оформление текста</div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="hotspot-text-color">Цвет текста</label>
+                  <input
+                    type="color"
+                    id="hotspot-text-color"
+                    name="textColor"
+                    value="#ffffff"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="hotspot-text-size">Размер текста</label>
+                  <select id="hotspot-text-size" name="textSize">
+                    <option value="0.75">Мелкий</option>
+                    <option value="1" selected>Обычный</option>
+                    <option value="1.25">Средний</option>
+                    <option value="1.5">Крупный</option>
+                    <option value="2">Очень крупный</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="hotspot-text-family">Шрифт</label>
+                <select id="hotspot-text-family" name="textFamily">
+                  <option value="Arial, sans-serif">Arial</option>
+                  <option value="Roboto, Arial, sans-serif">Roboto</option>
+                  <option
+                    value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+                  >
+                    Segoe UI
+                  </option>
+                  <option value="'Times New Roman', Times, serif">
+                    Times New Roman
+                  </option>
+                  <option value="'Courier New', Courier, monospace">
+                    Courier New
+                  </option>
+                </select>
+              </div>
+
+              <div class="checkbox-group">
+                <div class="checkbox-item">
+                  <input
+                    type="checkbox"
+                    id="hotspot-text-bold"
+                    name="textBold"
+                  />
+                  <label for="hotspot-text-bold">💪 Жирный</label>
+                </div>
+                <div class="checkbox-item">
+                  <input
+                    type="checkbox"
+                    id="hotspot-text-underline"
+                    name="textUnderline"
+                  />
+                  <label for="hotspot-text-underline">📝 Подчёркнутый</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="form-section form-group-marker-style">
+              <div class="section-title">📋 Настройки маркера</div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="hotspot-marker-color">Цвет маркера</label>
+                  <input
+                    type="color"
+                    id="hotspot-marker-color"
+                    name="markerColor"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="hotspot-marker-size">Размер маркера</label>
+                  <select id="hotspot-marker-size" name="markerSize">
+                    <option value="0.2">Маленький</option>
+                    <option value="0.3" selected>Обычный</option>
+                    <option value="0.4">Крупный</option>
+                    <option value="0.5">Очень крупный</option>
+                    <option value="0.7">Гигант</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="hotspot-marker-icon">Иконка маркера</label>
+                <select id="hotspot-marker-icon" name="markerIcon">
+                  <option value="arrow">🔺 Стрелка</option>
+                  <option value="sphere">🔵 Круг</option>
+                  <option value="custom">🖼️ Собственная иконка</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <div class="checkbox-item">
+                  <input
+                    type="checkbox"
+                    id="hotspot-marker-no-fill"
+                    name="markerNoFill"
+                  />
+                  <label for="hotspot-marker-no-fill"
+                    >🕳️ Без заливки (только иконка)</label
+                  >
+                </div>
+              </div>
+
+              <div
+                class="form-group form-group-custom-icon"
+                id="custom-icon-group"
+                style="display: none"
+              >
+                <label for="hotspot-custom-icon">Загрузить иконку</label>
+                <input
+                  type="file"
+                  id="hotspot-custom-icon"
+                  name="customIcon"
+                  accept="image/*"
+                />
+                <div
+                  class="custom-icon-preview"
+                  id="custom-icon-preview"
+                  style="margin-top: 10px; display: none"
+                >
+                  <img
+                    id="custom-icon-img"
+                    src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+                    alt="Предпросмотр иконки"
+                    style="
+                      max-width: 60px;
+                      max-height: 60px;
+                      border-radius: 4px;
+                    "
+                  />
+                  <button
+                    type="button"
+                    id="remove-custom-icon"
+                    style="
+                      padding: 6px 12px;
+                      background: #dc3545;
+                      color: white;
+                      border: none;
+                      border-radius: 6px;
+                      cursor: pointer;
+                      font-size: 12px;
+                    "
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            </div>
+            <!-- Дополнительные настройки -->
+            <div class="form-section form-group-iframe" style="display: none">
+              <div class="section-title">🖥️ 3D-iframe</div>
+              <div class="form-group">
+                <label for="hotspot-iframe-url"
+                  >Ссылка (YouTube/другой embed)</label
+                >
+                <input
+                  type="text"
+                  id="hotspot-iframe-url"
+                  name="iframeUrl"
+                  placeholder="Вставьте ссылку на видео (YouTube и т.п.)"
+                />
+                <div class="help-text">
+                  Этот тип добавляет поверх сцены iframe, синхронизируемый с
+                  3D‑плоскостью.<br />
+                  Рекомендуется указывать ссылки формата YouTube — обычные
+                  ссылки будут преобразованы в embed автоматически.
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section form-group-video" style="display: none">
+              <div class="section-title">📹 Видео-область</div>
+              <div class="form-group">
+                <label for="hotspot-video-source">Источник видео</label>
+                <select id="hotspot-video-source" name="videoSource">
+                  <option value="">Выберите источник</option>
+                  <option value="file">📁 Локальный файл</option>
+                  <option value="url">🌐 Онлайн-видео</option>
+                </select>
+              </div>
+              <div
+                class="form-group"
+                id="video-file-group"
+                style="display: none"
+              >
+                <label for="hotspot-video-file">Выберите видеофайл</label>
+                <input
+                  type="file"
+                  id="hotspot-video-file"
+                  name="videoFile"
+                  accept="video/*"
+                />
+                <div class="help-text">
+                  Поддерживаемые форматы: MP4, WebM, OGG, Data URL
+                </div>
+              </div>
+              <div
+                class="form-group"
+                id="video-url-group"
+                style="display: none"
+              >
+                <label for="hotspot-video-url">Ссылка на видео</label>
+                <input
+                  type="text"
+                  id="hotspot-video-url"
+                  name="videoUrl"
+                  placeholder="Введите ссылку на видео"
+                />
+                <div class="help-text">
+                  <strong>✅ Поддерживается:</strong> Прямые ссылки на MP4,
+                  WebM, OGG файлы + Data URL (base64)<br />
+                  <strong>❌ НЕ поддерживается:</strong> YouTube, Instagram,
+                  TikTok, VK Video<br />
+                  <strong>Пример:</strong>
+                  https://storage.googleapis.com/video.mp4
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="form-section form-group-video-size"
+              style="display: none"
+            >
+              <div class="section-title">📏 Размеры области</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="hotspot-video-width">Ширина (м)</label>
+                  <input
+                    type="number"
+                    id="hotspot-video-width"
+                    name="videoWidth"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                    value="4"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="hotspot-video-height">Высота (м)</label>
+                  <input
+                    type="number"
+                    id="hotspot-video-height"
+                    name="videoHeight"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                    value="3"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section form-group-chroma" style="display: none">
+              <div class="section-title">🌈 Хромакей</div>
+              <div class="checkbox-group">
+                <div class="checkbox-item">
+                  <input
+                    type="checkbox"
+                    id="hotspot-chroma-enabled"
+                    name="chromaEnabled"
+                  />
+                  <label for="hotspot-chroma-enabled">Включить хромакей</label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="hotspot-chroma-color">Ключевой цвет</label>
+                <input
+                  type="color"
+                  id="hotspot-chroma-color"
+                  name="chromaColor"
+                  value="#00ff00"
+                />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="hotspot-chroma-similarity">Порог похожести</label>
+                  <input
+                    type="number"
+                    id="hotspot-chroma-similarity"
+                    name="chromaSimilarity"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.4"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="hotspot-chroma-smoothness">Плавность</label>
+                  <input
+                    type="number"
+                    id="hotspot-chroma-smoothness"
+                    name="chromaSmoothness"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.1"
+                  />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="hotspot-chroma-threshold">Порог отсечения</label>
+                <input
+                  type="number"
+                  id="hotspot-chroma-threshold"
+                  name="chromaThreshold"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0.0"
+                />
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button
+                type="button"
+                id="set-as-default-btn"
+                class="btn-secondary"
+              >
+                ⭐ Установить по умолчанию
+              </button>
+              <button type="submit" class="btn-primary">Сохранить</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Подключение модулей -->
+    <script type="module" src="main.js"></script>
+    <!-- Стилизованный выпадающий список -->
+    <script src="scripts/styled-select.js"></script>
+
+    <!-- Обработчики для интерактивных элементов формы -->
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        // Обновление значения слайдера размера текста
+        const textSizeSlider = document.getElementById("hotspot-text-size");
+        const textSizeValue = document.getElementById("text-size-value");
+
+        if (textSizeSlider && textSizeValue) {
+          textSizeSlider.addEventListener("input", (e) => {
+            textSizeValue.textContent = e.target.value;
+          });
+        }
+
+        // Обработчики для пользовательской иконки
+        const iconSelect = document.getElementById("hotspot-marker-icon");
+        const customIconGroup = document.getElementById("custom-icon-group");
+        const customIconInput = document.getElementById("hotspot-custom-icon");
+        const customIconPreview = document.getElementById(
+          "custom-icon-preview"
+        );
+        const customIconImg = document.getElementById("custom-icon-img");
+        const removeCustomIconBtn =
+          document.getElementById("remove-custom-icon");
+
+        // Показать/скрыть поле загрузки пользовательской иконки
+        if (iconSelect && customIconGroup) {
+          iconSelect.addEventListener("change", (e) => {
+            if (e.target.value === "custom") {
+              customIconGroup.style.display = "block";
+            } else {
+              customIconGroup.style.display = "none";
+              // Сбрасываем пользовательскую иконку
+              if (customIconInput) customIconInput.value = "";
+              if (customIconPreview) customIconPreview.style.display = "none";
+            }
+          });
+        }
+
+        // Обработка загрузки файла
+        if (customIconInput && customIconImg && customIconPreview) {
+          customIconInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith("image/")) {
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                customIconImg.src = e.target.result;
+                customIconPreview.style.display = "flex";
+              };
+              reader.readAsDataURL(file);
+            }
+          });
+        }
+
+        // Удаление пользовательской иконки
+        if (removeCustomIconBtn && customIconInput && customIconPreview) {
+          removeCustomIconBtn.addEventListener("click", () => {
+            customIconInput.value = "";
+            customIconPreview.style.display = "none";
+          });
+        }
+
+        // Обработчик переключения источника видео
+        const videoSourceSelect = document.getElementById(
+          "hotspot-video-source"
+        );
+        const videoFileGroup = document.getElementById("video-file-group");
+        const videoUrlGroup = document.getElementById("video-url-group");
+
+        if (videoSourceSelect && videoFileGroup && videoUrlGroup) {
+          videoSourceSelect.addEventListener("change", (e) => {
+            const source = e.target.value;
+            if (source === "file") {
+              videoFileGroup.style.display = "block";
+              videoUrlGroup.style.display = "none";
+            } else if (source === "url") {
+              videoFileGroup.style.display = "none";
+              videoUrlGroup.style.display = "block";
+            } else {
+              videoFileGroup.style.display = "none";
+              videoUrlGroup.style.display = "none";
+            }
+          });
+        }
+
+        // Удален обработчик тестового видео для продакшна
+      });
+    </script>
+  </body>
+</html>

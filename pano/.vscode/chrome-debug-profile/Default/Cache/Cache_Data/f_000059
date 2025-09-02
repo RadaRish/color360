@@ -1,0 +1,526 @@
+import ExportManager from './core/export_manager.js';
+import HotspotManager from './core/hotspot_manager.js';
+import ProjectManager from './core/project_manager.js';
+import SceneManager from './core/scene_manager.js';
+import ViewerManager from './core/viewer_manager.js';
+import HotspotEditor from './ui/hotspot-editor.js';
+import SceneList from './ui/scene_list.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const viewerContainer = document.getElementById('viewer-container');
+  if (!viewerContainer) {
+    console.error('viewer-container не найден в DOM!');
+    return;
+  }
+
+  setTimeout(() => {
+    try {
+      const hotspotManager = new HotspotManager(); // Создаем сначала hotspotManager
+      const viewerManager = new ViewerManager('viewer-container', hotspotManager); // Передаем его в ViewerManager
+      const sceneManager = new SceneManager(viewerManager);
+      const projectManager = new ProjectManager(sceneManager, hotspotManager);
+      const exportManager = new ExportManager(sceneManager, hotspotManager, projectManager);
+      const hotspotEditor = new HotspotEditor('hotspot-editor-modal');
+
+      // Загружаем и применяем сохраненные настройки
+      const settings = viewerManager.getDefaultSettings();
+      viewerManager.updateCameraSettings(settings);
+
+      // Связываем менеджеры друг с другом
+      hotspotManager.setViewerManager(viewerManager);
+      sceneManager.setHotspotManager(hotspotManager);
+      hotspotManager.setSceneManager(sceneManager);
+
+      window.sceneManager = sceneManager;
+      window.hotspotManager = hotspotManager;
+      window.viewerManager = viewerManager;
+      window.hotspotEditor = hotspotEditor;
+      window.exportManager = exportManager;
+
+      // Создаем глобальный объект app для удобного доступа
+      window.app = {
+        sceneManager,
+        hotspotManager,
+        viewerManager,
+        hotspotEditor,
+        exportManager,
+        projectManager,
+        // Функция для показа уведомлений
+        showNotification: (message, type = 'info') => {
+          const notification = document.createElement('div');
+          notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        padding: 12px 20px;
+                        background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+                        color: white;
+                        border-radius: 4px;
+                        z-index: 10000;
+                        font-family: system-ui, sans-serif;
+                        font-size: 14px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                        max-width: 300px;
+                    `;
+          notification.textContent = message;
+          document.body.appendChild(notification);
+
+          setTimeout(() => {
+            notification.remove();
+          }, 3000);
+        }
+      };
+
+      const sceneList = new SceneList(sceneManager, document.getElementById('scene-list'));
+      sceneList.render();
+
+      // Глобальные функции для редактирования и удаления, вызываемые из A-Frame компонентов
+      window.editMarker = async (hotspotId) => {
+        const hotspot = hotspotManager.findHotspotById(hotspotId);
+        if (!hotspot) return;
+
+        const scenes = sceneManager.getAllScenes();
+        const currentScene = sceneManager.getSceneById(hotspot.sceneId);
+
+        try {
+          const data = await hotspotEditor.showEditMode(hotspot);
+
+          if (data) {
+            hotspotManager.updateHotspot(hotspot.id, data);
+          }
+        } catch (error) {
+          console.error('Ошибка при редактировании маркера:', error);
+        }
+      };
+
+      window.deleteMarker = (hotspotId) => {
+        if (confirm('Вы уверены, что хотите удалить эту точку?')) {
+          hotspotManager.removeHotspotById(hotspotId);
+        }
+      };
+
+      // Обработчик для создания хотспота из контекстного меню
+      viewerManager.getViewer().container.addEventListener('context-menu-add-hotspot', async (e) => {
+        const { type, position } = e.detail;
+        const scenes = sceneManager.getAllScenes();
+        const currentScene = sceneManager.getCurrentScene();
+
+        if (!currentScene) {
+          alert("Сначала добавьте или выберите сцену.");
+          return;
+        }
+
+        const data = await hotspotEditor.show({
+          type,
+          scenes: scenes.filter(s => s.id !== currentScene.id)
+        });
+
+        if (data) {
+          hotspotManager.addHotspot(currentScene, {
+            ...data,
+            type,
+            position,
+          });
+        }
+      });
+
+      // --- Обработчики событий UI ---
+
+      // Боковая панель
+      const sidebar = document.getElementById('sidebar');
+      const toggle = document.getElementById('sidebar-toggle');
+      if (sidebar && toggle) {
+        toggle.onclick = function () {
+          sidebar.classList.toggle('hide');
+          toggle.textContent = sidebar.classList.contains('hide') ? '⮞' : '⮜';
+        };
+      }
+
+      // Полноэкранный режим
+      const fullscreenBtn = document.getElementById('fullscreen-btn');
+      if (fullscreenBtn) {
+        fullscreenBtn.onclick = () => {
+          if (!document.fullscreenElement) {
+            viewerContainer.requestFullscreen().catch(err => {
+              alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+          } else {
+            document.exitFullscreen();
+          }
+        };
+      }
+
+      // Кнопка настроек
+      const settingsBtn = document.getElementById('settings-btn');
+      if (settingsBtn) {
+        settingsBtn.onclick = () => {
+          showAppSettings();
+        };
+      }
+
+      // Кнопка экспорта
+      const exportBtn = document.getElementById('export-btn');
+      if (exportBtn) {
+        exportBtn.onclick = async () => {
+          try {
+            await exportManager.exportProject();
+          } catch (error) {
+            console.error('Ошибка экспорта:', error);
+            alert('Ошибка при экспорте: ' + error.message);
+          }
+        };
+      }
+
+      // Кнопка очистки хотспотов-сирот
+      const cleanupBtn = document.getElementById('cleanup-btn');
+      if (cleanupBtn) {
+        cleanupBtn.onclick = () => {
+          try {
+            const scenes = sceneManager.getAllScenes();
+            const validSceneIds = scenes.map(scene => scene.id);
+            const orphanedCount = hotspotManager.cleanupOrphanedHotspots(validSceneIds);
+
+            if (orphanedCount > 0) {
+              alert(`Очистка завершена! Удалено ${orphanedCount} хотспотов-сирот.`);
+              // Обновляем отображение текущей сцены
+              const currentScene = sceneManager.getCurrentScene();
+              if (currentScene) {
+                viewerManager.restoreMarkersForScene(currentScene.id);
+              }
+            } else {
+              alert('Хотспоты-сироты не найдены. Данные уже чистые!');
+            }
+          } catch (error) {
+            console.error('Ошибка очистки:', error);
+            alert('Ошибка при очистке: ' + error.message);
+          }
+        };
+      }
+
+      // Кнопка установки вида камеры
+      const setCameraViewBtn = document.getElementById('set-camera-view-btn');
+      if (setCameraViewBtn) {
+        setCameraViewBtn.onclick = () => {
+          try {
+            const currentScene = sceneManager.getCurrentScene();
+            if (!currentScene) {
+              alert('Нет активной сцены для сохранения вида камеры');
+              return;
+            }
+
+            const success = viewerManager.saveCameraPositionForScene(currentScene.id);
+            if (success) {
+              const cleanName = (currentScene.name || '').replace(/\.[^.]+$/, '');
+              window.app?.showNotification?.(`Вид камеры сохранен для сцены "${cleanName}"`, 'success');
+            } else {
+              window.app?.showNotification?.('Ошибка при сохранении вида камеры', 'error');
+            }
+          } catch (error) {
+            console.error('Ошибка сохранения вида камеры:', error);
+            alert('Ошибка при сохранении вида камеры: ' + error.message);
+          }
+        };
+      }
+
+      // Кнопка очистки вида камеры
+      const clearCameraViewBtn = document.getElementById('clear-camera-view-btn');
+      if (clearCameraViewBtn) {
+        clearCameraViewBtn.onclick = () => {
+          try {
+            const currentScene = sceneManager.getCurrentScene();
+            if (!currentScene) {
+              alert('Нет активной сцены для очистки вида камеры');
+              return;
+            }
+
+            const success = sceneManager.clearCameraForScene(currentScene.id);
+            if (success) {
+              const cleanName2 = (currentScene.name || '').replace(/\.[^.]+$/, '');
+              window.app?.showNotification?.(`Вид камеры очищен для сцены "${cleanName2}"`, 'info');
+            } else {
+              window.app?.showNotification?.('У этой сцены не было сохраненного вида камеры', 'warning');
+            }
+          } catch (error) {
+            console.error('Ошибка очистки вида камеры:', error);
+            alert('Ошибка при очистке вида камеры: ' + error.message);
+          }
+        };
+      }
+
+      // Кнопки управления зумом
+  const zoomInBtn = document.getElementById('zoom-in-btn');
+  const zoomOutBtn = document.getElementById('zoom-out-btn');
+  const zoomResetBtn = document.getElementById('zoom-reset-btn');
+
+      if (zoomInBtn) {
+        zoomInBtn.onclick = () => {
+          if (viewerManager && viewerManager.zoomIn) viewerManager.zoomIn();
+        };
+      }
+      if (zoomOutBtn) {
+        zoomOutBtn.onclick = () => {
+          if (viewerManager && viewerManager.zoomOut) viewerManager.zoomOut();
+        };
+      }
+      if (zoomResetBtn) {
+        zoomResetBtn.onclick = () => {
+          if (viewerManager && viewerManager.resetZoom) viewerManager.resetZoom();
+        };
+      }
+
+      // Модальное окно загрузки
+      const openUploadBtn = document.getElementById('open-upload');
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('file-input');
+
+      if (openUploadBtn && dropZone) {
+        openUploadBtn.onclick = () => {
+          dropZone.style.display = 'flex';
+        };
+        dropZone.addEventListener('click', (e) => {
+          if (e.target.id === 'drop-zone') {
+            dropZone.style.display = 'none';
+          }
+        });
+      }
+
+      // Сохранение проекта
+      const saveProjectBtn = document.getElementById('save-project');
+      if (saveProjectBtn) {
+        saveProjectBtn.onclick = () => {
+          try {
+            const json = projectManager.saveProject();
+            const blob = new Blob([json], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'panorama-project.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            // project saved
+          } catch (error) {
+            console.error('Ошибка при сохранении проекта:', error);
+            alert('Ошибка при сохранении проекта');
+          }
+        };
+      }
+
+      // Загрузка проекта
+      const loadProjectBtn = document.getElementById('load-project-btn');
+      const loadFileInput = document.getElementById('load-file');
+
+      if (loadProjectBtn && loadFileInput) {
+        loadProjectBtn.onclick = () => loadFileInput.click();
+
+        loadFileInput.addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            try {
+              const content = await file.text();
+              const success = await projectManager.loadProject(content);
+              if (success) {
+                sceneList.render();
+                if (dropZone) dropZone.style.display = 'none';
+                // project loaded
+              } else {
+                alert('Не удалось загрузить проект. Проверьте консоль для деталей.');
+              }
+            } catch (error) {
+              console.error('Ошибка при загрузке проекта:', error);
+              alert('Ошибка при чтении файла проекта');
+            }
+            e.target.value = '';
+          }
+        });
+      }
+
+      // Загрузка панорамных изображений
+      if (fileInput) {
+        fileInput.addEventListener('change', async (e) => {
+          const files = [...e.target.files];
+          if (files.length === 0) return;
+
+          for (const file of files) {
+            if (!file.type.startsWith('image/')) continue;
+            const src = await new Promise(resolve => {
+              const reader = new FileReader();
+              reader.onload = ev => resolve(ev.target.result);
+              reader.readAsDataURL(file);
+            });
+            await sceneManager.addScene({ name: file.name, src });
+          }
+          sceneList.render();
+          if (dropZone) dropZone.style.display = 'none';
+          e.target.value = '';
+        });
+      }
+
+  // app initialized
+
+      // Функция настроек приложения
+      window.showAppSettings = () => {
+        const settingsModal = document.createElement('div');
+        settingsModal.className = 'modal';
+        settingsModal.style.display = 'flex';
+
+        settingsModal.innerHTML = `
+                    <div class="modal-content">
+                        <span class="close-btn settings-close">&times;</span>
+                        <h3>Настройки приложения</h3>
+                        
+                        <div class="settings-section">
+                            <h4>Управление камерой</h4>
+                            <label>
+                                <input type="range" id="mouse-sensitivity" min="0.1" max="2" step="0.1" value="1">
+                                Чувствительность мыши: <span id="sensitivity-value">1</span>
+                            </label>
+                            <label>
+                                <input type="range" id="zoom-speed" min="1" max="10" step="1" value="5">
+                                Скорость зума (кнопки +/- и колесико мыши): <span id="zoom-speed-value">5</span>
+                            </label>
+              <label style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                <input type="checkbox" id="gyro-enabled">
+                Включить гироскоп (на мобильных устройствах)
+              </label>
+                        </div>
+                        
+                        <div class="settings-section">
+                            <h4>Хотспоты по умолчанию</h4>
+                            <label>
+                                <input type="color" id="default-hotspot-color" value="#00ff00">
+                                Цвет хотспотов
+                            </label>
+                            <label>
+                                <input type="range" id="default-hotspot-size" min="0.1" max="1" step="0.1" value="0.3">
+                                Размер хотспотов: <span id="hotspot-size-value">0.3</span>
+                            </label>
+                        </div>
+                        
+                        <div class="settings-section">
+                            <h4>Инфоточки по умолчанию</h4>
+                            <label>
+                                <input type="color" id="default-infopoint-color" value="#ffcc00">
+                                Цвет инфоточек
+                            </label>
+                            <label>
+                                <input type="range" id="default-infopoint-size" min="0.1" max="1" step="0.1" value="0.3">
+                                Размер инфоточек: <span id="infopoint-size-value">0.3</span>
+                            </label>
+                        </div>
+                        
+                        <button onclick="applySettings()" class="btn-primary">Применить настройки</button>
+                    </div>
+                `;
+
+        document.body.appendChild(settingsModal);
+
+        // Обработчики для слайдеров
+        const sensitivitySlider = settingsModal.querySelector('#mouse-sensitivity');
+        const sensitivityValue = settingsModal.querySelector('#sensitivity-value');
+        sensitivitySlider.addEventListener('input', (e) => {
+          sensitivityValue.textContent = e.target.value;
+        });
+
+        const zoomSpeedSlider = settingsModal.querySelector('#zoom-speed');
+        const zoomSpeedValue = settingsModal.querySelector('#zoom-speed-value');
+        zoomSpeedSlider.addEventListener('input', (e) => {
+          zoomSpeedValue.textContent = e.target.value;
+        });
+
+        const hotspotSizeSlider = settingsModal.querySelector('#default-hotspot-size');
+        const hotspotSizeValue = settingsModal.querySelector('#hotspot-size-value');
+        hotspotSizeSlider.addEventListener('input', (e) => {
+          hotspotSizeValue.textContent = e.target.value;
+        });
+
+        const infopointSizeSlider = settingsModal.querySelector('#default-infopoint-size');
+        const infopointSizeValue = settingsModal.querySelector('#infopoint-size-value');
+        infopointSizeSlider.addEventListener('input', (e) => {
+          infopointSizeValue.textContent = e.target.value;
+        });
+
+        // Проставляем сохранённые значения, если есть
+        try {
+          const saved = JSON.parse(localStorage.getItem('panorama-editor-settings') || '{}');
+          if (saved.mouseSensitivity) { sensitivitySlider.value = saved.mouseSensitivity; sensitivityValue.textContent = saved.mouseSensitivity; }
+          if (saved.zoomSpeed) { zoomSpeedSlider.value = saved.zoomSpeed; zoomSpeedValue.textContent = saved.zoomSpeed; }
+          if (saved.hotspotColor) document.getElementById('default-hotspot-color').value = saved.hotspotColor;
+          if (saved.hotspotSize) { hotspotSizeSlider.value = saved.hotspotSize; hotspotSizeValue.textContent = saved.hotspotSize; }
+          if (saved.infopointColor) document.getElementById('default-infopoint-color').value = saved.infopointColor;
+          if (saved.infopointSize) { infopointSizeSlider.value = saved.infopointSize; infopointSizeValue.textContent = saved.infopointSize; }
+          if (typeof saved.gyroEnabled === 'boolean') document.getElementById('gyro-enabled').checked = saved.gyroEnabled;
+        } catch { }
+
+        // Закрытие модального окна
+        const closeBtn = settingsModal.querySelector('.settings-close');
+        closeBtn.addEventListener('click', () => {
+          settingsModal.remove();
+        });
+
+        settingsModal.addEventListener('click', (e) => {
+          if (e.target === settingsModal) {
+            settingsModal.remove();
+          }
+        });
+      };
+
+      // Функция применения настроек
+      window.applySettings = () => {
+        const mouseSensitivity = document.getElementById('mouse-sensitivity').value;
+        const zoomSpeed = document.getElementById('zoom-speed').value;
+        const gyroEnabled = !!document.getElementById('gyro-enabled').checked;
+        const hotspotColor = document.getElementById('default-hotspot-color').value;
+        const hotspotSize = document.getElementById('default-hotspot-size').value;
+        const infopointColor = document.getElementById('default-infopoint-color').value;
+        const infopointSize = document.getElementById('default-infopoint-size').value;
+
+        // Сохраняем настройки в localStorage
+        const settings = {
+          mouseSensitivity: parseFloat(mouseSensitivity),
+          zoomSpeed: parseFloat(zoomSpeed),
+          gyroEnabled,
+          hotspotColor,
+          hotspotSize: parseFloat(hotspotSize),
+          infopointColor,
+          infopointSize: parseFloat(infopointSize)
+        };
+
+        localStorage.setItem('panorama-editor-settings', JSON.stringify(settings));
+
+        // Применяем настройки к камере
+        viewerManager.updateCameraSettings(settings);
+
+        // Применяем настройки к существующим маркерам
+        hotspotManager.updateAllMarkersWithSettings(settings);
+
+        alert('Настройки применены!');
+        document.querySelector('.modal').remove();
+      };
+
+      // Загружаем сохраненные настройки при старте
+      const savedSettings = localStorage.getItem('panorama-editor-settings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        viewerManager.updateCameraSettings(settings);
+      }
+
+      // Добавляем обработчик для кнопки очистки данных
+      const clearDataBtn = document.getElementById('clear-data-btn');
+      if (clearDataBtn) {
+        clearDataBtn.addEventListener('click', () => {
+          if (confirm('Вы уверены, что хотите очистить все данные приложения? Это действие нельзя отменить.')) {
+            localStorage.clear();
+            sessionStorage.clear();
+            location.reload();
+          }
+        });
+      }
+
+      // Добавляем тестовую кнопку для проверки редактирования маркеров
+  // Удалены диагностические утилиты и тестовые хендлеры для продакшна
+
+    } catch (error) {
+      console.error('Критическая ошибка при инициализации приложения:', error);
+      alert('Ошибка инициализации приложения. Проверьте консоль для деталей.');
+    }
+  }, 100);
+});

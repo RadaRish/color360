@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # Main Color360 site (landing page + API)
+  color360-main:
+    build: .
+    container_name: color360-main
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - color360-network
+
+  # Panorama editor application
+  color360-pano:
+    build: ./pano
+    container_name: color360-pano
+    ports:
+      - "80:80"
+    volumes:
+      - ./pano/export:/usr/share/nginx/html/export
+    restart: unless-stopped
+    networks:
+      - color360-network
+
+  # Reverse proxy to route traffic
+  nginx:
+    image: nginx:alpine
+    container_name: color360-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - color360-main
+      - color360-pano
+    restart: unless-stopped
+    networks:
+      - color360-network
+
+networks:
+  color360-network:
+    driver: bridge

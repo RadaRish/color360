@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Тестирование видео-областей ColoR</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .test-panel {
+            background: #333;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .video-test {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        video {
+            width: 200px;
+            height: 112px;
+            border: 1px solid #555;
+        }
+        button {
+            padding: 8px 16px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005999;
+        }
+        .status {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .status.success { background: #2d5a2d; }
+        .status.error { background: #5a2d2d; }
+        .status.warning { background: #5a5a2d; }
+    </style>
+</head>
+<body>
+    <h1>🎬 Тестирование видео-областей ColoR</h1>
+    
+    <div class="test-panel">
+        <h3>Проверка видео элементов в основном приложении</h3>
+        <button onclick="checkMainAppVideos()">Проверить видео в основном приложении</button>
+        <div id="main-app-status"></div>
+    </div>
+
+    <div class="test-panel">
+        <h3>Тестовые видео</h3>
+        
+        <div class="video-test">
+            <video id="test-video-1" controls>
+                <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+                Ваш браузер не поддерживает видео.
+            </video>
+            <div>
+                <div>Тестовое видео 1 (W3Schools)</div>
+                <button onclick="testVideo('test-video-1')">Тест воспроизведения</button>
+                <div id="status-1" class="status"></div>
+            </div>
+        </div>
+
+        <div class="video-test">
+            <video id="test-video-2" controls>
+                <source src="https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4" type="video/mp4">
+                Ваш браузер не поддерживает видео.
+            </video>
+            <div>
+                <div>Тестовое видео 2 (Sample Videos)</div>
+                <button onclick="testVideo('test-video-2')">Тест воспроизведения</button>
+                <div id="status-2" class="status"></div>
+            </div>
+        </div>
+
+        <div class="video-test">
+            <video id="test-video-3" controls>
+                <source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAQhtZGF0AAAA..." type="video/mp4">
+                Локальное тестовое видео
+            </video>
+            <div>
+                <div>Тестовое видео 3 (Base64)</div>
+                <button onclick="testVideo('test-video-3')">Тест воспроизведения</button>
+                <div id="status-3" class="status"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-panel">
+        <h3>Создать тестовую видео-область</h3>
+        <button onclick="createTestVideoArea()">Создать видео-область в основном приложении</button>
+        <div id="create-status"></div>
+    </div>
+
+    <div class="test-panel">
+        <h3>Консоль диагностики</h3>
+        <div id="console-output" style="background: #000; padding: 10px; font-family: monospace; max-height: 300px; overflow-y: auto;"></div>
+        <button onclick="clearConsole()">Очистить консоль</button>
+    </div>
+
+    <script>
+        // Перехватываем console.log для отображения в панели
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+
+        function logToPanel(message, type = 'log') {
+            const output = document.getElementById('console-output');
+            const div = document.createElement('div');
+            div.style.color = type === 'error' ? '#ff6b6b' : type === 'warn' ? '#ffd93d' : '#6bcf7f';
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logToPanel(args.join(' '), 'log');
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            logToPanel(args.join(' '), 'warn');
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logToPanel(args.join(' '), 'error');
+        };
+
+        function testVideo(videoId) {
+            const video = document.getElementById(videoId);
+            const status = document.getElementById('status-' + videoId.split('-')[2]);
+            
+            console.log(`🎬 Тестирование видео: ${videoId}`);
+            
+            status.textContent = 'Тестирование...';
+            status.className = 'status';
+            
+            video.play().then(() => {
+                status.textContent = '✅ Воспроизведение успешно';
+                status.className = 'status success';
+                console.log(`✅ Видео ${videoId} успешно воспроизводится`);
+                
+                // Останавливаем через 2 секунды
+                setTimeout(() => {
+                    video.pause();
+                    video.currentTime = 0;
+                }, 2000);
+            }).catch(err => {
+                status.textContent = `❌ Ошибка: ${err.message}`;
+                status.className = 'status error';
+                console.error(`❌ Ошибка воспроизведения видео ${videoId}:`, err);
+            });
+        }
+
+        function checkMainAppVideos() {
+            const statusDiv = document.getElementById('main-app-status');
+            
+            // Проверяем, открыто ли основное приложение
+            if (window.opener) {
+                const mainWindow = window.opener;
+                const videos = mainWindow.document.querySelectorAll('video');
+                
+                console.log(`🔍 Найдено видео элементов в основном приложении: ${videos.length}`);
+                
+                let statusHTML = `<div>Найдено видео элементов: ${videos.length}</div>`;
+                
+                videos.forEach((video, index) => {
+                    console.log(`Видео ${index}:`, {
+                        id: video.id,
+                        src: video.src,
+                        currentSrc: video.currentSrc,
+                        readyState: video.readyState,
+                        paused: video.paused
+                    });
+                    
+                    statusHTML += `<div>Видео ${index}: ID=${video.id}, src=${video.src || 'не установлен'}</div>`;
+                });
+                
+                statusDiv.innerHTML = statusHTML;
+            } else {
+                statusDiv.innerHTML = '<div class="status error">❌ Основное приложение не найдено. Откройте эту страницу из основного приложения.</div>';
+                console.error('❌ Основное приложение не найдено');
+            }
+        }
+
+        function createTestVideoArea() {
+            const statusDiv = document.getElementById('create-status');
+            
+            if (window.opener && window.opener.viewerManager) {
+                const vm = window.opener.viewerManager;
+                
+                // Создаем тестовый хотспот с обязательными полями
+                const testHotspot = {
+                    id: 'test-video-' + Date.now(),
+                    type: 'video-area',
+                    title: 'Тестовая видео-область',
+                    position: { x: 0, y: 0, z: -3 },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+                    videoWidth: 2,
+                    videoHeight: 1.125
+                };
+                
+                console.log('🔧 Создаем тестовый хотспот:', testHotspot);
+                
+                try {
+                    // Проверяем наличие hotspotManager
+                    if (!window.opener.hotspotManager) {
+                        throw new Error('hotspotManager не найден в основном приложении');
+                    }
+                    
+                    // Добавляем хотспот в менеджер сначала
+                    window.opener.hotspotManager.addHotspot(testHotspot);
+                    console.log('✅ Тестовый хотспот добавлен в менеджер');
+                    
+                    // Проверяем, что хотспот добавился
+                    const addedHotspot = window.opener.hotspotManager.getHotspot(testHotspot.id);
+                    if (!addedHotspot) {
+                        throw new Error('Хотспот не был добавлен в менеджер');
+                    }
+                    console.log('✅ Хотспот найден в менеджере:', addedHotspot);
+                    
+                    // Затем создаем визуальное представление
+                    const markerEl = vm.createVideoArea(addedHotspot);
+                    
+                    if (markerEl) {
+                        statusDiv.innerHTML = '<div class="status success">✅ Тестовая видео-область создана</div>';
+                        console.log('✅ Тестовая видео-область создана:', testHotspot);
+                    } else {
+                        statusDiv.innerHTML = '<div class="status error">❌ Не удалось создать элемент видео-области</div>';
+                        console.error('❌ createVideoArea вернул null');
+                    }
+                } catch (err) {
+                    statusDiv.innerHTML = `<div class="status error">❌ Ошибка создания: ${err.message}</div>`;
+                    console.error('❌ Ошибка создания тестовой видео-области:', err);
+                }
+            } else {
+                statusDiv.innerHTML = '<div class="status error">❌ ViewerManager не найден в основном приложении</div>';
+                console.error('❌ ViewerManager не найден');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('console-output').innerHTML = '';
+        }
+
+        console.log('🚀 Тестовая панель видео загружена');
+    </script>
+</body>
+</html>

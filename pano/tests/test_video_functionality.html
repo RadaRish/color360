@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тест функциональности видео-областей</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        background: #1a1a1a;
+        color: white;
+        padding: 20px;
+        line-height: 1.6;
+      }
+
+      .test-section {
+        background: #333;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+
+      .status {
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+
+      .status.success {
+        background: #004d00;
+      }
+      .status.error {
+        background: #4d0000;
+      }
+      .status.warning {
+        background: #4d4d00;
+      }
+      .status.info {
+        background: #003d4d;
+      }
+
+      button {
+        padding: 10px 20px;
+        background: #0066cc;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+        font-size: 14px;
+      }
+
+      button:hover {
+        background: #0055aa;
+      }
+
+      .log {
+        background: #222;
+        padding: 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        max-height: 300px;
+        overflow-y: auto;
+        font-size: 12px;
+      }
+
+      iframe {
+        width: 100%;
+        height: 500px;
+        border: 1px solid #555;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🎬 Тест функциональности видео-областей</h1>
+
+    <div class="test-section">
+      <h2>📊 Диагностическая информация</h2>
+      <div id="diagnostic-info"></div>
+      <button onclick="runDiagnostics()">🔍 Запустить диагностику</button>
+      <button onclick="openMainApp()">🚀 Открыть основное приложение</button>
+    </div>
+
+    <div class="test-section">
+      <h2>📝 Инструкции по тестированию</h2>
+      <div>
+        <h3>Шаги для проверки видео-областей:</h3>
+        <ol>
+          <li>
+            <strong>Создание видео-области:</strong>
+            <ul>
+              <li>Кликните правой кнопкой мыши в пустом месте панорамы</li>
+              <li>Выберите "Видео-область" из контекстного меню</li>
+              <li>Заполните поля в редакторе и нажмите "Создать"</li>
+            </ul>
+          </li>
+          <li>
+            <strong>Проверка перетаскивания:</strong>
+            <ul>
+              <li>
+                Наведите курсор на центральную зону видео-области (курсор должен
+                стать "move")
+              </li>
+              <li>Зажмите левую кнопку мыши и перетащите видео-область</li>
+              <li>
+                Убедитесь, что видео-область перемещается вместе с курсором
+              </li>
+            </ul>
+          </li>
+          <li>
+            <strong>Проверка сохранения позиции:</strong>
+            <ul>
+              <li>Переместите видео-область на новое место</li>
+              <li>Поверните камеру (перетащите панораму)</li>
+              <li>Убедитесь, что видео-область остается на своем месте</li>
+            </ul>
+          </li>
+          <li>
+            <strong>Проверка зума:</strong>
+            <ul>
+              <li>Используйте колесико мыши для зума</li>
+              <li>Нажимайте кнопки +/- для зума</li>
+              <li>Убедитесь, что панорама увеличивается/уменьшается</li>
+              <li>Должны появляться уведомления "🔍 125%" в центре экрана</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>🔧 Встроенное приложение</h2>
+      <iframe id="app-frame" src="index.html"></iframe>
+      <button onclick="reloadApp()">🔄 Перезагрузить приложение</button>
+      <button onclick="openInNewTab()">🔗 Открыть в новой вкладке</button>
+    </div>
+
+    <div class="test-section">
+      <h2>📋 Журнал диагностики</h2>
+      <div id="diagnostic-log" class="log"></div>
+      <button onclick="clearLog()">🧹 Очистить журнал</button>
+    </div>
+
+    <script>
+      function log(message, type = "info") {
+        const logElement = document.getElementById("diagnostic-log");
+        const time = new Date().toLocaleTimeString();
+        const colors = {
+          success: "#4CAF50",
+          error: "#f44336",
+          warning: "#ff9800",
+          info: "#2196F3",
+        };
+
+        logElement.innerHTML += `<div style="color: ${colors[type] || colors.info}">[${time}] ${message}</div>`;
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+
+      function clearLog() {
+        document.getElementById("diagnostic-log").innerHTML = "";
+      }
+
+      function runDiagnostics() {
+        const infoElement = document.getElementById("diagnostic-info");
+        infoElement.innerHTML = "";
+
+        log("🔍 Запуск диагностики системы...", "info");
+
+        // Проверка браузера
+        const browserInfo = {
+          userAgent: navigator.userAgent,
+          language: navigator.language,
+          platform: navigator.platform,
+          cookieEnabled: navigator.cookieEnabled,
+          onLine: navigator.onLine,
+        };
+
+        // Проверка поддержки веб-технологий
+        const features = {
+          webGL: !!window.WebGLRenderingContext,
+          webGL2: !!window.WebGL2RenderingContext,
+          canvas: !!document.createElement("canvas").getContext,
+          localStorage: !!window.localStorage,
+          sessionStorage: !!window.sessionStorage,
+          indexedDB: !!window.indexedDB,
+          webRTC: !!window.RTCPeerConnection,
+          fullscreen: !!document.fullscreenElement !== undefined,
+        };
+
+        // Проверка A-Frame
+        const aframeStatus = {
+          loaded: !!window.AFRAME,
+          version: window.AFRAME ? window.AFRAME.version : "не загружен",
+        };
+
+        // Отображение результатов
+        infoElement.innerHTML = `
+                <div class="status info">
+                    <strong>🌐 Браузер:</strong> ${
+                      browserInfo.userAgent.includes("Chrome")
+                        ? "Chrome"
+                        : browserInfo.userAgent.includes("Firefox")
+                          ? "Firefox"
+                          : browserInfo.userAgent.includes("Safari")
+                            ? "Safari"
+                            : "Неизвестный"
+                    }
+                </div>
+                <div class="status ${features.webGL ? "success" : "error"}">
+                    <strong>🎮 WebGL:</strong> ${features.webGL ? "✅ Поддерживается" : "❌ Не поддерживается"}
+                </div>
+                <div class="status ${features.localStorage ? "success" : "error"}">
+                    <strong>💾 LocalStorage:</strong> ${features.localStorage ? "✅ Доступен" : "❌ Недоступен"}
+                </div>
+                <div class="status ${aframeStatus.loaded ? "success" : "warning"}">
+                    <strong>🎯 A-Frame:</strong> ${aframeStatus.loaded ? `✅ Загружен (${aframeStatus.version})` : "⚠️ Не загружен"}
+                </div>
+                <div class="status info">
+                    <strong>🌍 Сеть:</strong> ${browserInfo.onLine ? "✅ Подключен" : "❌ Офлайн"}
+                </div>
+            `;
+
+        log(`🌐 Браузер: ${browserInfo.userAgent.split(" ")[0]}`, "info");
+        log(
+          `🎮 WebGL: ${features.webGL ? "поддерживается" : "НЕ поддерживается"}`,
+          features.webGL ? "success" : "error"
+        );
+        log(
+          `💾 LocalStorage: ${features.localStorage ? "доступен" : "недоступен"}`,
+          features.localStorage ? "success" : "error"
+        );
+        log(
+          `🎯 A-Frame: ${aframeStatus.loaded ? `загружен (${aframeStatus.version})` : "не загружен"}`,
+          aframeStatus.loaded ? "success" : "warning"
+        );
+        log("✅ Диагностика завершена", "success");
+      }
+
+      function openMainApp() {
+        window.open("index.html", "_blank");
+        log("🚀 Основное приложение открыто в новой вкладке", "info");
+      }
+
+      function reloadApp() {
+        const frame = document.getElementById("app-frame");
+        frame.src = frame.src;
+        log("🔄 Приложение перезагружено", "info");
+      }
+
+      function openInNewTab() {
+        window.open("index.html", "_blank");
+        log("🔗 Приложение открыто в новой вкладке", "info");
+      }
+
+      // Автоматический запуск диагностики
+      window.addEventListener("load", () => {
+        log("📋 Страница тестирования загружена", "success");
+        setTimeout(runDiagnostics, 500);
+      });
+
+      // Мониторинг сообщений от iframe
+      window.addEventListener("message", (event) => {
+        if (event.origin === window.location.origin) {
+          log(`📨 Сообщение от приложения: ${event.data}`, "info");
+        }
+      });
+    </script>
+  </body>
+</html>

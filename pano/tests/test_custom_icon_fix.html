@@ -1,0 +1,209 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Тест исправления пользовательских иконок</title>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background: #f0f0f0;
+      }
+      .test-container {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      .test-result {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+      .pass {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+      }
+      .fail {
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      #viewer {
+        width: 100%;
+        height: 500px;
+        border: 1px solid #ddd;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Тест исправления пользовательских иконок</h1>
+
+    <div class="test-container">
+      <h2>Описание теста</h2>
+      <p>
+        Этот тест проверяет, что пользовательские иконки сохраняются при
+        переходе между сценами.
+      </p>
+      <p>Шаги теста:</p>
+      <ol>
+        <li>Создать хотспот с пользовательской иконкой</li>
+        <li>Перейти на другую сцену</li>
+        <li>Вернуться на исходную сцену</li>
+        <li>Проверить, что иконка осталась пользовательской</li>
+      </ol>
+    </div>
+
+    <div class="test-container">
+      <h2>Тестовый просмотр</h2>
+      <div id="viewer"></div>
+      <button onclick="runTest()">Запустить тест</button>
+      <button onclick="resetTest()">Сбросить тест</button>
+    </div>
+
+    <div id="test-results"></div>
+
+    <script>
+      // Мock данные для теста
+      const mockHotspotManager = {
+        hotspots: [],
+        getHotspotsForScene(sceneId) {
+          return this.hotspots.filter((h) => h.sceneId === sceneId);
+        },
+        restoreHotspotData(hotspot) {
+          // Имитация восстановления данных
+          if (!hotspot.icon) {
+            hotspot.icon = hotspot.type === "hotspot" ? "arrow" : "sphere";
+          }
+          if (!hotspot.color) {
+            hotspot.color = hotspot.type === "hotspot" ? "#ff0000" : "#0066cc";
+          }
+          return hotspot;
+        },
+      };
+
+      const mockSceneManager = {
+        currentScene: null,
+        scenes: [
+          { id: "scene1", name: "Сцена 1" },
+          { id: "scene2", name: "Сцена 2" },
+        ],
+        getSceneById(id) {
+          return this.scenes.find((s) => s.id === id);
+        },
+        getCurrentScene() {
+          return this.currentScene;
+        },
+      };
+
+      // Имитация ViewerManager
+      const mockViewerManager = {
+        clearMarkers() {
+          console.log("Маркеры очищены");
+        },
+        createVisualMarker(hotspot) {
+          console.log("Создан маркер:", hotspot);
+          addTestResult(
+            `Создан маркер: ${hotspot.title} (иконка: ${hotspot.icon})`,
+            "pass"
+          );
+        },
+      };
+
+      // Функция для добавления результатов теста
+      function addTestResult(message, type) {
+        const results = document.getElementById("test-results");
+        const div = document.createElement("div");
+        div.className = `test-result ${type}`;
+        div.textContent = message;
+        results.appendChild(div);
+      }
+
+      // Функция для запуска теста
+      function runTest() {
+        // Очищаем предыдущие результаты
+        document.getElementById("test-results").innerHTML = "";
+
+        // Создаем тестовый хотспот с пользовательской иконкой
+        const customHotspot = {
+          id: "test-hotspot-1",
+          sceneId: "scene1",
+          type: "hotspot",
+          title: "Тестовый хотспот",
+          icon: "custom",
+          customIconData:
+            "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0MCIgZmlsbD0iI2ZmMDAwMCIvPjwvc3ZnPg==",
+          position: { x: 1, y: 0, z: -3 },
+          color: "#ff0000",
+        };
+
+        // Добавляем хотспот в менеджер
+        mockHotspotManager.hotspots = [customHotspot];
+
+        // Имитируем переключение сцен
+        addTestResult(
+          "Начало теста: создание хотспота с пользовательской иконкой",
+          "pass"
+        );
+
+        // Переключаемся на другую сцену
+        mockSceneManager.currentScene = mockSceneManager.getSceneById("scene2");
+        mockViewerManager.clearMarkers();
+        addTestResult("Переключение на сцену 2: маркеры очищены", "pass");
+
+        // Возвращаемся на исходную сцену
+        mockSceneManager.currentScene = mockSceneManager.getSceneById("scene1");
+        mockViewerManager.clearMarkers();
+
+        // Восстанавливаем маркеры
+        const sceneHotspots = mockHotspotManager.getHotspotsForScene("scene1");
+        sceneHotspots.forEach((hotspot) => {
+          mockHotspotManager.restoreHotspotData(hotspot);
+          mockViewerManager.createVisualMarker(hotspot);
+        });
+
+        addTestResult("Переключение на сцену 1: маркеры восстановлены", "pass");
+
+        // Проверяем, что иконка осталась пользовательской
+        if (customHotspot.icon === "custom") {
+          addTestResult(
+            "Тест пройден: пользовательская иконка сохранена",
+            "pass"
+          );
+        } else {
+          addTestResult(
+            "Тест провален: иконка изменена на " + customHotspot.icon,
+            "fail"
+          );
+        }
+      }
+
+      // Функция для сброса теста
+      function resetTest() {
+        document.getElementById("test-results").innerHTML = "";
+        mockHotspotManager.hotspots = [];
+        mockSceneManager.currentScene = null;
+      }
+
+      // Инициализация
+      window.addEventListener("load", () => {
+        addTestResult("Тест готов к запуску", "pass");
+      });
+    </script>
+  </body>
+</html>

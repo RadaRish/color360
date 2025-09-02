@@ -1,0 +1,40 @@
+# Устанавливаем стандарт окончания строк для всех файлов
+* text=auto eol=lf
+
+# Текстовые файлы должны нормализоваться к LF
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.xml text eol=lf
+*.svg text eol=lf
+
+# Бинарные файлы не должны изменяться
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.mp4 binary
+*.webm binary
+
+# Скрипты должны иметь LF окончания даже в Windows
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.bat text eol=crlf
+
+# Специфичные для проекта файлы
+/pano/core/*.js text eol=lf
+/pano/tests/*.html text eol=lf
+/pano/tests/*.js text eol=lf
+/pano/ui/*.js text eol=lf

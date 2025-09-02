@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест поворотов видео-области</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        
+        .test-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10000;
+        }
+        
+        .cursor-test {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10000;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-info">
+        <h3>Тест исправлений:</h3>
+        <ul>
+            <li>✅ Курсоры для поворотов: круглые стрелки</li>
+            <li>✅ Защита от двойных контекстных меню</li>
+            <li>✅ Предотвращение случайного сброса размера</li>
+            <li>🔧 Тестируем: функциональность поворотов</li>
+        </ul>
+    </div>
+    
+    <div class="cursor-test">
+        <strong>Проверьте курсоры:</strong><br>
+        • Углы изменения размера: ↖ ↗ ↙ ↘<br>
+        • Контролы глубины: ↕<br>
+        • Кнопки поворота: 🔄 ⤴<br>
+        • Зона перемещения: ✋
+    </div>
+
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="core/hotspot_manager.js"></script>
+    <script src="core/scene_manager.js"></script>
+    <script src="core/project_manager.js"></script>
+    <script src="core/viewer_manager.js"></script>
+    <script src="ui/hotspot-editor.js"></script>
+    <script src="ui/modal.js"></script>
+    <script src="ui/scene_list.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>

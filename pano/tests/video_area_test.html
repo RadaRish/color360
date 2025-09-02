@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест видео-областей - ColoR</title>
+    <link rel="stylesheet" href="styles/photo-sphere-viewer.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .test-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 300px;
+            z-index: 1000;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 12px;
+        }
+        
+        .test-panel h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+        
+        .test-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .test-btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .test-btn:hover {
+            background: #1976D2;
+        }
+        
+        .test-btn.danger {
+            background: #f44336;
+        }
+        
+        .test-btn.danger:hover {
+            background: #d32f2f;
+        }
+        
+        .test-info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+        }
+        
+        .video-url-input {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            margin-bottom: 8px;
+        }
+        
+        .dragging-info {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewer-container"></div>
+    
+    <!-- Тестовая панель -->
+    <div class="test-panel">
+        <h3>🎬 Тест видео-областей</h3>
+        
+        <div class="test-buttons">
+            <button class="test-btn" onclick="createTestVideoArea()">
+                📹 Создать тестовую видео-область
+            </button>
+            <button class="test-btn" onclick="testVideoPlayback()">
+                ▶️ Тест воспроизведения видео
+            </button>
+            <button class="test-btn" onclick="testDraggingPrecision()">
+                🎯 Тест точности перетаскивания
+            </button>
+            <button class="test-btn" onclick="listAllVideoElements()">
+                📋 Список всех видео элементов
+            </button>
+            <button class="test-btn danger" onclick="clearAllVideoAreas()">
+                🗑️ Очистить все видео-области
+            </button>
+        </div>
+        
+        <div>
+            <label>Тестовый URL видео:</label>
+            <input type="text" class="video-url-input" id="testVideoUrl" 
+                   value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" 
+                   placeholder="Введите URL видео">
+        </div>
+        
+        <div class="dragging-info">
+            <strong>🎯 Инструкция по тестированию:</strong><br>
+            1. Создайте видео-область кнопкой выше<br>
+            2. Попробуйте перетащить видео-область за пределы её границ<br>
+            3. Кликните на пустое место рядом с видео-областью<br>
+            4. Проверьте воспроизведение видео кликом по области<br>
+            5. Следите за консольными сообщениями
+        </div>
+        
+        <div class="test-info" id="test-info">
+            Готов к тестированию...
+        </div>
+    </div>
+
+    <!-- Загружаем A-Frame -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    
+    <!-- Загружаем наши модули в правильном порядке -->
+    <script src="core/hotspot_manager.js"></script>
+    <script src="core/coordinate_manager.js"></script>
+    <script src="core/viewer_manager.js"></script>
+    <script src="core/project_manager.js"></script>
+    <script src="core/scene_manager.js"></script>
+    <script src="ui/hotspot-editor.js"></script>
+    <script src="ui/scene_list.js"></script>
+    <!-- modal.js пропускаем, так как его нет -->
+
+    <script>
+        let viewerManager, hotspotManager, coordinateManager;
+        let testVideoAreaId = 1;
+        
+        function updateTestInfo(message) {
+            const infoDiv = document.getElementById('test-info');
+            const timestamp = new Date().toLocaleTimeString();
+            infoDiv.innerHTML = `[${timestamp}] ${message}`;
+            console.log(`🧪 TEST: ${message}`);
+        }
+
+        function createTestVideoArea() {
+            if (!hotspotManager) {
+                updateTestInfo('❌ HotspotManager не инициализирован');
+                return;
+            }
+
+            const videoUrl = document.getElementById('testVideoUrl').value.trim();
+            if (!videoUrl) {
+                updateTestInfo('❌ Введите URL видео');
+                return;
+            }
+
+            const testHotspot = {
+                id: `test-video-${testVideoAreaId++}`,
+                title: `Тестовая видео-область ${testVideoAreaId - 1}`,
+                type: 'video-area',
+                position: { x: Math.random() * 4 - 2, y: Math.random() * 2 - 1, z: -5 },
+                videoUrl: videoUrl,
+                videoWidth: 4,
+                videoHeight: 3
+            };
+
+            console.log('🧪 Создаем тестовую видео-область:', testHotspot);
+            hotspotManager.addHotspot(testHotspot);
+            updateTestInfo(`✅ Создана видео-область: ${testHotspot.title}`);
+        }
+
+        function testVideoPlayback() {
+            const videoAreas = document.querySelectorAll('[data-video-plane]');
+            if (videoAreas.length === 0) {
+                updateTestInfo('❌ Нет видео-областей для тестирования');
+                return;
+            }
+
+            updateTestInfo(`🎬 Тестирование ${videoAreas.length} видео-областей...`);
+            
+            videoAreas.forEach((plane, index) => {
+                const marker = plane.closest('[data-hotspot-id]');
+                const hotspotId = marker ? marker.getAttribute('data-hotspot-id') : null;
+                
+                if (hotspotId) {
+                    const hotspot = hotspotManager.findHotspotById(hotspotId);
+                    const videoEl = document.getElementById(`video-${hotspotId}`);
+                    
+                    console.log(`🧪 Тест видео ${index + 1}:`, {
+                        hotspotId,
+                        hotspotTitle: hotspot?.title,
+                        videoUrl: hotspot?.videoUrl,
+                        videoElementExists: !!videoEl,
+                        videoSrc: videoEl?.src,
+                        videoReadyState: videoEl?.readyState
+                    });
+                }
+            });
+        }
+
+        function testDraggingPrecision() {
+            updateTestInfo('🎯 Тест перетаскивания: кликните и тащите рядом с видео-областью');
+            
+            // Добавляем временный обработчик для тестирования
+            const testHandler = (event) => {
+                const rect = viewerManager.container.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                
+                console.log('🧪 DRAGGING TEST - клик по координатам:', { x, y });
+                
+                // Проверяем все видео-области
+                const videoAreas = document.querySelectorAll('[data-hotspot-id]');
+                videoAreas.forEach(marker => {
+                    const hotspotId = marker.getAttribute('data-hotspot-id');
+                    const hotspot = hotspotManager.findHotspotById(hotspotId);
+                    
+                    if (hotspot && hotspot.type === 'video-area') {
+                        const isWithin = viewerManager.isMouseOverVideoArea(event, marker, 
+                            hotspot.videoWidth || 4, hotspot.videoHeight || 3);
+                        
+                        console.log(`🧪 Видео-область ${hotspotId}: курсор ${isWithin ? 'ВНУТРИ' : 'СНАРУЖИ'} границ`);
+                    }
+                });
+            };
+
+            viewerManager.container.addEventListener('mousedown', testHandler);
+            
+            setTimeout(() => {
+                viewerManager.container.removeEventListener('mousedown', testHandler);
+                updateTestInfo('✅ Тест перетаскивания завершен');
+            }, 10000);
+        }
+
+        function listAllVideoElements() {
+            const allVideos = document.querySelectorAll('video');
+            const videoInfo = Array.from(allVideos).map(video => ({
+                id: video.id,
+                src: video.src,
+                readyState: video.readyState,
+                paused: video.paused,
+                duration: video.duration
+            }));
+            
+            console.log('🧪 Все видео элементы:', videoInfo);
+            updateTestInfo(`📋 Найдено ${allVideos.length} видео элементов (см. консоль)`);
+        }
+
+        function clearAllVideoAreas() {
+            const videoAreas = document.querySelectorAll('[data-video-plane]');
+            videoAreas.forEach(plane => {
+                const marker = plane.closest('[data-hotspot-id]');
+                if (marker) {
+                    const hotspotId = marker.getAttribute('data-hotspot-id');
+                    hotspotManager.removeHotspot(hotspotId);
+                }
+            });
+            
+            updateTestInfo(`🗑️ Удалено ${videoAreas.length} видео-областей`);
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🧪 Инициализация тестовой страницы видео-областей');
+            
+            // Создаем все менеджеры
+            hotspotManager = new HotspotManager();
+            coordinateManager = new CoordinateManager();
+            viewerManager = new ViewerManager(document.getElementById('viewer-container'));
+            
+            // Устанавливаем связи между менеджерами
+            viewerManager.setHotspotManager(hotspotManager);
+            viewerManager.setCoordinateManager(coordinateManager);
+            coordinateManager.setViewerManager(viewerManager);
+            
+            hotspotManager.onHotspotAdded = (hotspot) => {
+                console.log('🧪 Hotspot добавлен:', hotspot);
+                viewerManager.createMarker(hotspot);
+            };
+            
+            hotspotManager.onHotspotRemoved = (hotspotId) => {
+                console.log('🧪 Hotspot удален:', hotspotId);
+                viewerManager.removeMarker(hotspotId);
+            };
+
+            // Инициализируем viewer с тестовой панорамой
+            viewerManager.initializeViewer().then(() => {
+                console.log('✅ ViewerManager инициализирован');
+                
+                // Загружаем тестовую панораму
+                viewerManager.setPanorama('panoramas/test_panorama.jpg').then(() => {
+                    updateTestInfo('✅ Система готова к тестированию');
+                }).catch(() => {
+                    // Если тестовая панорама не найдена, устанавливаем цвет по умолчанию
+                    viewerManager.aframeSky.setAttribute('color', '#87CEEB');
+                    updateTestInfo('✅ Система готова (тестовая панорама)');
+                });
+            }).catch(error => {
+                console.error('❌ Ошибка инициализации:', error);
+                updateTestInfo('❌ Ошибка инициализации: ' + error.message);
+            });
+        });
+    </script>
+</body>
+</html>

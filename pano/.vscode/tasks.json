@@ -1,0 +1,171 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Live Server",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"live-server",
+				"--port=5500",
+				"--host=localhost",
+				"--no-browser"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new",
+				"showReuseMessage": true,
+				"clear": false
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
+		},
+		{
+			"label": "Validate HTML",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"html-validate",
+				"index.html"
+			],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Check JavaScript Syntax",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"-c",
+				"${file}"
+			],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "ESLint Check",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"eslint",
+				"**/*.js",
+				"--fix"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Format Code with Prettier",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"prettier",
+				"--write",
+				"**/*.{js,css,html,json}"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Open in Browser",
+			"type": "shell",
+			"command": "start",
+			"args": [
+				"http://localhost:5500/index.html"
+			],
+			"windows": {
+				"command": "start",
+				"args": [
+					"http://localhost:5500/index.html"
+				]
+			},
+			"linux": {
+				"command": "xdg-open",
+				"args": [
+					"http://localhost:5500/index.html"
+				]
+			},
+			"osx": {
+				"command": "open",
+				"args": [
+					"http://localhost:5500/index.html"
+				]
+			},
+			"group": "build"
+		},
+		{
+			"label": "Build and Debug",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Start Live Server",
+				"Open in Browser"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "Validate HTML",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"html-validate",
+				"index.html"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Restart Live Server",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"live-server",
+				"--port=5500",
+				"--host=localhost",
+				"--no-browser"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Open Editor (Live Server)",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"live-server",
+				"--port=5500",
+				"--host=localhost",
+				"--no-browser"
+			],
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

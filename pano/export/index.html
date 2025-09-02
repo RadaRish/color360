@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Панорамный тур</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>"
+    />
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&subset=cyrillic&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="tour-container">
+      <!-- Левая панель со сценами -->
+      <div id="scene-panel" class="open">
+        <div class="scene-panel-header">
+          <span class="title">Панорамный тур</span>
+          <button id="scene-panel-toggle" title="Скрыть/показать список сцен">
+            ⟨
+          </button>
+        </div>
+        <div id="scene-list"></div>
+      </div>
+
+      <!-- A-Frame сцена -->
+      <a-scene
+        id="tour-scene"
+        embedded
+        style="height: 100vh; width: 100%"
+        background="color: #000000"
+        vr-mode-ui="enabled: false"
+        cursor="rayOrigin: mouse"
+        raycaster="objects: [data-raycastable]; far: 100; interval: 100"
+        renderer="antialias: true; colorManagement: true; sortObjects: true"
+        loading-screen="enabled: false"
+        >>
+
+        <!-- Активы -->
+        <a-assets>
+          <img id="scene-0-1-jpg-panorama" src="panoramas/scene-0-1-jpg.jpg" />
+          <img
+            id="scene-1-10-jpg-panorama"
+            src="panoramas/scene-1-10-jpg.jpg"
+          />
+        </a-assets>
+
+        <!-- Небесная сфера для панорамы -->
+        <a-sky
+          id="panorama-sky"
+          src="#scene-0-1-jpg-panorama"
+          rotation="0 0 0"
+        ></a-sky>
+
+        <!-- Камера с орбитальным управлением -->
+        <a-camera
+          id="tour-camera"
+          look-controls="pointerLockEnabled: false"
+          wasd-controls="enabled: false"
+          position="0 0 0"
+          fov="75"
+        >
+        </a-camera>
+
+        <!-- Контейнер для хотспотов -->
+        <a-entity id="hotspots-container"></a-entity>
+      </a-scene>
+
+      <!-- Элементы управления -->
+      <div id="tour-controls">
+        <button id="fullscreen-btn">⛶</button>
+        <button id="zoom-in-btn">+</button>
+        <button id="zoom-out-btn">−</button>
+        <button id="reset-view-btn">⌂</button>
+        <button id="gyro-btn" title="Гироскоп">📱</button>
+      </div>
+      <!-- Индикатор загрузки -->
+      <div
+        id="tour-loading"
+        role="status"
+        aria-live="polite"
+        aria-label="Загрузка"
+        style="display: none"
+      >
+        <div class="color-logo">
+          <span class="logo-letter letter-c" data-letter="C">C</span>
+          <span class="logo-letter letter-o" data-letter="o">o</span>
+          <span class="logo-letter letter-l" data-letter="l">l</span>
+          <span class="logo-letter letter-o2" data-letter="o">o</span>
+          <span class="logo-letter letter-r" data-letter="R">R</span>
+        </div>
+        <div class="loading-text" data-text="Загрузка...">Загрузка...</div>
+      </div>
+    </div>
+
+    <!-- Данные тура и логика -->
+    <script src="tour-data.js"></script>
+  </body>
+</html>

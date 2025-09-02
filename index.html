@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ColoR360 — панорамные туры</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="logo" href="./">Color360</a>
+      <nav class="nav">
+        <a href="#features">Возможности</a>
+        <a href="#about">О площадке</a>
+        <a href="#testimonials">Отзывы</a>
+        <a href="#news">Новости</a>
+        <a href="#contact">Контакты</a>
+        <!-- User menu will be inserted here by JavaScript -->
+        <div id="user-menu-placeholder"></div>
+        <button id="btn-login" class="btn">Вход</button>
+        <button id="btn-register" class="btn ghost">Регистрация</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="hero">
+      <div class="video-background">
+        <video autoplay muted loop id="hero-video" playsinline preload="auto">
+          <source src="./assets/videos/121805-724719819_tiny.mp4" type="video/mp4">
+          <!-- Fallback text if video tag not supported -->
+          Your browser does not support the video tag.
+        </video>
+        <!-- Резервный фон с градиентом и изображением -->
+        <div class="fallback-background"></div>
+        <div class="overlay"></div>
+      </div>
+      <div class="container">
+        <div class="hero-content">
+          <h1 class="hero-title"><span class="color360-gradient">ColoR360</span> — платформа для панорамных туров</h1>
+          <p class="hero-subtitle">Создавайте впечатляющие панорамные туры для недвижимости, отелей, ресторанов и других объектов — просто и эффективно.</p>
+          <div class="hero-actions">
+            <a id="app-link" class="btn primary" href="/pano" target="_blank" rel="noopener">Попробовать демо</a>
+            <a href="#features" class="btn secondary">Узнать больше</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="features-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Возможности платформы</h2>
+          <p class="section-subtitle">Все необходимые инструменты для создания профессионального контента</p>
+        </div>
+        
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+              </svg>
+            </div>
+            <h3>Панорамные туры</h3>
+            <p>Создавайте интерактивные 360° туры для недвижимости, отелей, ресторанов и других объектов.</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </div>
+            <h3>Управление клиентами</h3>
+            <p>Система управления заказами, клиентами и проектами в одном месте.</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h3>Простота использования</h3>
+            <p>Интуитивный интерфейс без необходимости технических знаний.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="about" class="about-section">
+      <div class="container">
+        <div class="about-content">
+          <div class="about-text">
+            <h2>О платформе Color360</h2>
+            <p>Color360 — это современная платформа для создания панорамных туров. Мы объединяем передовые технологии и удобный интерфейс, чтобы вы могли сосредоточиться на творчестве, а не на технической стороне.</p>
+            <p>Наша платформа разработана специально для агентств недвижимости и всех, кто хочет представить свои работы в лучшем свете.</p>
+            <a href="#contact" class="btn primary">Связаться с нами</a>
+          </div>
+          <div class="about-image">
+            <div class="about-video-container">
+              <video autoplay muted loop class="about-video" playsinline preload="auto">
+                <source src="./assets/videos/1.mp4" type="video/mp4">
+              </video>
+              <!-- Резервное изображение -->
+              <div class="fallback-image"></div>
+              <div class="overlay-light"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="testimonials" class="testimonials-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Отзывы наших клиентов</h2>
+          <p class="section-subtitle">Что говорят профессионалы, которые уже используют нашу платформу</p>
+        </div>
+        
+        <div class="testimonials-grid">
+          <div class="testimonial-card">
+            <div class="testimonial-content">
+              <p>"Панорамные туры для наших объектов недвижимости увеличили количество звонков на 40%. Очень удобный инструмент с отличной поддержкой."</p>
+            </div>
+            <div class="testimonial-author">
+              <div class="author-info">
+                <h4>Михаил Сидоров</h4>
+                <p>Агентство недвижимости</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="testimonial-card">
+            <div class="testimonial-content">
+              <p>"Использую Color360 для создания панорамных туров. Простота загрузки и настройки визуализации экономила мне массу времени."</p>
+            </div>
+            <div class="testimonial-author">
+              <div class="author-info">
+                <h4>Елена Козлова</h4>
+                <p>Фотограф</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Временно скрыт раздел тарифов
+    <section id="pricing" class="pricing-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Тарифы</h2>
+          <p class="section-subtitle">Выберите план, который подходит именно вам</p>
+        </div>
+        
+        <div class="pricing-grid">
+          <div class="pricing-card">
+            <div class="pricing-header">
+              <h3>Старт</h3>
+              <div class="price">Бесплатно</div>
+              <p class="price-description">Для ознакомления с платформой</p>
+            </div>
+            <ul class="pricing-features">
+              <li>До 5 проектов</li>
+              <li>1 ГБ хранилища</li>
+              <li>Базовые шаблоны</li>
+              <li>Поддержка по email</li>
+            </ul>
+            <a href="#contact" class="btn secondary full-width">Начать бесплатно</a>
+          </div>
+          
+          <div class="pricing-card popular">
+            <div class="popular-badge">Популярный</div>
+            <div class="pricing-header">
+              <h3>Профессионал</h3>
+              <div class="price">1 990 ₽<span>/месяц</span></div>
+              <p class="price-description">Для активных пользователей</p>
+            </div>
+            <ul class="pricing-features">
+              <li>До 50 проектов</li>
+              <li>10 ГБ хранилища</li>
+              <li>Все шаблоны</li>
+              <li>Приоритетная поддержка</li>
+              <li>Индивидуальная настройка</li>
+            </ul>
+            <a href="#contact" class="btn primary full-width">Выбрать план</a>
+          </div>
+          
+          <div class="pricing-card">
+            <div class="pricing-header">
+              <h3>Бизнес</h3>
+              <div class="price">4 990 ₽<span>/месяц</span></div>
+              <p class="price-description">Для агентств и студий</p>
+            </div>
+            <ul class="pricing-features">
+              <li>Неограниченные проекты</li>
+              <li>50 ГБ хранилища</li>
+              <li>Все функции</li>
+              <li>Персональный менеджер</li>
+              <li>Обучение команды</li>
+            </ul>
+            <a href="#contact" class="btn secondary full-width">Выбрать план</a>
+          </div>
+        </div>
+      </div>
+    </section>
+    -->
+
+    <section id="news" class="news-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Новости и обновления</h2>
+          <p class="section-subtitle">Следите за последними новостями платформы</p>
+        </div>
+        
+        <div class="news-grid">
+          <div class="news-card">
+            <div class="news-image">
+              <img src="./assets/images/1.webp" alt="Новости: фотоаппарат" />
+            </div>
+            <div class="news-content">
+              <div class="news-date">31 августа 2025</div>
+              <h3>Запуск демо-платформы</h3>
+              <p>Мы рады представить первую версию демо-платформы Color360. Попробуйте все возможности бесплатно!</p>
+              <a href="#" class="read-more">Читать далее</a>
+            </div>
+          </div>
+          
+          <div class="news-card">
+            <div class="news-image">
+              <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80" alt="Новости: бизнес" />
+            </div>
+            <div class="news-content">
+              <div class="news-date">1 сентября 2025</div>
+              <h3>Новый функционал редактора</h3>
+              <p>Добавлены инструменты для управления сценами и хотспотами. Теперь создавать интерактивные туры еще проще!</p>
+              <a href="#" class="read-more">Читать далее</a>
+            </div>
+          </div>
+        </div>
+        
+        <!-- News list for dynamic content -->
+        <div class="news-list-container">
+          <h3>Последние новости</h3>
+          <ul id="news-list">
+            <!-- News will be loaded here by JavaScript -->
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="faq-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Часто задаваемые вопросы</h2>
+          <p class="section-subtitle">Ответы на самые популярные вопросы</p>
+        </div>
+        
+        <div class="faq-container">
+          <div class="faq-item">
+            <div class="faq-question">
+              <h3>Как начать использовать платформу?</h3>
+              <div class="faq-toggle">+</div>
+            </div>
+            <div class="faq-answer">
+              <p>Просто зарегистрируйтесь на сайте и получите бесплатный доступ ко всем возможностям платформы на 14 дней. После этого вы сможете выбрать подходящий тариф.</p>
+            </div>
+          </div>
+          
+          <div class="faq-item">
+            <div class="faq-question">
+              <h3>Нужны ли специальные навыки для работы с платформой?</h3>
+              <div class="faq-toggle">+</div>
+            </div>
+            <div class="faq-answer">
+              <p>Нет, платформа разработана для простого использования без специальных навыков программирования. Интуитивный интерфейс позволит вам создавать профессиональные работы с первого дня.</p>
+            </div>
+          </div>
+          
+          <div class="faq-item">
+            <div class="faq-question">
+              <h3>Можно ли интегрировать платформу с моим сайтом?</h3>
+              <div class="faq-toggle">+</div>
+            </div>
+            <div class="faq-answer">
+              <p>Да, мы предоставляем код для встраивания галерей и туров на ваш сайт. Также возможна интеграция с популярными CMS.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="contact-section">
+      <div class="container">
+        <div class="contact-wrapper">
+          <div class="contact-info">
+            <h2>Свяжитесь с нами</h2>
+            <p>У вас есть вопросы? Мы с радостью на них ответим!</p>
+            
+            <div class="contact-details">
+              <div class="contact-item">
+                <div class="contact-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                  </svg>
+                </div>
+                <div>
+                  <h4>Email</h4>
+                  <p><a href="mailto:info@color360.online">info@color360.online</a></p>
+                </div>
+              </div>
+              
+              <div class="contact-item">
+                <div class="contact-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h4>Телефон</h4>
+                  <p>+7 (495) 123-45-67</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="contact-form">
+            <form id="contact-form">
+              <div class="form-group">
+                <input type="text" name="name" placeholder="Ваше имя" required>
+              </div>
+              <div class="form-group">
+                <input type="email" name="email" placeholder="Email" required>
+              </div>
+              <div class="form-group">
+                <textarea name="message" placeholder="Ваше сообщение" rows="5" required></textarea>
+              </div>
+              <button type="submit" class="btn primary full-width">Отправить сообщение</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-column">
+          <a class="footer-logo" href="./">Color360</a>
+          <p class="footer-description">Платформа для создания панорамных туров.</p>
+          <div class="social-links">
+            <a href="#" aria-label="ВКонтакте">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+              </svg>
+            </a>
+            <a href="#" aria-label="Instagram">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+              </svg>
+            </a>
+            <a href="#" aria-label="Telegram">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
+        
+        <div class="footer-column">
+          <h4>Платформа</h4>
+          <ul>
+            <li><a href="#features">Возможности</a></li>
+            <!-- <li><a href="#pricing">Тарифы</a></li> -->
+            <li><a href="#testimonials">Отзывы</a></li>
+            <li><a href="#news">Новости</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-column">
+          <h4>Поддержка</h4>
+          <ul>
+            <li><a href="#">Помощь</a></li>
+            <li><a href="#">Документация</a></li>
+            <li><a href="#contact">Контакты</a></li>
+            <li><a href="#">Сообщить об ошибке</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-column">
+          <h4>Компания</h4>
+          <ul>
+            <li><a href="#">О нас</a></li>
+            <li><a href="#">Блог</a></li>
+            <li><a href="#">Вакансии</a></li>
+            <li><a href="#">Партнерская программа</a></li>
+          </ul>
+        </div>
+      </div>
+      
+      <div class="footer-bottom">
+        <p>&copy; 2025 Color360. Все права защищены.</p>
+        <div class="footer-links">
+          <a href="#">Политика конфиденциальности</a>
+          <a href="#">Условия использования</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="modal-close" class="modal-close">&times;</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="./assets/app.js"></script>
+</body>
+</html>

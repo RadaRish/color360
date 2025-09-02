@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ColoR360 — Личный кабинет</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="logo" href="./">Color360</a>
+      <nav class="nav">
+        <a href="./">Главная</a>
+        <button id="btn-logout" class="btn ghost">Выйти</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- User Dashboard Section -->
+    <section class="dashboard-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Личный кабинет</h2>
+          <p class="section-subtitle">Управление вашим аккаунтом и сессиями</p>
+        </div>
+        
+        <div class="dashboard-content">
+          <div class="user-profile-card">
+            <h3>Профиль пользователя</h3>
+            <div class="profile-info">
+              <div class="info-item">
+                <label>Имя:</label>
+                <span id="user-name"></span>
+              </div>
+              <div class="info-item">
+                <label>Email:</label>
+                <span id="user-email"></span>
+              </div>
+              <div class="info-item">
+                <label>Дата регистрации:</label>
+                <span id="user-registered"></span>
+              </div>
+              <div class="info-item">
+                <label>Подписка:</label>
+                <span id="subscription-plan"></span>
+              </div>
+              <div class="info-item">
+                <label>Статус подписки:</label>
+                <span id="subscription-status"></span>
+              </div>
+              <div class="info-item">
+                <label>Лимит сессий редактора:</label>
+                <span id="subscription-limit"></span>
+              </div>
+            </div>
+            
+            <div class="profile-actions">
+              <button id="btn-change-password" class="btn secondary">Изменить пароль</button>
+              <button id="btn-delete-account" class="btn danger">Удалить аккаунт</button>
+            </div>
+          </div>
+          
+          <div class="sessions-section">
+            <h3>Активные сессии</h3>
+            <p class="section-description">Здесь вы можете управлять активными сессиями вашего аккаунта. Для оптимизации ресурсов рекомендуется закрывать неиспользуемые сессии.</p>
+            
+            <div class="sessions-list">
+              <table id="sessions-table">
+                <thead>
+                  <tr>
+                    <th>Устройство/IP</th>
+                    <th>Дата входа</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody id="sessions-list-body">
+                  <!-- Sessions will be loaded here -->
+                </tbody>
+              </table>
+            </div>
+            
+            <div class="session-info">
+              <p>Количество активных сессий: <span id="session-count">0</span> из 3 возможных</p>
+            </div>
+          </div>
+          
+          <!-- Editor Sessions Section -->
+          <div class="sessions-section">
+            <h3>Сессии работы в редакторе</h3>
+            <p class="section-description">Здесь вы можете управлять сессиями работы в редакторе панорамных туров. Вы можете восстановить предыдущую работу, переименовать сессию или удалить ненужные.</p>
+            
+            <div class="table-actions">
+              <button id="create-session" class="btn primary">Создать новую сессию</button>
+            </div>
+            
+            <div class="sessions-list">
+              <table id="editor-sessions-table">
+                <thead>
+                  <tr>
+                    <th>Название</th>
+                    <th>Дата создания</th>
+                    <th>Последний доступ</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody id="editor-sessions-list-body">
+                  <!-- Editor sessions will be loaded here -->
+                </tbody>
+              </table>
+            </div>
+            
+            <div class="session-info">
+              <p>Количество сессий редактора: <span id="editor-session-count">0</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin Panel Section -->
+    <section class="admin-dashboard">
+      <div class="container">
+        <div class="admin-header">
+          <h2>Панель администратора</h2>
+          <p class="section-subtitle">Управление системой и пользователями</p>
+        </div>
+        
+        <div class="admin-stats">
+          <div class="stat-card">
+            <h3>Всего пользователей</h3>
+            <div class="stat-value" id="total-users">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Активных сессий</h3>
+            <div class="stat-value" id="active-sessions">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Лимит пользователей</h3>
+            <div class="stat-value" id="user-limit">100</div>
+          </div>
+        </div>
+        
+        <div class="users-table">
+          <h3>Управление пользователями</h3>
+          <div class="table-actions">
+            <button id="refresh-users" class="btn secondary">Обновить</button>
+          </div>
+          <table id="users-table">
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Email</th>
+                <th>Дата регистрации</th>
+                <th>Активных сессий</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="users-list-body">
+              <!-- Users will be loaded here -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Subscription Management Section -->
+        <div class="users-table">
+          <h3>Управление подписками</h3>
+          <div class="table-actions">
+            <button id="refresh-subscriptions" class="btn secondary">Обновить</button>
+          </div>
+          <table id="subscriptions-table">
+            <thead>
+              <tr>
+                <th>Пользователь</th>
+                <th>Email</th>
+                <th>План</th>
+                <th>Статус</th>
+                <th>Лимит сессий</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="subscriptions-list-body">
+              <!-- Subscriptions will be loaded here -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- News Management Section -->
+        <div class="news-management">
+          <h3>Управление новостями</h3>
+          <div class="table-actions">
+            <button id="add-news-btn" class="btn primary">Добавить новость</button>
+            <button id="refresh-news" class="btn secondary">Обновить</button>
+          </div>
+          <table id="news-table">
+            <thead>
+              <tr>
+                <th>Заголовок</th>
+                <th>Дата</th>
+                <th>Текст</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="news-list-body">
+              <!-- News will be loaded here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-column">
+          <a class="footer-logo" href="./">Color360</a>
+          <p class="footer-description">Платформа для создания панорамных туров.</p>
+          <div class="social-links">
+            <a href="#" aria-label="ВКонтакте">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+              </svg>
+            </a>
+            <a href="#" aria-label="Instagram">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+              </svg>
+            </a>
+            <a href="#" aria-label="Telegram">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
+        
+        <div class="footer-column">
+          <h4>Платформа</h4>
+          <ul>
+            <li><a href="./#features">Возможности</a></li>
+            <li><a href="./#pricing">Тарифы</a></li>
+            <li><a href="./#testimonials">Отзывы</a></li>
+            <li><a href="./#news">Новости</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-column">
+          <h4>Поддержка</h4>
+          <ul>
+            <li><a href="#">Помощь</a></li>
+            <li><a href="#">Документация</a></li>
+            <li><a href="./#contact">Контакты</a></li>
+            <li><a href="#">Сообщить об ошибке</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-column">
+          <h4>Компания</h4>
+          <ul>
+            <li><a href="#">О нас</a></li>
+            <li><a href="#">Блог</a></li>
+            <li><a href="#">Вакансии</a></li>
+            <li><a href="#">Партнерская программа</a></li>
+          </ul>
+        </div>
+      </div>
+      
+      <div class="footer-bottom">
+        <p>&copy; 2025 Color360. Все права защищены.</p>
+        <div class="footer-links">
+          <a href="#">Политика конфиденциальности</a>
+          <a href="#">Условия использования</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="modal-close" class="modal-close">&times;</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="./assets/admin-dashboard.js"></script>
+</body>
+</html>

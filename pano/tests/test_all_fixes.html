@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тест исправлений экспорта и переходов</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/@aframe/environment-component@1.3.0/dist/aframe-environment-component.min.js"></script>
+    <link rel="stylesheet" href="styles/photo-sphere-viewer.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="container">
+      <a-scene id="aframe-scene" embedded style="height: 100vh">
+        <a-assets>
+          <img id="panorama" src="panoramas/demo.svg" crossorigin="anonymous" />
+        </a-assets>
+
+        <a-sky src="#panorama" rotation="0 0 0"></a-sky>
+      </a-scene>
+
+      <!-- UI элементы -->
+      <div id="controls">
+        <h3>Тест исправлений</h3>
+        <button id="create-hotspot" style="background: #ff0000">
+          Создать красный хотспот (переход)
+        </button>
+        <button id="create-infopoint" style="background: #0099ff">
+          Создать синюю инфоточку
+        </button>
+        <button id="create-video" style="background: #666666">
+          Создать видео-область
+        </button>
+        <button id="add-scene">Добавить вторую сцену</button>
+        <button id="export-test">Тестовый экспорт</button>
+        <div id="status"></div>
+      </div>
+    </div>
+
+    <!-- Подключение модулей -->
+    <script type="module" src="core/coordinate_manager.js"></script>
+    <script type="module" src="core/hotspot_manager.js"></script>
+    <script type="module" src="core/scene_manager.js"></script>
+    <script type="module" src="core/project_manager.js"></script>
+    <script type="module" src="core/export_manager.js"></script>
+    <script type="module" src="core/viewer_manager.js"></script>
+    <script type="module" src="ui/scene_list.js"></script>
+    <script type="module" src="ui/hotspot-editor.js"></script>
+
+    <script type="module">
+      import ViewerManager from "./core/viewer_manager.js";
+      import HotspotManager from "./core/hotspot_manager.js";
+      import SceneManager from "./core/scene_manager.js";
+      import ProjectManager from "./core/project_manager.js";
+      import ExportManager from "./core/export_manager.js";
+
+      let viewerManager;
+      let hotspotManager;
+      let sceneManager;
+      let projectManager;
+      let exportManager;
+      let testSceneId;
+
+      function updateStatus(message) {
+        document.getElementById("status").innerHTML =
+          "<p>" + new Date().toLocaleTimeString() + ": " + message + "</p>";
+        console.log("📝 Статус:", message);
+      }
+
+      // Ждем загрузки A-Frame
+      document.querySelector("a-scene").addEventListener("loaded", () => {
+        console.log("🎬 A-Frame сцена загружена");
+
+        // Инициализируем менеджеры
+        const scene = document.querySelector("a-scene");
+
+        sceneManager = new SceneManager();
+        hotspotManager = new HotspotManager();
+        projectManager = new ProjectManager();
+        viewerManager = new ViewerManager(scene, hotspotManager, sceneManager);
+        exportManager = new ExportManager(
+          sceneManager,
+          hotspotManager,
+          projectManager
+        );
+
+        // Связываем менеджеры
+        sceneManager.setManagers(viewerManager, hotspotManager);
+        hotspotManager.setViewerManager(viewerManager);
+
+        // Делаем доступными глобально для тестирования
+        window.viewerManager = viewerManager;
+        window.hotspotManager = hotspotManager;
+        window.sceneManager = sceneManager;
+        window.projectManager = projectManager;
+        window.exportManager = exportManager;
+
+        updateStatus("Все менеджеры инициализированы");
+
+        // Создание красного хотспота для перехода
+        document
+          .getElementById("create-hotspot")
+          .addEventListener("click", () => {
+            const hotspot = {
+              id: "hotspot-" + Date.now(),
+              type: "hotspot",
+              title: "Переход к сцене 2",
+              description: "Тестовый хотспот для перехода",
+              position: { x: -3, y: 0, z: -5 },
+              color: "#ff0000",
+              size: 0.4,
+              icon: "arrow",
+              targetSceneId: testSceneId,
+              sceneId: sceneManager.currentScene?.id || "scene-1",
+            };
+
+            try {
+              hotspotManager.addHotspot(hotspot);
+              updateStatus("Красный хотспот создан с цветом: " + hotspot.color);
+            } catch (error) {
+              updateStatus("Ошибка создания хотспота: " + error.message);
+            }
+          });
+
+        // Создание синей инфоточки
+        document
+          .getElementById("create-infopoint")
+          .addEventListener("click", () => {
+            const hotspot = {
+              id: "infopoint-" + Date.now(),
+              type: "infopoint",
+              title: "Синяя инфоточка",
+              description: "Тестовая инфоточка",
+              position: { x: 0, y: 0, z: -5 },
+              color: "#0099ff",
+              size: 0.3,
+              icon: "sphere",
+              sceneId: sceneManager.currentScene?.id || "scene-1",
+            };
+
+            try {
+              hotspotManager.addHotspot(hotspot);
+              updateStatus(
+                "Синяя инфоточка создана с цветом: " + hotspot.color
+              );
+            } catch (error) {
+              updateStatus("Ошибка создания инфоточки: " + error.message);
+            }
+          });
+
+        // Создание видео-области
+        document
+          .getElementById("create-video")
+          .addEventListener("click", () => {
+            const hotspot = {
+              id: "video-" + Date.now(),
+              type: "video-area",
+              title: "Видео-область",
+              position: { x: 3, y: 0, z: -5 },
+              videoWidth: 4,
+              videoHeight: 3,
+              color: "#666666",
+              sceneId: sceneManager.currentScene?.id || "scene-1",
+            };
+
+            try {
+              viewerManager.createVideoArea(hotspot);
+              updateStatus("Видео-область создана");
+            } catch (error) {
+              updateStatus("Ошибка создания видео-области: " + error.message);
+            }
+          });
+
+        // Добавление второй сцены
+        document.getElementById("add-scene").addEventListener("click", () => {
+          testSceneId = "scene-" + Date.now();
+          const scene2 = {
+            id: testSceneId,
+            name: "Тестовая сцена 2",
+            src: "panoramas/demo.svg", // Используем ту же панораму для теста
+          };
+
+          try {
+            sceneManager.addScene(scene2);
+            updateStatus("Вторая сцена добавлена: " + scene2.name);
+
+            // Обновляем targetSceneId у существующих хотспотов
+            const hotspots = hotspotManager.getHotspotsForScene(
+              sceneManager.currentScene?.id
+            );
+            hotspots.forEach((h) => {
+              if (h.type === "hotspot" && !h.targetSceneId) {
+                h.targetSceneId = testSceneId;
+                hotspotManager.updateHotspot(h.id, {
+                  targetSceneId: testSceneId,
+                });
+              }
+            });
+          } catch (error) {
+            updateStatus("Ошибка добавления сцены: " + error.message);
+          }
+        });
+
+        // Тестовый экспорт
+        document
+          .getElementById("export-test")
+          .addEventListener("click", async () => {
+            try {
+              updateStatus("Начинаем тестовый экспорт...");
+              const result = await exportManager.exportProject();
+              if (result && result.files) {
+                updateStatus(
+                  "Экспорт успешен! Файлов: " + Object.keys(result.files).length
+                );
+
+                // Проверяем, что экспорт содержит правильные данные
+                if (result.files["index.html"]) {
+                  const html = result.files["index.html"];
+                  const hasNoCursor = html.indexOf("<a-cursor") === -1;
+                  const hasHotspots = html.indexOf("hotspot-handler") !== -1;
+
+                  updateStatus(
+                    `Экспорт проверен: белый курсор удален: ${hasNoCursor}, хотспоты есть: ${hasHotspots}`
+                  );
+                }
+              } else {
+                updateStatus("Экспорт завершен, но результат не получен");
+              }
+            } catch (error) {
+              updateStatus("Ошибка экспорта: " + error.message);
+            }
+          });
+      });
+
+      // Отслеживаем переходы между сценами
+      window.addEventListener("sceneChanged", (e) => {
+        updateStatus(
+          "Переход к сцене: " +
+            e.detail.sceneName +
+            " (ID: " +
+            e.detail.sceneId +
+            ")"
+        );
+
+        // Проверяем, что цвета маркеров сохранились
+        setTimeout(() => {
+          const markers = document.querySelectorAll('[id^="marker-"]');
+          markers.forEach((marker) => {
+            const shape = marker.querySelector(
+              "a-sphere, a-box, a-cylinder, a-octahedron, a-plane, a-cone, a-circle"
+            );
+            if (shape) {
+              const color = shape.getAttribute("color");
+              console.log("🎨 Цвет маркера", marker.id, ":", color);
+            }
+          });
+        }, 1000);
+      });
+
+      // Отслеживаем ошибки JavaScript
+      window.addEventListener("error", (e) => {
+        console.error("❌ JavaScript ошибка:", e.error);
+        updateStatus("JavaScript ошибка: " + e.message);
+      });
+    </script>
+
+    <style>
+      #controls {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        z-index: 1000;
+        max-width: 350px;
+      }
+
+      #controls button {
+        display: block;
+        width: 100%;
+        margin: 8px 0;
+        padding: 12px;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+      }
+
+      #controls button:hover {
+        opacity: 0.8;
+      }
+
+      #add-scene {
+        background: #28a745;
+      }
+
+      #export-test {
+        background: #ffc107;
+        color: black;
+      }
+
+      #status {
+        margin-top: 15px;
+        font-size: 12px;
+        max-height: 300px;
+        overflow-y: auto;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 10px;
+        border-radius: 4px;
+      }
+
+      #status p {
+        margin: 3px 0;
+        padding: 2px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+    </style>
+  </body>
+</html>
