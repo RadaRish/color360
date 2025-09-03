@@ -7,8 +7,8 @@
   "scripts": {
     "start": "npm run serve",
     "dev": "live-server --port=5500 --host=localhost --watch=. --open=/index.html",
-    "lint": "eslint **/*.js --fix",
-    "format": "prettier --write **/*.{js,css,html,json} --ignore-unknown",
+    "lint": "eslint core/*.js ui/*.js main.js --fix",
+    "format": "prettier --write 'core/**/*.js' 'ui/**/*.js' '*.js' '*.css' '*.html' '*.json' --ignore-unknown",
     "validate": "html-validate index.html",
     "build": "npm run lint && npm run format && npm run validate",
     "serve": "python -m http.server 5500"
