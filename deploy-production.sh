@@ -17,10 +17,66 @@ NC='\033[0m' # No Color
 # Конфигурация
 DOMAIN="color360.ru"
 PROJECT_DIR="/var/www/color360"
+OLD_PROJECT_DIR="/var/www/color"  # Поддержка старой установки
 BACKUP_DIR="/var/backups/color360"
 LOG_FILE="/var/log/color360-deploy.log"
 NGINX_SITE_CONFIG="/etc/nginx/sites-available/color360"
 SYSTEMD_SERVICE="/etc/systemd/system/color360.service"
+EMAIL=""
+SKIP_SSL=false
+SKIP_FIREWALL=false
+MIGRATION_MODE=false
+
+# Разбор аргументов командной строки
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -d|--domain)
+            DOMAIN="$2"
+            shift 2
+            ;;
+        -e|--email)
+            EMAIL="$2"
+            shift 2
+            ;;
+        -p|--path)
+            PROJECT_DIR="$2"
+            shift 2
+            ;;
+        -b|--backup)
+            BACKUP_DIR="$2"
+            shift 2
+            ;;
+        --skip-ssl)
+            SKIP_SSL=true
+            shift
+            ;;
+        --skip-firewall)
+            SKIP_FIREWALL=true
+            shift
+            ;;
+        --migrate)
+            MIGRATION_MODE=true
+            shift
+            ;;
+        -h|--help)
+            echo "Использование: $0 [ОПЦИИ]"
+            echo "ОПЦИИ:"
+            echo "  -d, --domain DOMAIN     Доменное имя (по умолчанию: color360.ru)"
+            echo "  -e, --email EMAIL       Email для SSL сертификата"
+            echo "  -p, --path PATH         Путь установки (по умолчанию: /var/www/color360)"
+            echo "  -b, --backup PATH       Путь для резервных копий"
+            echo "  --skip-ssl              Пропустить настройку SSL"
+            echo "  --skip-firewall         Пропустить настройку UFW"
+            echo "  --migrate               Режим миграции с /var/www/color"
+            echo "  -h, --help              Показать эту справку"
+            exit 0
+            ;;
+        *)
+            echo "Неизвестная опция: $1"
+            exit 1
+            ;;
+    esac
+done
 
 # Функция логирования
 log() {
@@ -45,6 +101,84 @@ check_root() {
     if [ "$EUID" -ne 0 ]; then
         error "Этот скрипт должен запускаться с правами root. Используйте: sudo $0"
     fi
+}
+
+# Автоматическое обнаружение старой установки
+detect_old_installation() {
+    log "🔍 Поиск существующих установок Color360..."
+    
+    # Проверяем старую папку /var/www/color
+    if [ -d "$OLD_PROJECT_DIR" ]; then
+        warning "Обнаружена старая установка в $OLD_PROJECT_DIR"
+        
+        # Проверяем файлы, чтобы убедиться, что это Color360
+        if [ -f "$OLD_PROJECT_DIR/server.js" ] || [ -f "$OLD_PROJECT_DIR/package.json" ]; then
+            log "✅ Подтверждена установка Color360 в старой папке"
+            
+            if [ "$MIGRATION_MODE" = false ]; then
+                echo
+                echo "=========================================================="
+                echo "🔄 ОБНАРУЖЕНА СТАРАЯ УСТАНОВКА COLOR360"
+                echo "=========================================================="
+                echo "Найдена существующая установка: $OLD_PROJECT_DIR"
+                echo "Новая установка будет в: $PROJECT_DIR"
+                echo
+                read -p "Хотите выполнить автоматическую миграцию? (y/N): " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    MIGRATION_MODE=true
+                    log "Включен режим миграции"
+                else
+                    warning "Миграция пропущена. Продолжение с обычным развертыванием..."
+                fi
+            fi
+        fi
+    fi
+    
+    # Проверяем новую папку
+    if [ -d "$PROJECT_DIR" ]; then
+        warning "Обнаружена установка в $PROJECT_DIR"
+    fi
+}
+
+# Миграция данных из старой установки
+migrate_from_old_installation() {
+    if [ "$MIGRATION_MODE" = true ] && [ -d "$OLD_PROJECT_DIR" ]; then
+        log "🔄 Начинаем миграцию с $OLD_PROJECT_DIR на $PROJECT_DIR"
+        
+        # Создаем бэкап старой установки
+        MIGRATION_BACKUP="$BACKUP_DIR/migration-$(date +%Y%m%d_%H%M%S)"
+        mkdir -p "$MIGRATION_BACKUP"
+        cp -r "$OLD_PROJECT_DIR" "$MIGRATION_BACKUP/old_installation"
+        log "📦 Создан бэкап старой установки: $MIGRATION_BACKUP"
+        
+        # Ищем важные файлы для переноса
+        MIGRATION_DATA=""
+        
+        # .env файлы
+        if [ -f "$OLD_PROJECT_DIR/.env" ]; then
+            MIGRATION_DATA="$MIGRATION_DATA $OLD_PROJECT_DIR/.env"
+        fi
+        if [ -f "$OLD_PROJECT_DIR/.env.production" ]; then
+            MIGRATION_DATA="$MIGRATION_DATA $OLD_PROJECT_DIR/.env.production"
+        fi
+        
+        # Пользовательские данные
+        for dir in uploads user_data data sessions avatars panoramas; do
+            if [ -d "$OLD_PROJECT_DIR/$dir" ]; then
+                MIGRATION_DATA="$MIGRATION_DATA $OLD_PROJECT_DIR/$dir"
+                log "📁 Найдены данные для миграции: $OLD_PROJECT_DIR/$dir"
+            fi
+        done
+        
+        # Сохраняем список файлов для переноса
+        echo "$MIGRATION_DATA" > "$MIGRATION_BACKUP/migration_files.txt"
+        
+        log "✅ Подготовка к миграции завершена"
+        
+        return 0
+    fi
+    return 1
 }
 
 # Создание резервной копии существующей версии
