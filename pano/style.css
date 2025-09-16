@@ -21,26 +21,26 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Убираем светло-голубой фон A-Frame */
+/* Исправленные стили для A-Frame */
 a-scene {
-  background: transparent !important;
+  background: #000000 !important;
 }
 
 .a-canvas {
-  background: transparent !important;
+  background: #000000 !important;
 }
 
 #viewer-container canvas {
-  background: transparent !important;
+  background: #000000 !important;
 }
 
 /* Дополнительные правила для полного удаления A-Frame маски */
 a-scene canvas {
-  background: transparent !important;
+  background: #000000 !important;
 }
 
 .a-enter-vr {
-  background: transparent !important;
+  background: #000000 !important;
 }
 
 /* Убираем любые overlay и маски A-Frame */
@@ -51,27 +51,27 @@ a-scene canvas {
   display: none !important;
 }
 
-/* Убираем синий фон со всех возможных элементов A-Frame */
+/* Устанавливаем черный фон для всех возможных элементов A-Frame */
 .a-canvas,
 #aframe-canvas,
 canvas[data-aframe-canvas="true"] {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: #000000 !important;
+  background-color: #000000 !important;
 }
 
 /* Убираем Three.js renderer фон */
 canvas {
-  background: none !important;
-  background-color: transparent !important;
+  background: #000000 !important;
+  background-color: #000000 !important;
 }
 
-/* Полное удаление всех A-Frame фонов и масок */
+/* Установка черного фона для всех элементов viewer-container */
 #viewer-container * {
-  background: transparent !important;
+  background: #000000 !important;
 }
 
 #viewer-container a-scene {
-  background: none !important;
+  background: #000000 !important;
 }
 
 /* Современные маркеры с градиентными фонами и анимациями */
@@ -157,11 +157,16 @@ canvas {
   line-height: 1.35;
 }
 
-/* Убираем скрытые системные фоны */
-.a-entity,
+/* Исправленные стили для отображения элементов */
+.a-entity {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 a-sky:not([src]) {
-  opacity: 0 !important;
-  visibility: hidden !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background-color: #000000 !important;
 }
 
 /* Информационный диалог */
@@ -1355,24 +1360,24 @@ button:active {
 }
 
 .modern-icon-btn::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   background: linear-gradient(
     135deg,
     rgba(100, 108, 255, 0.15),
     rgba(139, 92, 246, 0.15)
-  );
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  border-radius: 11px;
+  ) !important;
+  opacity: 0 !important;
+  transition: opacity 0.3s ease !important;
+  border-radius: 11px !important;
 }
 
 .modern-icon-btn:hover::before {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .modern-icon-btn:hover {
@@ -1392,60 +1397,22 @@ button:active {
 }
 
 .modern-icon-btn svg {
-  width: 20px;
-  height: 20px;
-  color: rgba(255, 255, 255, 0.9);
-  transition: all 0.3s ease;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-  z-index: 1;
-  position: relative;
+  width: 20px !important;
+  height: 20px !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  transition: all 0.3s ease !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3)) !important;
+  z-index: 1 !important;
+  position: relative !important;
 }
 
 .modern-icon-btn:hover svg {
-  color: #ffffff;
-  transform: scale(1.1);
-  filter: drop-shadow(0 4px 8px rgba(100, 108, 255, 0.4));
+  color: #ffffff !important;
+  transform: scale(1.1) !important;
+  filter: drop-shadow(0 4px 8px rgba(100, 108, 255, 0.4)) !important;
 }
 
 /* Специальные цвета для разных типов кнопок */
-#save-project.modern-icon-btn {
-  background: linear-gradient(
-    135deg,
-    rgba(76, 175, 80, 0.1),
-    rgba(56, 142, 60, 0.1)
-  ) !important;
-  border-color: rgba(76, 175, 80, 0.2) !important;
-}
-
-#save-project.modern-icon-btn:hover {
-  background: linear-gradient(
-    135deg,
-    rgba(76, 175, 80, 0.2),
-    rgba(56, 142, 60, 0.2)
-  ) !important;
-  border-color: rgba(76, 175, 80, 0.4) !important;
-  box-shadow: 0 8px 20px rgba(76, 175, 80, 0.3) !important;
-}
-
-#export-btn.modern-icon-btn {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 152, 0, 0.1),
-    rgba(245, 124, 0, 0.1)
-  ) !important;
-  border-color: rgba(255, 152, 0, 0.2) !important;
-}
-
-#export-btn.modern-icon-btn:hover {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 152, 0, 0.2),
-    rgba(245, 124, 0, 0.2)
-  ) !important;
-  border-color: rgba(255, 152, 0, 0.4) !important;
-  box-shadow: 0 8px 20px rgba(255, 152, 0, 0.3) !important;
-}
-
 #cleanup-btn.modern-icon-btn,
 #clear-camera-view-btn.modern-icon-btn {
   background: linear-gradient(

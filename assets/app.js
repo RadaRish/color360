@@ -300,9 +300,45 @@ function updateUIForUserStatus() {
   if (userToken) {
     // User is logged in, show user menu
     showUserMenu();
+    // Update main page buttons for authenticated users
+    updateMainPageButtonsForAuthUser();
   } else {
     // User is not logged in, show login/register buttons
     showLoginRegisterButtons();
+    // Reset main page buttons for non-authenticated users
+    resetMainPageButtonsForNonAuthUser();
+  }
+}
+
+// Function to update main page buttons for authenticated users
+function updateMainPageButtonsForAuthUser() {
+  const appLink = document.getElementById('app-link');
+  const learnMoreLink = document.querySelector('.hero-actions a[href="#features"]');
+  
+  if (appLink) {
+    appLink.textContent = 'Редактор ColoR';
+    appLink.href = '/pano';
+  }
+  
+  if (learnMoreLink) {
+    learnMoreLink.textContent = 'Другие приложения (beta)';
+    learnMoreLink.href = '#'; // You can change this to an actual link if needed
+  }
+}
+
+// Function to reset main page buttons for non-authenticated users
+function resetMainPageButtonsForNonAuthUser() {
+  const appLink = document.getElementById('app-link');
+  const learnMoreLink = document.querySelector('.hero-actions a[href="#features"]');
+  
+  if (appLink) {
+    appLink.textContent = 'Попробовать демо';
+    appLink.href = '/pano';
+  }
+  
+  if (learnMoreLink) {
+    learnMoreLink.textContent = 'Узнать больше';
+    learnMoreLink.href = '#features';
   }
 }
 
@@ -463,6 +499,24 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Update UI based on user status
   updateUIForUserStatus();
+  
+  // Add event listener for "Другие приложения (beta)" button
+  const otherAppsLink = document.querySelector('.hero-actions a[href="#"]');
+  if (otherAppsLink) {
+    otherAppsLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      // Show a modal with information about other applications
+      openModal(`
+        <h3>Другие приложения (beta)</h3>
+        <p>Мы активно работаем над разработкой новых приложений для расширения функциональности платформы Color360.</p>
+        <p>Следите за нашими новостями и обновлениями!</p>
+        <button class="btn primary" id="close-modal-btn">Закрыть</button>
+      `);
+      
+      // Add event listener to close button
+      document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+    });
+  }
 });
 
 // Contact Form Submission
@@ -504,6 +558,14 @@ function closeModal(){
   modal.classList.add('hidden');
   modalBody.innerHTML = '';
 }
+
+// Функция для показа политики конфиденциальности
+function showPrivacyPolicy() {
+  window.open('./privacy.html', '_blank', 'width=900,height=700,scrollbars=yes');
+}
+
+// Делаем функцию глобально доступной
+window.showPrivacyPolicy = showPrivacyPolicy;
 modalClose.addEventListener('click', closeModal);
 modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
 
@@ -546,7 +608,8 @@ btnLogin.addEventListener('click', ()=>{
       if (j.user && j.user.isAdmin) {
         window.location.href = './admin';
       } else {
-        window.location.href = './dashboard';
+        // For regular users, we stay on the main page but with updated buttons
+        // The UI has already been updated by updateUIForUserStatus()
       }
     } else {
       document.getElementById('login-msg').textContent = j.message || 'Ошибка входа';
@@ -564,6 +627,17 @@ btnRegister.addEventListener('click', ()=>{
       <input name="email" type="email" required placeholder="your@email.com" />
       <label>Пароль</label>
       <input name="password" type="password" required placeholder="••••••••" />
+      
+      <div class="privacy-consent">
+        <label class="checkbox-label">
+          <input type="checkbox" name="privacyConsent" id="privacy-consent" required />
+          <span class="checkmark"></span>
+          <span class="consent-text">
+            <span class="privacy-link" onclick="showPrivacyPolicy()">Согласие</span> на обработку персональных данных
+          </span>
+        </label>
+      </div>
+      
       <button class="btn primary register-submit-btn" type="submit">Зарегистрироваться</button>
       <div class="message" id="reg-msg"></div>
     </form>
@@ -577,6 +651,14 @@ btnRegister.addEventListener('click', ()=>{
   
   document.getElementById('register-form').addEventListener('submit', async (e)=>{
     e.preventDefault();
+    
+    // Проверяем согласие на обработку персональных данных
+    const privacyConsent = document.getElementById('privacy-consent');
+    if (!privacyConsent.checked) {
+      document.getElementById('reg-msg').textContent = 'Необходимо согласие на обработку персональных данных';
+      return;
+    }
+    
     const f = Object.fromEntries(new FormData(e.target));
     const res = await fetch('./api/register', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(f)});
     const j = await res.json();

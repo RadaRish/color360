@@ -22,7 +22,6 @@ export default class ProjectManager {
                 hotspots: hotspots,
             };
 
-            console.log('Сохраняем проект с данными:', data);
             return JSON.stringify(data, null, 2);
         } catch (error) {
             console.error('Ошибка при сохранении проекта:', error);
@@ -52,8 +51,6 @@ export default class ProjectManager {
                 throw new Error('Неверный формат проекта: отсутствует массив scenes');
             }
 
-            console.log('Загружаем проект:', data);
-
             // Очищаем текущие данные
             this.sceneManager.clearScenes();
             this.hotspotManager.loadHotspots([]); // Очищаем хотспоты
@@ -79,7 +76,6 @@ export default class ProjectManager {
                 this.sceneManager.switchToScene(firstScene.id);
             }
 
-            console.log(`Проект загружен успешно. Загружено сцен: ${data.scenes.length}`);
             return true;
 
         } catch (error) {

@@ -56,44 +56,27 @@
                 <span id="subscription-limit"></span>
               </div>
             </div>
-            
+            <div style="margin-top:12px">
+              <label>Аватар</label>
+              <div id="profile-avatar-preview" style="width:72px;height:72px;border-radius:50%;overflow:hidden;background:#222;margin-bottom:8px;"><img id="profile-avatar-img" src="" style="width:100%;height:100%;object-fit:cover;display:none"></div>
+              <input type="file" id="profile-avatar-file" accept="image/*" />
+            </div>
+
             <div class="profile-actions">
               <button id="btn-change-password" class="btn secondary">Изменить пароль</button>
               <button id="btn-delete-account" class="btn danger">Удалить аккаунт</button>
             </div>
           </div>
           
-          <div class="sessions-section">
-            <h3>Активные сессии</h3>
-            <p class="section-description">Здесь вы можете управлять активными сессиями вашего аккаунта. Для оптимизации ресурсов рекомендуется закрывать неиспользуемые сессии.</p>
-            
-            <div class="sessions-list">
-              <table id="sessions-table">
-                <thead>
-                  <tr>
-                    <th>Устройство/IP</th>
-                    <th>Дата входа</th>
-                    <th>Действия</th>
-                  </tr>
-                </thead>
-                <tbody id="sessions-list-body">
-                  <!-- Sessions will be loaded here -->
-                </tbody>
-              </table>
-            </div>
-            
-            <div class="session-info">
-              <p>Количество активных сессий: <span id="session-count">0</span> из 3 возможных</p>
-            </div>
-          </div>
+
           
           <!-- Editor Sessions Section -->
           <div class="sessions-section">
-            <h3>Сессии работы в редакторе</h3>
-            <p class="section-description">Здесь вы можете управлять сессиями работы в редакторе панорамных туров. Вы можете восстановить предыдущую работу, переименовать сессию или удалить ненужные.</p>
+            <h3>Сохраненные проекты</h3>
+            <p class="section-description">Здесь вы можете управлять сохраненными проектами панорамных туров. Вы можете восстановить предыдущий проект, переименовать проект или удалить ненужные.</p>
             
             <div class="table-actions">
-              <button id="create-session" class="btn primary">Создать новую сессию</button>
+              <button id="create-session" class="btn primary">Создать новый проект</button>
             </div>
             
             <div class="sessions-list">
@@ -113,7 +96,7 @@
             </div>
             
             <div class="session-info">
-              <p>Количество сессий редактора: <span id="editor-session-count">0</span></p>
+              <p>Количество сохраненных проектов: <span id="editor-session-count">0</span></p>
             </div>
           </div>
         </div>
@@ -273,7 +256,7 @@
       <div class="footer-bottom">
         <p>&copy; 2025 Color360. Все права защищены.</p>
         <div class="footer-links">
-          <a href="#">Политика конфиденциальности</a>
+          <a href="./privacy.html" target="_blank">Политика конфиденциальности</a>
           <a href="#">Условия использования</a>
         </div>
       </div>

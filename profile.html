@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Личный кабинет — Color360 (демо)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#111; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; margin:0 }
+    .card { background: rgba(26,26,26,0.95); padding:24px; border-radius:12px; width:360px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); }
+    .preview { width:72px; height:72px; border-radius:50%; overflow:hidden; background:#222; margin-bottom:12px }
+    .preview img { width:100%; height:100%; object-fit:cover }
+    input[type=file] { display:block; margin-bottom:12px }
+    button { background:#646cff; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer }
+    .msg { margin-top:12px }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Личный кабинет</h2>
+    <div class="preview" id="avatar-preview">
+      <img id="avatar-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23f0f0f0'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='%23999'%3EНет фото%3C/text%3E%3C/svg%3E" alt="avatar" />
+    </div>
+    <!-- ВРЕМЕННО ОТКЛЮЧЕНО: возможность загрузки пользовательской иконки на аватар -->
+    <!-- <input type="file" id="avatar-file" accept="image/*" /> -->
+    <div style="opacity: 0.5; pointer-events: none;">
+      <p style="text-align: center; margin: 10px 0; color: #666;">Загрузка пользовательских аватаров временно отключена</p>
+      <!-- <button id="upload-btn">Загрузить аватар на сервер</button> -->
+      <!-- <button id="save-local-btn">Сохранить локально</button> -->
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('color360_token');
+    const localAvatar = localStorage.getItem('color360_avatar');
+    const img = document.getElementById('avatar-img');
+    const preview = document.getElementById('avatar-preview');
+    // ВРЕМЕННО ОТКЛЮЧЕНО: const fileInput = document.getElementById('avatar-file');
+    const msg = document.getElementById('msg');
+
+    if (localAvatar) img.src = localAvatar; else img.style.display = 'none';
+
+    // ВРЕМЕННО ОТКЛЮЧЕНО: возможность загрузки пользовательской иконки на аватар
+    /*
+    fileInput.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        img.src = r.result; img.style.display = 'block';
+      };
+      r.readAsDataURL(f);
+    });
+
+    document.getElementById('save-local-btn').addEventListener('click', () => {
+      if (!img.src) { msg.textContent = 'Выберите файл сначала'; return; }
+      localStorage.setItem('color360_avatar', img.src);
+      msg.textContent = 'Аватар сохранён локально';
+    });
+
+    document.getElementById('upload-btn').addEventListener('click', async () => {
+      if (!img.src) { msg.textContent = 'Выберите файл сначала'; return; }
+      if (!token) { msg.textContent = 'Сначала войдите в систему (токен не найден)'; return; }
+
+      msg.textContent = 'Загрузка...';
+      try {
+        const res = await fetch('/api/user/avatar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ dataUrl: img.src })
+        });
+        const json = await res.json();
+        if (res.ok) {
+          msg.textContent = 'Аватар загружен: ' + json.url;
+          // update local avatar to the new server url
+          localStorage.setItem('color360_avatar', json.url);
+          // notify opener (editor) to refresh avatar if opened
+          try { window.opener && window.opener.postMessage({ type: 'avatar-updated', url: json.url }, '*'); } catch(e){}
+        } else {
+          msg.textContent = json.message || 'Ошибка загрузки';
+        }
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Ошибка во время загрузки';
+      }
+    });
+    */
+  </script>
+</body>
+</html>

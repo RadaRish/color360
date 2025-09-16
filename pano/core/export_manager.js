@@ -15,8 +15,6 @@ class ExportManager {
      * Создает тестовые данные для отладки экспорта
      */
     createTestProjectData() {
-        console.log('🧪 Создание тестовых данных для экспорта...');
-
         return {
             projectTitle: 'Тестовый панорамный тур',
             scenes: [
@@ -79,18 +77,14 @@ class ExportManager {
      */
     async exportTestProject() {
         try {
-            console.log('🧪 [TEST EXPORT] Начинаем тестовый экспорт...');
 
             const testData = this.createTestProjectData();
-            console.log('🧪 [TEST EXPORT] Тестовые данные созданы:', testData);
 
             // Создаем структуру файлов для экспорта
             const exportPackage = await this.createExportPackage(testData);
-            console.log('🧪 [TEST EXPORT] Пакет файлов создан:', Object.keys(exportPackage));
 
             // Генерируем и скачиваем ZIP архив
             await this.downloadExportPackage(exportPackage);
-            console.log('🧪 [TEST EXPORT] Тестовый экспорт завершен!');
 
         } catch (error) {
             console.error('❌ [TEST EXPORT] Ошибка при тестовом экспорте:', error);
@@ -166,15 +160,14 @@ class ExportManager {
 
         // Получаем ВСЕ хотспоты для диагностики (текущее состояние в памяти ДО выборки по сценам)
         const allHotspotsInitial = this.hotspotManager.getHotspots();
-        console.log('🧪 [EXPORT] Хотспотов в памяти (initial):', allHotspotsInitial.length);
+
         if (allHotspotsInitial.length) {
-            console.log('🧪 [EXPORT] Пример первых хотспотов:', allHotspotsInitial.slice(0, 5).map(h => ({ id: h.id, sceneId: h.sceneId, type: h.type, title: h.title, pos: h.position })));
+
         }
 
         // Карта распределения хотспотов по сценам (предварительная)
         const distributionInitial = {};
         allHotspotsInitial.forEach(h => { distributionInitial[h.sceneId] = (distributionInitial[h.sceneId] || 0) + 1; });
-        console.log('🧪 [EXPORT] Предварительное распределение хотспотов по сценам:', distributionInitial);
 
         // Подготовим карту соответствия editorId -> exportId (первый проход)
         const idMap = {};
@@ -187,14 +180,13 @@ class ExportManager {
         const exportScenes = [];
         for (let index = 0; index < scenes.length; index++) {
             const scene = scenes[index];
-            console.log('🧪 [EXPORT] Обработка сцены:', { idx: index, editorId: scene.id, exportId: idMap[scene.id], name: scene.name, sceneHotspotsArrayLen: (scene.hotspots ? scene.hotspots.length : 0) });
+
             // Основной способ – получить хотспоты через менеджер (форсирует загрузку из localStorage)
             let hotspots = this.hotspotManager.getHotspotsForScene(scene.id) || [];
-            console.log(`🧪 [EXPORT] Найдено хотспотов через getHotspotsForScene(${scene.id}):`, hotspots.length);
 
             // Fallback 1: если пусто, но в объекте сцены есть хотспоты
             if (hotspots.length === 0 && scene.hotspots && scene.hotspots.length) {
-                console.warn('⚠️ [EXPORT] Fallback: используем scene.hotspots (длина:', scene.hotspots.length, ')');
+
                 hotspots = scene.hotspots;
             }
             // Fallback 2: если всё ещё пусто, попробуем взять из общего массива (по sceneId)
@@ -202,14 +194,14 @@ class ExportManager {
                 const allAfterLoad = this.hotspotManager.getHotspots(); // после потенциальной loadFromStorage внутри getHotspotsForScene
                 const matching = allAfterLoad.filter(h => h.sceneId === scene.id);
                 if (matching.length) {
-                    console.warn('⚠️ [EXPORT] Fallback#2: найдено хотспотов в общем массиве:', matching.length);
+
                     hotspots = matching;
                 }
             }
             if (hotspots.length === 0) {
-                console.warn('🚨 [EXPORT] СЦЕНА БЕЗ ХОТСПОТОВ при экспорте:', scene.id, scene.name);
+
             } else {
-                console.log('🧪 [EXPORT] Детали хотспотов сцены:', hotspots.slice(0, 10).map(h => ({ id: h.id, type: h.type, title: h.title, target: h.targetSceneId, pos: h.position })));
+
             }
             // ВАЖНО: перед конвертацией попытаемся заполнить отсутствующие videoUrl (реестр/IndexedDB/legacy)
             await this.fillMissingVideoUrls(hotspots);
@@ -218,9 +210,74 @@ class ExportManager {
             // Проверяем корректность конвертации позиций
             convertedHotspots.forEach(ch => {
                 if (!ch.position || typeof ch.position.x !== 'number') {
-                    console.warn('⚠️ [EXPORT] Некорректная позиция у конвертированного хотспота:', ch.id, ch.position);
+
                 }
             });
+
+            // Получаем текущие настройки камеры для сцены
+            let initialView = {
+                yaw: 0,
+                pitch: 0,
+                fov: 80 // 80 градусов как в редакторе (стандартный FOV)
+            };
+
+            // 0) Если у сцены уже сохранена позиция камеры — используем её в приоритете
+            let hasSceneSavedCamera = false;
+            if (scene.cameraPosition && scene.cameraPosition.rotation) {
+                try {
+                    if (typeof scene.cameraPosition.rotation.x === 'number') {
+                        initialView.pitch = scene.cameraPosition.rotation.x;
+                        hasSceneSavedCamera = true;
+                    }
+                    if (typeof scene.cameraPosition.rotation.y === 'number') {
+                        initialView.yaw = scene.cameraPosition.rotation.y;
+                        hasSceneSavedCamera = true;
+                    }
+                    // Если есть FOV - берём его
+                    if (typeof scene.cameraPosition.fov === 'number' && !isNaN(scene.cameraPosition.fov)) {
+                        initialView.fov = Math.max(10, Math.min(130, scene.cameraPosition.fov));
+                    }
+                } catch (_) {}
+            }
+
+            // 1) Пытаемся получить реальные настройки камеры из viewer manager (ТОЛЬКО если у сцены нет своей сохранённой позиции)
+            if (!hasSceneSavedCamera && this.viewerManager && typeof this.viewerManager.getCameraPosition === 'function') {
+                try {
+                    const cameraData = this.viewerManager.getCameraPosition();
+                    if (cameraData && cameraData.rotation) {
+                        // rotation.x = pitch, rotation.y = yaw, rotation.z = roll
+                        initialView.pitch = (cameraData.rotation.x ?? initialView.pitch) || 0;
+                        initialView.yaw = (cameraData.rotation.y ?? initialView.yaw) || 0;
+
+                        // Пытаемся получить текущий FOV
+                        const camera = this.viewerManager.aframeCamera;
+                        if (camera) {
+                            // Для A-Frame камера задается через компонент 'camera'
+                            const camComp = camera.getAttribute('camera') || {};
+                            const currentFov = parseFloat(camComp.fov) || 80;
+                            initialView.fov = currentFov;
+                        }
+
+                        console.log('✅ [EXPORT] Получены настройки камеры от viewerManager для сцены', scene.name, ':', {
+                            pitch: initialView.pitch,
+                            yaw: initialView.yaw,
+                            fov: initialView.fov
+                        });
+                    }
+                } catch (error) {
+
+                }
+            }
+
+            // Альтернативно - пытаемся получить из самой сцены если есть сохраненные настройки
+            if (scene.initialView) {
+                initialView = {
+                    yaw: (scene.initialView.yaw ?? initialView.yaw),
+                    pitch: (scene.initialView.pitch ?? initialView.pitch),
+                    fov: (scene.initialView.fov ?? initialView.fov)
+                };
+
+            }
 
             exportScenes.push({
                 id: idMap[scene.id],
@@ -228,18 +285,13 @@ class ExportManager {
                 panoramaFile: scene.name || `scene_${index}.jpg`,
                 panoramaData: scene.src, // URL или Data URL изображения
                 hotspots: convertedHotspots,
-                initialView: {
-                    yaw: 0,
-                    pitch: 0,
-                    fov: Math.PI / 3
-                }
+                initialView: initialView
             });
         }
 
         // Итоговая проверка распределения уже в exportScenes
         const exportDistribution = {};
         exportScenes.forEach(s => { exportDistribution[s.id] = s.hotspots.length; });
-        console.log('🧪 [EXPORT] Итоговое распределение хотспотов (export IDs):', exportDistribution);
 
         // Сохраняем debug-данные глобально для ручного анализа из консоли
         window.__EXPORT_DEBUG__ = {
@@ -250,7 +302,6 @@ class ExportManager {
             orphanedCount,
             distributionInitial
         };
-        console.log('🧪 [EXPORT] Debug данные доступны в window.__EXPORT_DEBUG__');
 
         return {
             projectTitle: projectInfo.title || 'Панорамный тур',
@@ -319,7 +370,7 @@ class ExportManager {
                 } catch { }
             }
         } catch (e) {
-            console.warn('⚠️ fillMissingVideoUrls: не удалось дополнить видео-URL при экспорте:', e);
+
         }
     }
 
@@ -337,9 +388,55 @@ class ExportManager {
     }
 
     /**
+     * Применяет начальный вид камеры для сцены
+     */
+    applyInitialView(scene) {
+        const camera = document.querySelector('#tour-camera');
+        if (!camera || !scene.initialView) {
+
+            return;
+        }
+
+        // Устанавливаем FOV
+        if (scene.initialView.fov) {
+            camera.setAttribute('fov', scene.initialView.fov);
+        }
+
+        // Устанавливаем поворот камеры
+        if (scene.initialView.rotation) {
+            // Используем готовую строку rotation
+            camera.setAttribute('rotation', scene.initialView.rotation);
+
+        } else if (scene.initialView.yaw !== undefined || scene.initialView.pitch !== undefined) {
+            // Вычисляем rotation из yaw/pitch
+            const yaw = scene.initialView.yaw || 0;
+            const pitch = scene.initialView.pitch || 0;
+            const roll = 0; // обычно roll = 0 для панорам
+            
+            const rotationString = pitch + ' ' + yaw + ' ' + roll;
+            camera.setAttribute('rotation', rotationString);
+
+        }
+    }
+
+    /**
+     * Генерирует безопасный ID для элемента панорамы в экспорте
+     */
+    generatePanoramaElementId(sceneName, index) {
+        // Убираем небезопасные символы и создаем ID для элемента панорамы
+        const cleanName = sceneName
+            .replace(/[^a-zA-Zа-яА-Я0-9]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+
+        return `scene-${index}-${cleanName}-panorama`;
+    }
+
+    /**
      * Создает современный SVG маркер со стрелкой (синхронизировано с редактором)
      */
-    createModernArrowSVG(color, size) {
+    createModernArrowSVG(color, size, options = {}) {
+        const noFill = !!options.noFill;
         const highResolution = 512;
         const center = highResolution / 2;
         const iconSize = center * 0.4;
@@ -362,14 +459,14 @@ class ExportManager {
             <g class="marker-content">
                 <!-- Основной фон маркера -->
                 <polygon points="${center},${center * 0.3} ${center * 1.4},${center * 0.8} ${center * 1.15},${center * 0.8} ${center * 1.15},${center * 1.4} ${center * 0.85},${center * 1.4} ${center * 0.85},${center * 0.8} ${center * 0.6},${center * 0.8}" 
-                         fill="url(#gradient-hotspot)" 
+                         fill="${noFill ? 'none' : 'url(#gradient-hotspot)'}" 
                          filter="url(#glow-hotspot)" 
                          stroke="rgba(255, 255, 255, 0.4)" 
                          stroke-width="3"/>
                 <!-- Стрелка (увеличенная в 2 раза) -->
-                <g fill="#ffffff" opacity="0.95">
-                    <circle cx="${center}" cy="${center}" r="${iconSize}" fill="none" stroke="currentColor" stroke-width="8"/>
-                    <polygon points="${center},${center - iconSize * 1.6} ${center - iconSize * 0.6},${center + iconSize * 0.6} ${center},${center} ${center + iconSize * 0.6},${center + iconSize * 0.6}" fill="currentColor"/>
+                <g fill="${noFill ? 'none' : '#ffffff'}" opacity="0.95">
+                    <circle cx="${center}" cy="${center}" r="${iconSize}" fill="none" stroke="#ffffff" stroke-width="8"/>
+                    <polygon points="${center},${center - iconSize * 1.6} ${center - iconSize * 0.6},${center + iconSize * 0.6} ${center},${center} ${center + iconSize * 0.6},${center + iconSize * 0.6}" ${noFill ? 'fill="none" stroke="#ffffff" stroke-width="6"' : 'fill="#ffffff"'}/>
                 </g>
             </g>
         </svg>`;
@@ -378,7 +475,8 @@ class ExportManager {
     /**
      * Создает современный SVG маркер с иконкой "i" (синхронизировано с редактором)
      */
-    createModernInfoSVG(color, size) {
+    createModernInfoSVG(color, size, options = {}) {
+        const noFill = !!options.noFill;
         const highResolution = 512;
         const center = highResolution / 2;
         const iconSize = center * 0.4;
@@ -401,18 +499,15 @@ class ExportManager {
             <g class="marker-content">
                 <!-- Основной фон маркера -->
                 <circle cx="${center}" cy="${center}" r="${center * 0.7}" 
-                        fill="url(#gradient-info)" 
+                        fill="${noFill ? 'none' : 'url(#gradient-info)'}" 
                         filter="url(#glow-info)" 
                         stroke="rgba(255, 255, 255, 0.4)" 
                         stroke-width="3"/>
                 <!-- Иконка "i" в круге -->
                 <g>
-                    <!-- Круг фон для иконки "i" -->
-                    <circle cx="${center}" cy="${center}" r="${iconSize * 0.9}" fill="currentColor" stroke="#ffffff" stroke-width="4"/>
-                    <!-- Точка сверху -->
-                    <circle cx="${center}" cy="${center - iconSize * 0.3}" r="${iconSize * 0.12}" fill="#ffffff"/>
-                    <!-- Вертикальная линия -->
-                    <rect x="${center - iconSize * 0.08}" y="${center - iconSize * 0.05}" width="${iconSize * 0.16}" height="${iconSize * 0.6}" fill="#ffffff" rx="${iconSize * 0.04}"/>
+                    <circle cx="${center}" cy="${center}" r="${iconSize * 0.9}" ${noFill ? 'fill="none" stroke="#ffffff" stroke-width="4"' : 'fill="#ffffff" stroke="#ffffff" stroke-width="4"'}/>
+                    <circle cx="${center}" cy="${center - iconSize * 0.3}" r="${iconSize * 0.12}" ${noFill ? 'fill="none" stroke="#4CAF50" stroke-width="4"' : 'fill="#4CAF50"'}/>
+                    <rect x="${center - iconSize * 0.08}" y="${center - iconSize * 0.05}" width="${iconSize * 0.16}" height="${iconSize * 0.6}" ${noFill ? 'fill="none" stroke="#4CAF50" stroke-width="6"' : 'fill="#4CAF50"'} rx="${iconSize * 0.04}"/>
                 </g>
             </g>
         </svg>`;
@@ -432,7 +527,7 @@ class ExportManager {
                 z: hotspot.position?.z || 0
             },
             title: hotspot.title ? this.removeFileExtension(hotspot.title) : 'Без названия',
-            description: hotspot.description || '',
+            description: (hotspot.description ?? hotspot._originalData?.description ?? ''),
             type: hotspot.type || 'hotspot',
             targetSceneId: hotspot.targetSceneId || null, // временно, перепишем ниже через idMap
             icon: hotspot.icon || (hotspot.type === 'hotspot' ? 'arrow' :
@@ -445,6 +540,7 @@ class ExportManager {
                     hotspot.type === 'animated-object' ? '#ffffff' : '#00ff00'),
             textColor: hotspot.textColor || '#ffffff',
             textSize: hotspot.textSize || 1.0,
+            noFill: !!hotspot.noFill,
             videoUrl: hotspot.videoUrl || hotspot._originalData?.videoUrl || null,
             poster: hotspot.poster || hotspot._originalData?.poster || (this.hotspotManager?.getPoster?.(hotspot.id) || null),
             videoWidth: hotspot.videoWidth || hotspot._originalData?.videoWidth || null,
@@ -477,6 +573,7 @@ class ExportManager {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://aframe.io https://fonts.googleapis.com https://fonts.gstatic.com; connect-src 'self' data: blob: https://aframe.io https://fonts.googleapis.com https://fonts.gstatic.com;">
     <title>${projectData.projectTitle}</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
@@ -506,17 +603,17 @@ class ExportManager {
             cursor="rayOrigin: mouse"
             raycaster="objects: [data-raycastable]; far: 100; interval: 100"
             renderer="antialias: true; colorManagement: true; sortObjects: true"
-            loading-screen="enabled: false">>
+            loading-screen="enabled: false">
             
             <!-- Активы -->
             <a-assets>
-                ${projectData.scenes.map(scene =>
-            `<img id="${scene.id}-panorama" src="panoramas/${scene.id}.jpg">`
+                ${projectData.scenes.map((scene, index) =>
+            `<img id="${this.generatePanoramaElementId(scene.name, index)}" src="panoramas/${scene.id}.jpg">`
         ).join('\n                ')}
             </a-assets>
 
             <!-- Небесная сфера для панорамы -->
-            <a-sky id="panorama-sky" src="#${projectData.scenes[0]?.id || 'scene-0'}-panorama" rotation="0 0 0"></a-sky>
+            <a-sky id="panorama-sky" src="#${projectData.scenes[0] ? this.generatePanoramaElementId(projectData.scenes[0].name, 0) : 'scene-0'}" rotation="0 0 0"></a-sky>
 
             <!-- Камера с орбитальным управлением -->
             <a-camera 
@@ -744,6 +841,7 @@ class ExportManager {
                 this.el.addEventListener('click', this.onClick.bind(this));
                 this.el.addEventListener('mouseenter', this.onMouseEnter.bind(this));
                 this.el.addEventListener('mouseleave', this.onMouseLeave.bind(this));
+                this._modalOpen = false;
                 
                 // Добавляем data-raycastable для корректной работы raycaster
                 this.el.setAttribute('data-raycastable', '');
@@ -752,6 +850,13 @@ class ExportManager {
                 // hotspot click
                 // Info-point: всегда показываем текст, НЕ навигируем
                 if (this.data.type === 'info-point' || this.data.type === 'infopoint') {
+                    // Скрываем возможный тултип и запрещаем появление новых на время модала
+                    if (this._tooltipEl) {
+                        try { window.removeEventListener('mousemove', this._tooltipMove); } catch {}
+                        try { document.body.removeChild(this._tooltipEl); } catch {}
+                        this._tooltipEl = null; this._tooltipMove = null;
+                    }
+                    this._modalOpen = true;
                     this.showInfoModal();
                     return;
                 }
@@ -852,7 +957,9 @@ class ExportManager {
                 // Закрытие модального окна
                 const closeBtn = content.querySelector('button');
                 const closeModal = () => {
-                    document.body.removeChild(modal);
+                    try { document.body.removeChild(modal); } catch {}
+                    // Разрешаем появление тултипов снова
+                    this._modalOpen = false;
                 };
                 
                 closeBtn.addEventListener('click', closeModal);
@@ -861,13 +968,17 @@ class ExportManager {
                 });
             },
                 // Удален showVideoModal: видео теперь играет в плоскости
-        onMouseEnter: function(evt) {
+    onMouseEnter: function(evt) {
+        if (this._modalOpen) { return; }
                 const textEl = this.el.querySelector('[cyrillic-text]');
                 // Показываем 3D-лейбл для всех типов (info-point, hotspot, video-area)
                 if (textEl) {
                     textEl.setAttribute('visible', true);
                 }
-                this.el.setAttribute('scale', '1.2 1.2 1.2');
+                // Запускаем hover-анимации на shape через события
+                try { this.el.emit && this.el.emit('hover-on'); } catch {}
+                // Ставим на паузу мягкую анимацию покачивания, если есть
+                try { const comp = this.el.components && this.el.components['animation__bob']; if (comp && comp.pause) comp.pause(); } catch(e) {}
                 // 2D подсказка: показываем Название + Описание для всех типов маркеров
                 if (this.data && (this.data.title || this.data.description)) {
                     const tip = document.createElement('div');
@@ -886,7 +997,9 @@ class ExportManager {
             onMouseLeave: function() {
                 const textEl = this.el.querySelector('[cyrillic-text]');
                 if (textEl) textEl.setAttribute('visible', false);
-                this.el.setAttribute('scale', '1 1 1');
+                try { this.el.emit && this.el.emit('hover-off'); } catch {}
+                // Возобновляем мягкую анимацию покачивания, если есть
+                try { const comp = this.el.components && this.el.components['animation__bob']; if (comp && comp.play) comp.play(); } catch(e) {}
                 if (this._tooltipEl) {
                     window.removeEventListener('mousemove', this._tooltipMove);
                     document.body.removeChild(this._tooltipEl);
@@ -957,32 +1070,29 @@ class TourViewer {
     }
 
     init() {
-        console.log('🎬 TourViewer.init() запущен');
-        
+
         // Проверяем, готовы ли элементы DOM
         if (!this.scene || !this.panoramaSky || !this.hotspotsContainer || !this.sceneList) {
-            console.log('⏳ DOM элементы не готовы, повторяем через 100мс...');
+
             setTimeout(() => this.init(), 100);
             return;
         }
-        
-        console.log('✅ DOM элементы найдены');
-        
+
         // Ожидаем готовности A-Frame сцены
         if (this.scene.hasLoaded) {
-            console.log('✅ A-Frame сцена уже загружена, запускаем тур');
+
             this.startTour();
         } else {
-            console.log('⏳ Ждем загрузки A-Frame сцены...');
+
             this.scene.addEventListener('loaded', () => {
-                console.log('✅ A-Frame сцена загружена, запускаем тур');
+
                 this.startTour();
             });
         }
     }
     
     startTour() {
-        console.log('🚀 Запуск тура...');
+
         this.setupEventListeners();
         this.loadScene(this.currentSceneId);
     }
@@ -1083,7 +1193,7 @@ class TourViewer {
 
     // scene data
         scene.hotspots.forEach(function(hotspot, i){
-            console.log('  🎯 Хотспот ' + (i+1) + ': "' + hotspot.title + '" тип: ' + hotspot.type + ' переход: ' + hotspot.targetSceneId);
+
         });
 
         // Показать индикатор загрузки панорамы
@@ -1096,36 +1206,368 @@ class TourViewer {
             if (self.panoramaSky) {
                 self.panoramaSky.removeEventListener('materialtextureloaded', onLoaded);
             }
+            // После загрузки текстуры — применяем начальный вид
+            try { self.applyInitialView(scene); } catch(e) { console.warn('applyInitialView after load failed', e); }
         };
         if (this.panoramaSky) {
             this.panoramaSky.addEventListener('materialtextureloaded', onLoaded);
         }
 
+        // Найдем индекс сцены для получения правильного ID элемента панорамы
+        const sceneIndex = this.tourData.scenes.findIndex(s => s.id === sceneId);
+        const panoramaElementId = this.generatePanoramaElementId(scene.name, sceneIndex);
+        
         // Обновляем панораму
-        const panoramaElement = document.querySelector('#' + sceneId + '-panorama');
+        const panoramaElement = document.querySelector('#' + panoramaElementId);
         if (panoramaElement) {
-            this.panoramaSky.setAttribute('src', '#' + sceneId + '-panorama');
-            console.log('✅ Панорама установлена:', sceneId);
+            this.panoramaSky.setAttribute('src', '#' + panoramaElementId);
+
         } else {
-            console.error('❌ Элемент панорамы не найден:', sceneId + '-panorama');
+            console.error('❌ Элемент панорамы не найден:', panoramaElementId);
         }
+
+    // Применение начального вида перенесено в onLoaded
 
         // Очищаем старые хотспоты
         while (this.hotspotsContainer.firstChild) {
             this.hotspotsContainer.removeChild(this.hotspotsContainer.firstChild);
         }
-        console.log('🧹 Старые хотспоты очищены');
 
         // Добавляем хотспоты
-        console.log('🎯 Создаем', scene.hotspots.length, 'хотспотов...');
+
         scene.hotspots.forEach((hotspot, i) => {
-            console.log('🔧 Создаем хотспот ' + (i + 1) + '/' + scene.hotspots.length + ':', hotspot.title);
+
             this.createHotspot(hotspot);
         });
-        
-        console.log('✅ Сцена загружена:', scene.name);
+
         this.hideLoading();
 }
+
+    /**
+     * Применяет начальный вид камеры для сцены с механизмом повторных попыток
+     */
+    applyInitialView(scene) {
+        const camera = document.querySelector('#tour-camera');
+        if (!camera || !scene.initialView) {
+
+            return;
+        }
+        
+        // Применяем вид с повторными попытками
+        this.applyCameraWithRetries(scene, 0);
+    }
+
+    /**
+     * Применяет камеру с повторными попытками для надежности
+     */
+    applyCameraWithRetries(scene, attempt) {
+        const maxAttempts = 8;
+        const camera = document.querySelector('#tour-camera');
+        
+        if (!camera || !scene.initialView) {
+
+            return;
+        }
+
+        const lc = camera.components && camera.components['look-controls'];
+
+        // Пауза look-controls перед применением
+        try { if (lc && lc.pause) lc.pause(); } catch {}
+        
+        // Полный сброс состояния
+        try { camera.setAttribute('rotation', '0 0 0'); } catch {}
+        try { camera.object3D.rotation.set(0,0,0,'XYZ'); } catch {}
+        
+        setTimeout(() => {
+            // FOV
+            if (scene.initialView.fov) {
+                let fovDegrees = scene.initialView.fov;
+                if (fovDegrees < 10) fovDegrees = fovDegrees * (180 / Math.PI);
+                fovDegrees = Math.max(10, Math.min(130, fovDegrees));
+                try { camera.setAttribute('fov', fovDegrees); } catch {}
+
+            }
+            
+            // Rotation
+            if (scene.initialView.rotation) {
+                try { camera.setAttribute('rotation', scene.initialView.rotation); } catch {}
+                try {
+                    const parts = String(scene.initialView.rotation).split(/[\s,]+/).map(parseFloat);
+                    if (parts.length >= 2 && camera.object3D) {
+                        // x=pitch, y=yaw, z=roll, значения в градусах
+                        const deg2rad = Math.PI / 180;
+                        camera.object3D.rotation.set((parts[0]||0)*deg2rad, (parts[1]||0)*deg2rad, (parts[2]||0)*deg2rad, 'XYZ');
+                    }
+                } catch {}
+
+            } else if (scene.initialView.yaw !== undefined || scene.initialView.pitch !== undefined) {
+                let yaw = scene.initialView.yaw || 0;
+                let pitch = scene.initialView.pitch || 0;
+                if (Math.abs(yaw) < 10 && Math.abs(pitch) < 10 && (yaw !== 0 || pitch !== 0)) {
+                    yaw = yaw * (180 / Math.PI);
+                    pitch = pitch * (180 / Math.PI);
+                }
+                const roll = 0;
+                const rotationString = pitch + ' ' + yaw + ' ' + roll;
+                try { camera.setAttribute('rotation', rotationString); } catch {}
+                try {
+                    if (camera.object3D) {
+                        const deg2rad = Math.PI / 180;
+                        camera.object3D.rotation.set(pitch*deg2rad, yaw*deg2rad, 0, 'XYZ');
+                    }
+                } catch {}
+
+            }
+            
+            // Возобновление управления после применения
+            requestAnimationFrame(() => { 
+                try { if (lc && lc.play) lc.play(); } catch {} 
+                
+                // Проверяем результат после небольшой задержки
+                setTimeout(() => {
+                    const actualRotation = camera.getAttribute('rotation');
+
+                    // Если поворот не применился правильно и есть еще попытки
+                    if (attempt < maxAttempts - 1) {
+                        let needRetry = false;
+                        
+                        if (scene.initialView.rotation) {
+                            const expectedParts = String(scene.initialView.rotation).split(/[\s,]+/).map(parseFloat);
+                            const actualParts = String(actualRotation || '0 0 0').split(/[\s,]+/).map(parseFloat);
+                            const tolerance = 5; // градусы
+                            
+                            if (Math.abs((expectedParts[0] || 0) - (actualParts[0] || 0)) > tolerance ||
+                                Math.abs((expectedParts[1] || 0) - (actualParts[1] || 0)) > tolerance) {
+                                needRetry = true;
+                            }
+                        } else if (scene.initialView.yaw !== undefined || scene.initialView.pitch !== undefined) {
+                            let expectedYaw = scene.initialView.yaw || 0;
+                            let expectedPitch = scene.initialView.pitch || 0;
+                            if (Math.abs(expectedYaw) < 10 && Math.abs(expectedPitch) < 10 && (expectedYaw !== 0 || expectedPitch !== 0)) {
+                                expectedYaw = expectedYaw * (180 / Math.PI);
+                                expectedPitch = expectedPitch * (180 / Math.PI);
+                            }
+                            
+                            const actualParts = String(actualRotation || '0 0 0').split(/[\s,]+/).map(parseFloat);
+                            const tolerance = 5; // градусы
+                            
+                            if (Math.abs(expectedPitch - (actualParts[0] || 0)) > tolerance ||
+                                Math.abs(expectedYaw - (actualParts[1] || 0)) > tolerance) {
+                                needRetry = true;
+                            }
+                        }
+                        
+                        if (needRetry) {
+
+                            setTimeout(() => {
+                                this.applyCameraWithRetries(scene, attempt + 1);
+                            }, 300);
+                        } else {
+
+                        }
+                    } else {
+
+                    }
+                }, 100);
+            });
+        }, 50);
+    }
+
+    /**
+     * Генерирует безопасный ID для элемента панорамы в экспорте
+     */
+    generatePanoramaElementId(sceneName, index) {
+        // Убираем небезопасные символы и создаем ID для элемента панорамы
+        const cleanName = sceneName
+            .replace(/[^a-zA-Zа-яА-Я0-9]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+
+        return 'scene-' + index + '-' + cleanName + '-panorama';
+    }
+
+    /**
+     * Вспомогательные функции для работы с цветами
+     */
+    _hexToRgb(hex) {
+        if (!hex) return { r: 255, g: 255, b: 255 };
+        let h = hex.trim();
+        if (h[0] === '#') h = h.slice(1);
+        if (h.length === 3) {
+            const r = parseInt(h[0] + h[0], 16);
+            const g = parseInt(h[1] + h[1], 16);
+            const b = parseInt(h[2] + h[2], 16);
+            return { r, g, b };
+        }
+        if (h.length === 6) {
+            const r = parseInt(h.slice(0, 2), 16);
+            const g = parseInt(h.slice(2, 4), 16);
+            const b = parseInt(h.slice(4, 6), 16);
+            return { r, g, b };
+        }
+        return { r: 255, g: 255, b: 255 };
+    }
+    _rgbToHex(r, g, b) {
+        const toHex = (v) => {
+            const n = Math.max(0, Math.min(255, Math.round(v)));
+            return n.toString(16).padStart(2, '0');
+        };
+        return '#' + toHex(r) + toHex(g) + toHex(b);
+    }
+    _mixColor(hex, ratioToWhite = 0) {
+        // ratioToWhite: 0 -> исходный цвет; 1 -> белый; отрицательные значения смешивают с чёрным
+        const { r, g, b } = this._hexToRgb(hex);
+        if (ratioToWhite === 0) return this._rgbToHex(r, g, b);
+        if (ratioToWhite > 0) {
+            const t = Math.min(1, Math.max(0, ratioToWhite));
+            const R = r + (255 - r) * t;
+            const G = g + (255 - g) * t;
+            const B = b + (255 - b) * t;
+            return this._rgbToHex(R, G, B);
+        } else {
+            const t = Math.min(1, Math.max(0, -ratioToWhite));
+            const R = r * (1 - t);
+            const G = g * (1 - t);
+            const B = b * (1 - t);
+            return this._rgbToHex(R, G, B);
+        }
+    }
+
+    /**
+     * Создает современный SVG маркер со стрелкой для хотспотов
+     */
+    createModernArrowSVG(color, size) {
+        const HR = 512; const C = HR / 2; const s = C * 0.4;
+        const gradId = 'arrow-gradient-' + Math.random().toString(36).slice(2, 11);
+        const shId = 'arrow-shadow-' + Math.random().toString(36).slice(2, 11);
+        const base = color || '#ffffff';
+        const c0 = this._mixColor(base, 0.3);   // светлее
+        const c1 = this._mixColor(base, 0.1);   // немного светлее
+        const c2 = this._mixColor(base, -0.05); // чуть темнее
+        // Chevron со штрихами + круговая окантовка (без заливки), как в редакторе
+        return (
+            '<svg width="' + HR + '" height="' + HR + '" viewBox="0 0 ' + HR + ' ' + HR + '" xmlns="http://www.w3.org/2000/svg">' +
+              '<defs>' +
+                '<linearGradient id="' + gradId + '" x1="0%" y1="0%" x2="100%" y2="100%">' +
+                  '<stop offset="0%" stop-color="' + c0 + '" stop-opacity="0.98"/>' +
+                  '<stop offset="50%" stop-color="' + c1 + '" stop-opacity="0.9"/>' +
+                  '<stop offset="100%" stop-color="' + c2 + '" stop-opacity="0.82"/>' +
+                '</linearGradient>' +
+                '<filter id="' + shId + '" x="-50%" y="-50%" width="200%" height="200%">' +
+                  '<feDropShadow dx="2" dy="3" stdDeviation="4" flood-color="rgba(0,0,0,0.3)" />' +
+                '</filter>' +
+              '</defs>' +
+              '<g>' +
+                // Круглая окантовка
+                '<circle cx="' + C + '" cy="' + C + '" r="' + (s * 0.9) + '" fill="none" stroke="url(#' + gradId + ')" stroke-width="12" filter="url(#' + shId + ')" />' +
+                // Левый штрих шеврона
+                '<path d="M ' + (C - s * 0.3) + ' ' + (C + s * 0.15) + ' L ' + C + ' ' + (C - s * 0.3) + '" ' +
+                      'fill="none" stroke="url(#' + gradId + ')" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" filter="url(#' + shId + ')" />' +
+                // Правый штрих шеврона
+                '<path d="M ' + C + ' ' + (C - s * 0.3) + ' L ' + (C + s * 0.3) + ' ' + (C + s * 0.15) + '" ' +
+                      'fill="none" stroke="url(#' + gradId + ')" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" filter="url(#' + shId + ')" />' +
+              '</g>' +
+            '</svg>'
+        );
+    }
+
+        // Вариант для hover: усиленная тень/свечение
+        createModernArrowSVGHover(color, size, options = {}) {
+                const HR = 512; const C = HR / 2; const s = C * 0.4;
+                const gradId = 'arrow-gradientH-' + Math.random().toString(36).slice(2, 11);
+                const shId = 'arrow-shadowH-' + Math.random().toString(36).slice(2, 11);
+                const base = color || '#ffffff';
+                const c0 = this._mixColor(base, 0.4);
+                const c1 = this._mixColor(base, 0.2);
+                const c2 = this._mixColor(base, 0.0);
+                return (
+                        '<svg width="' + HR + '" height="' + HR + '" viewBox="0 0 ' + HR + ' ' + HR + '" xmlns="http://www.w3.org/2000/svg">' +
+                            '<defs>' +
+                                '<linearGradient id="' + gradId + '" x1="0%" y1="0%" x2="100%" y2="100%">' +
+                                    '<stop offset="0%" stop-color="' + c0 + '" stop-opacity="1"/>' +
+                                    '<stop offset="50%" stop-color="' + c1 + '" stop-opacity="0.96"/>' +
+                                    '<stop offset="100%" stop-color="' + c2 + '" stop-opacity="0.92"/>' +
+                                '</linearGradient>' +
+                                '<filter id="' + shId + '" x="-60%" y="-60%" width="220%" height="220%">' +
+                                    '<feDropShadow dx="2" dy="4" stdDeviation="6" flood-color="rgba(0,0,0,0.5)" />' +
+                                '</filter>' +
+                            '</defs>' +
+                            '<g>' +
+                                '<circle cx="' + C + '" cy="' + C + '" r="' + (s * 0.9) + '" fill="none" stroke="url(#' + gradId + ')" stroke-width="12" filter="url(#' + shId + ')" />' +
+                                '<path d="M ' + (C - s * 0.3) + ' ' + (C + s * 0.15) + ' L ' + C + ' ' + (C - s * 0.3) + '" ' +
+                                                        'fill="none" stroke="url(#' + gradId + ')" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" filter="url(#' + shId + ')" />' +
+                                '<path d="M ' + C + ' ' + (C - s * 0.3) + ' L ' + (C + s * 0.3) + ' ' + (C + s * 0.15) + '" ' +
+                                                        'fill="none" stroke="url(#' + gradId + ')" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" filter="url(#' + shId + ')" />' +
+                            '</g>' +
+                        '</svg>'
+                );
+        }
+
+    /**
+     * Создает современный SVG маркер с иконкой "i" для инфоточек
+     */
+            createModernInfoSVG(color, size, options = {}) {
+                    const noFill = !!options.noFill;
+                const HR = 512; const C = HR / 2; const s = C * 0.4;
+                const gradId = 'info-gradient-' + Math.random().toString(36).slice(2, 11);
+                const base = color || '#ffffff';
+                const c0 = this._mixColor(base, 0.35); // светлее
+                const c1 = this._mixColor(base, 0.0);  // базовый
+                const c2 = this._mixColor(base, -0.08); // темнее по краю
+                // Рад. градиентный круг с бликом и буквой "i" как в редакторе
+                return (
+                        '<svg width="' + HR + '" height="' + HR + '" viewBox="0 0 ' + HR + ' ' + HR + '" xmlns="http://www.w3.org/2000/svg">' +
+                            '<defs>' +
+                                '<radialGradient id="' + gradId + '" cx="30%" cy="30%" r="70%">' +
+                                    '<stop offset="0%" stop-color="' + c0 + '" stop-opacity="1"/>' +
+                                    '<stop offset="70%" stop-color="' + c1 + '" stop-opacity="0.92"/>' +
+                                    '<stop offset="100%" stop-color="' + c2 + '" stop-opacity="0.86"/>' +
+                                '</radialGradient>' +
+                            '</defs>' +
+                            '<g>' +
+                                // Тень круга (слегка смещённая)
+                                '<circle cx="' + (C + s * 0.05) + '" cy="' + (C + s * 0.05) + '" r="' + (s * 0.9) + '" fill="rgba(0,0,0,0.3)" opacity="0.6" />' +
+                                // Основной круг
+                                    '<circle cx="' + C + '" cy="' + C + '" r="' + (s * 0.9) + '" ' + (noFill ? 'fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="3"' : 'fill="url(#' + gradId + ')" stroke="rgba(255,255,255,0.8)" stroke-width="3"') + ' />' +
+                                // Блик
+                                    (noFill ? '' : '<ellipse cx="' + (C - s * 0.2) + '" cy="' + (C - s * 0.3) + '" rx="' + (s * 0.3) + '" ry="' + (s * 0.2) + '" fill="rgba(255,255,255,0.3)" opacity="0.8" />') +
+                                // Точка над "i"
+                                    '<circle cx="' + C + '" cy="' + (C - s * 0.3) + '" r="' + (s * 0.12) + '" ' + (noFill ? 'fill="none" stroke="#ffffff" stroke-width="2"' : 'fill="#ffffff" stroke="rgba(0,0,0,0.3)" stroke-width="1"') + ' />' +
+                                // Вертикальная линия "i"
+                                    '<rect x="' + (C - s * 0.08) + '" y="' + (C - s * 0.05) + '" width="' + (s * 0.16) + '" height="' + (s * 0.6) + '" rx="' + (s * 0.04) + '" ' + (noFill ? 'fill="none" stroke="#ffffff" stroke-width="3"' : 'fill="#ffffff" stroke="rgba(0,0,0,0.3)" stroke-width="1"') + ' />' +
+                            '</g>' +
+                        '</svg>'
+                );
+        }
+
+        // Вариант для hover: усиленная тень круга
+                createModernInfoSVGHover(color, size, options = {}) {
+                        const noFill = !!options.noFill;
+                        const HR = 512; const C = HR / 2; const s = C * 0.4;
+                        const gradId = 'info-gradientH-' + Math.random().toString(36).slice(2, 11);
+                        const base = color || '#ffffff';
+                        const c0 = this._mixColor(base, 0.45);
+                        const c1 = this._mixColor(base, 0.15);
+                        const c2 = this._mixColor(base, -0.02);
+                        return (
+                                '<svg width="' + HR + '" height="' + HR + '" viewBox="0 0 ' + HR + ' ' + HR + '" xmlns="http://www.w3.org/2000/svg">' +
+                                    '<defs>' +
+                                        '<radialGradient id="' + gradId + '" cx="30%" cy="30%" r="70%">' +
+                                            '<stop offset="0%" stop-color="' + c0 + '" stop-opacity="1"/>' +
+                                            '<stop offset="70%" stop-color="' + c1 + '" stop-opacity="0.96"/>' +
+                                            '<stop offset="100%" stop-color="' + c2 + '" stop-opacity="0.92"/>' +
+                                        '</radialGradient>' +
+                                    '</defs>' +
+                                    '<g>' +
+                                        '<circle cx="' + (C + s * 0.06) + '" cy="' + (C + s * 0.06) + '" r="' + (s * 0.95) + '" fill="rgba(0,0,0,0.45)" opacity="0.8" />' +
+                                        '<circle cx="' + C + '" cy="' + C + '" r="' + (s * 0.9) + '" ' + (noFill ? 'fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="3"' : 'fill="url(#' + gradId + ')" stroke="rgba(255,255,255,0.85)" stroke-width="3"') + ' />' +
+                                        (noFill ? '' : '<ellipse cx="' + (C - s * 0.2) + '" cy="' + (C - s * 0.3) + '" rx="' + (s * 0.3) + '" ry="' + (s * 0.2) + '" fill="rgba(255,255,255,0.35)" opacity="0.9" />') +
+                                        '<circle cx="' + C + '" cy="' + (C - s * 0.3) + '" r="' + (s * 0.12) + '" ' + (noFill ? 'fill="none" stroke="#ffffff" stroke-width="2"' : 'fill="#ffffff" stroke="rgba(0,0,0,0.35)" stroke-width="1"') + ' />' +
+                                        '<rect x="' + (C - s * 0.08) + '" y="' + (C - s * 0.05) + '" width="' + (s * 0.16) + '" height="' + (s * 0.6) + '" rx="' + (s * 0.04) + '" ' + (noFill ? 'fill="none" stroke="#ffffff" stroke-width="3"' : 'fill="#ffffff" stroke="rgba(0,0,0,0.35)" stroke-width="1"') + ' />' +
+                                    '</g>' +
+                                '</svg>'
+                        );
+                }
 
     renderSceneList() {
         if (!this.sceneList) return;
@@ -1149,13 +1591,15 @@ class TourViewer {
     }
 
     createHotspot(hotspot) {
-        console.log('🎯 Создаем хотспот:', hotspot.title, 'позиция:', hotspot.position);
 
         // Основной контейнер хотспота
         const hotspotEl = document.createElement('a-entity');
         hotspotEl.setAttribute('id', 'hotspot-' + hotspot.id);
-        hotspotEl.setAttribute('position',
-            hotspot.position.x + ' ' + hotspot.position.y + ' ' + hotspot.position.z);
+        // Базовая позиция маркера
+        const baseX = Number(hotspot.position.x) || 0;
+        const baseY = Number(hotspot.position.y) || 0;
+        const baseZ = Number(hotspot.position.z) || 0;
+        hotspotEl.setAttribute('position', baseX + ' ' + baseY + ' ' + baseZ);
         hotspotEl.setAttribute('hotspot-handler', {
             hotspotId: hotspot.id,
             type: hotspot.type,
@@ -1252,33 +1696,89 @@ class TourViewer {
         } else if (hotspot.icon === 'arrow' || hotspot.type === 'hotspot') {
             // Стрелка - создаем SVG маркер для навигации
             shape = document.createElement('a-plane');
-            const svgData = this.createModernArrowSVG(hotspot.color || '#ff0000', size);
-            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
-            shape.setAttribute('material', {
-                src: url,
-                transparent: true,
-                alphaTest: 0.1,
-                side: 'double'
-            });
+            const svgData = this.createModernArrowSVG(hotspot.color || '#ff0000', size, { noFill: !!hotspot.noFill });
+            const svgHover = this.createModernArrowSVGHover(hotspot.color || '#ff0000', size, { noFill: !!hotspot.noFill });
+            // Безопасно кладем SVG как <img> в a-assets и ссылаемся по id (исключаем парсинг data URL внутри A-Frame)
+            const assets = document.querySelector('a-assets') || (function(){ const a=document.createElement('a-assets'); document.querySelector('a-scene').appendChild(a); return a; })();
+            const imgId = 'svg-arrow-' + hotspot.id;
+            let img = document.getElementById(imgId);
+            if (!img) {
+                img = document.createElement('img');
+                img.id = imgId;
+                img.crossOrigin = 'anonymous';
+                img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+                assets.appendChild(img);
+            }
+            const imgHoverId = 'svg-arrowH-' + hotspot.id;
+            let imgH = document.getElementById(imgHoverId);
+            if (!imgH) {
+                imgH = document.createElement('img');
+                imgH.id = imgHoverId;
+                imgH.crossOrigin = 'anonymous';
+                imgH.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgHover);
+                assets.appendChild(imgH);
+            }
+            shape.setAttribute('material', { shader: 'flat', src: '#' + imgId, transparent: true, alphaTest: 0.1, side: 'double' });
             shape.setAttribute('width', size * 3);
             shape.setAttribute('height', size * 3);
             shape.setAttribute('billboard', '');
+            // Анимации: плавное покачивание и масштаб при ховере
+            shape.setAttribute('animation__float', 'property: position; to: 0 0.3 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine');
+            shape.setAttribute('animation__hover_on', 'property: scale; to: 1.3 1.3 1.3; startEvents: hover-on; dur: 300; easing: easeOutElastic');
+            shape.setAttribute('animation__hover_off', 'property: scale; to: 1 1 1; startEvents: hover-off; dur: 200; easing: easeInOutQuad');
+            // hover-подмена текстуры для усиления glow
+            hotspotEl.addEventListener('mouseenter', function(){ shape.setAttribute('material', { shader: 'flat', src: '#' + imgHoverId, transparent: true, alphaTest: 0.1, side: 'double' }); shape.emit('hover-on'); });
+            hotspotEl.addEventListener('mouseleave', function(){ shape.setAttribute('material', { shader: 'flat', src: '#' + imgId, transparent: true, alphaTest: 0.1, side: 'double' }); shape.emit('hover-off'); });
+            // Точный коллайдер для raycaster (малый круг вместо всей плоскости)
+            const collider = document.createElement('a-circle');
+            collider.setAttribute('radius', Math.max(0.2, size * 0.6));
+            collider.setAttribute('position', '0 0 0.02');
+            collider.setAttribute('material', 'color: #ffffff; opacity: 0; transparent: true; side: double');
+            collider.setAttribute('data-raycastable', '');
+            hotspotEl.appendChild(collider);
+            // Idle-анимация убрана для 1:1 с редактором; оставляем только hover-скейл в обработчике
         } else if (hotspot.icon === 'sphere' || hotspot.type === 'info-point' || hotspot.type === 'infopoint') {
             // Информационная точка - создаем SVG маркер с "i" иконкой
             shape = document.createElement('a-plane');
-            const svgData = this.createModernInfoSVG(hotspot.color || '#0099ff', size);
-            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
-            shape.setAttribute('material', {
-                src: url,
-                transparent: true,
-                alphaTest: 0.1,
-                side: 'double'
-            });
+            const svgData = this.createModernInfoSVG(hotspot.color || '#0099ff', size, { noFill: !!hotspot.noFill });
+            const svgHover = this.createModernInfoSVGHover(hotspot.color || '#0099ff', size, { noFill: !!hotspot.noFill });
+            const assets = document.querySelector('a-assets') || (function(){ const a=document.createElement('a-assets'); document.querySelector('a-scene').appendChild(a); return a; })();
+            const imgId = 'svg-info-' + hotspot.id;
+            let img = document.getElementById(imgId);
+            if (!img) {
+                img = document.createElement('img');
+                img.id = imgId;
+                img.crossOrigin = 'anonymous';
+                img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+                assets.appendChild(img);
+            }
+            const imgHoverId = 'svg-infoH-' + hotspot.id;
+            let imgH = document.getElementById(imgHoverId);
+            if (!imgH) {
+                imgH = document.createElement('img');
+                imgH.id = imgHoverId;
+                imgH.crossOrigin = 'anonymous';
+                imgH.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgHover);
+                assets.appendChild(imgH);
+            }
+            shape.setAttribute('material', { shader: 'flat', src: '#' + imgId, transparent: true, alphaTest: 0.1, side: 'double' });
             shape.setAttribute('width', size * 3);
             shape.setAttribute('height', size * 3);
             shape.setAttribute('billboard', '');
+            // Анимации как в редакторе
+            shape.setAttribute('animation__float', 'property: position; to: 0 0.3 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine');
+            shape.setAttribute('animation__hover_on', 'property: scale; to: 1.3 1.3 1.3; startEvents: hover-on; dur: 300; easing: easeOutElastic');
+            shape.setAttribute('animation__hover_off', 'property: scale; to: 1 1 1; startEvents: hover-off; dur: 200; easing: easeInOutQuad');
+            hotspotEl.addEventListener('mouseenter', function(){ shape.setAttribute('material', { shader: 'flat', src: '#' + imgHoverId, transparent: true, alphaTest: 0.1, side: 'double' }); shape.emit('hover-on'); });
+            hotspotEl.addEventListener('mouseleave', function(){ shape.setAttribute('material', { shader: 'flat', src: '#' + imgId, transparent: true, alphaTest: 0.1, side: 'double' }); shape.emit('hover-off'); });
+            // Точный коллайдер
+            const collider2 = document.createElement('a-circle');
+            collider2.setAttribute('radius', Math.max(0.2, size * 0.6));
+            collider2.setAttribute('position', '0 0 0.02');
+            collider2.setAttribute('material', 'color: #ffffff; opacity: 0; transparent: true; side: double');
+            collider2.setAttribute('data-raycastable', '');
+            hotspotEl.appendChild(collider2);
+            // Idle-анимация убрана для 1:1 с редактором; оставляем только hover-скейл
         } else {
             // Плоский круглый маркер по умолчанию
             shape = document.createElement('a-circle');
@@ -1287,7 +1787,10 @@ class TourViewer {
         }
 
         shape.setAttribute('opacity', '0.8');
-        shape.setAttribute('data-raycastable', '');
+        // Для видео-областей и аним-объектов оставляем кликабельной саму плоскость
+        if (hotspot.type === 'video-area' || hotspot.type === 'animated-object') {
+            shape.setAttribute('data-raycastable', '');
+        }
         hotspotEl.appendChild(shape);
 
         // Кастомная иконка если есть
@@ -1303,7 +1806,6 @@ class TourViewer {
 
     // Удалено: 3D-текст над маркером в экспорте (оставляем только 2D тултип)
 
-        console.log('✅ Хотспот создан:', hotspot.title);
     this.hotspotsContainer.appendChild(hotspotEl);
     }
 
@@ -1414,6 +1916,7 @@ _stopAutorotateLoop() {
                 this._autorotateRaf = null;
         }
 }
+
 }
 
 // === Регистрация A-Frame компонентов (перенесено из viewer.js) ===
@@ -1426,15 +1929,11 @@ ${this.generateAFrameComponents().split('\n').map(l => '    ' + l).join('\n')}
 
 // === Инициализация тура ===
 (function initRuntime(){
-    console.log('🎬 Инициализация экспортного тура...');
+
     function init(){
-        console.log('🎬 Проверяем готовность компонентов...');
-        console.log('- TOUR_DATA:', !!window.TOUR_DATA);
-        console.log('- TourViewer:', typeof TourViewer);
-        console.log('- tourViewer instance:', !!window.tourViewer);
-        
+
         if (!window.TOUR_DATA) {
-            console.log('⏳ TOUR_DATA не готов, повторяем через 100мс...');
+
             setTimeout(init, 100); 
             return;
         }
@@ -1443,28 +1942,25 @@ ${this.generateAFrameComponents().split('\n').map(l => '    ' + l).join('\n')}
             return;
         }
         if (typeof TourViewer === 'undefined') {
-            console.log('⏳ TourViewer не определен, повторяем через 100мс...');
+
             setTimeout(init, 100); 
             return;
         }
-        
-        console.log('✅ Все компоненты готовы, создаем TourViewer...');
-        console.log('📊 Количество сцен:', window.TOUR_DATA.scenes.length);
-        
+
         if (!window.tourViewer) {
             try { 
                 window.tourViewer = new TourViewer(window.TOUR_DATA); 
-                console.log('✅ TourViewer успешно инициализирован');
+
             } catch(e){ 
                 console.error('❌ Ошибка инициализации TourViewer:', e); 
             }
         }
     }
     if (document.readyState === 'loading') {
-        console.log('📄 DOM загружается, ждем DOMContentLoaded...');
+
         document.addEventListener('DOMContentLoaded', init);
     } else {
-        console.log('📄 DOM уже готов, запускаем инициализацию...');
+
         init();
     }
 })();
@@ -1900,22 +2396,36 @@ a-scene {
      * Обрабатывает изображения панорам для экспорта
      */
     async processPanoramaImages(projectData, packageFiles) {
-        console.log('🖼️ Обрабатываем изображения панорам...');
 
         for (const scene of projectData.scenes) {
             if (scene.panoramaData) {
                 try {
-                    // Конвертируем Data URL в Blob
-                    const response = await fetch(scene.panoramaData);
-                    const blob = await response.blob();
+                    let blob;
+                    
+                    // Если это Data URL, конвертируем в Blob без fetch
+                    if (scene.panoramaData.startsWith('data:')) {
+                        const base64Data = scene.panoramaData.split(',')[1];
+                        const mimeType = scene.panoramaData.split(';')[0].split(':')[1];
+                        const binaryString = atob(base64Data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        
+                        blob = new Blob([bytes], { type: mimeType });
+                    } else {
+                        // Если это обычный URL, используем fetch
+                        const response = await fetch(scene.panoramaData);
+                        blob = await response.blob();
+                    }
 
                     // Сохраняем с именем сцены
                     const imagePath = `panoramas/${scene.id}.jpg`;
                     packageFiles[imagePath] = blob;
 
-                    console.log(`✅ Панорама обработана: ${scene.name}`);
                 } catch (error) {
-                    console.warn(`⚠️ Ошибка обработки панорамы ${scene.name}:`, error);
+
                 }
             }
         }
@@ -1925,7 +2435,7 @@ a-scene {
      * Обрабатывает кастомные иконки хотспотов
      */
     async processCustomIcons(projectData, packageFiles) {
-        console.log('🎨 Обрабатываем кастомные иконки...');
+
         const processedIcons = new Set();
         for (const scene of projectData.scenes) {
             for (const hotspot of scene.hotspots) {
@@ -1933,23 +2443,34 @@ a-scene {
                 const dataUrl = hotspot.customIconData || hotspot.customIcon;
                 if (dataUrl && dataUrl.startsWith('data:') && !processedIcons.has(hotspot.id)) {
                     try {
-                        const response = await fetch(dataUrl);
-                        const blob = await response.blob();
+                        let blob;
+                        
+                        // Конвертируем Data URL в Blob без fetch
+                        const base64Data = dataUrl.split(',')[1];
+                        const mimeType = dataUrl.split(';')[0].split(':')[1];
+                        const binaryString = atob(base64Data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        
+                        blob = new Blob([bytes], { type: mimeType });
+                        
                         const iconFileName = `icons/${hotspot.id}-icon.png`;
                         packageFiles[iconFileName] = blob;
                         hotspot.customIcon = iconFileName; // нормализуем
                         hotspot.customIconData = iconFileName; // чтобы условие в createHotspot сработало
                         processedIcons.add(hotspot.id);
-                        console.log(`✅ Иконка обработана для хотспота: ${hotspot.title}`);
+
                     } catch (error) {
-                        console.warn(`⚠️ Ошибка обработки иконки для ${hotspot.title}:`, error);
+
                         hotspot.customIcon = null;
                     }
                 }
             }
         }
     }
-
 
     /**
      * Генерирует README файл с инструкциями
@@ -2006,7 +2527,6 @@ a-scene {
      * Создает и скачивает ZIP архив
      */
     async downloadExportPackage(packageFiles) {
-        console.log('⬇️ Создаем ZIP архив...');
 
         if (typeof JSZip === 'undefined') {
             throw new Error('JSZip не загружен. Убедитесь что библиотека подключена.');
@@ -2042,7 +2562,6 @@ a-scene {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        console.log('📥 ZIP архив скачан!');
     }
 }
 
@@ -2058,9 +2577,27 @@ window.testExport = function () {
 window.debugExport = function () {
     if (window.exportManager) {
         const projectData = window.exportManager.collectProjectData();
-        console.log('🧪 [DEBUG] Собранные данные проекта:', projectData);
+
+        projectData.scenes.forEach((scene, index) => {
+
+        });
         window.__LAST_EXPORT_DATA__ = projectData;
         return projectData;
+    } else {
+        console.error('exportManager не найден');
+    }
+};
+
+window.testFullExport = async function () {
+    if (window.exportManager) {
+
+        try {
+            const result = await window.exportManager.exportProject();
+
+            return result;
+        } catch (error) {
+            console.error('❌ Ошибка при экспорте:', error);
+        }
     } else {
         console.error('exportManager не найден');
     }

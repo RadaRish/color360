@@ -20,13 +20,42 @@ services:
   color360-pano:
     build: ./pano
     container_name: color360-pano
-    ports:
-      - "80:80"
+    # Доступ внутрь сети только через nginx reverse proxy
     volumes:
       - ./pano/export:/usr/share/nginx/html/export
     restart: unless-stopped
     networks:
       - color360-network
+
+  # React frontend app (inpainting UI)
+  frontend:
+    build: ./frontend
+    container_name: color360-frontend
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    expose:
+      - "3000"
+    restart: unless-stopped
+    networks:
+      - color360-network
+
+  # Node.js backend API (proxy to LaMa)
+  backend:
+    build: ./backend
+    container_name: color360-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # Укажите URL реального сервиса инпейнтинга
+      - LAMA_URL=http://real-inpaint-service:5000
+    expose:
+      - "3001"
+    # depends_on можно убрать, используем внешний сервис
+    restart: unless-stopped
+    networks:
+      - color360-network
+
 
   # Reverse proxy to route traffic
   nginx:
@@ -41,6 +70,9 @@ services:
     depends_on:
       - color360-main
       - color360-pano
+      - frontend
+      - backend
+      - lama
     restart: unless-stopped
     networks:
       - color360-network

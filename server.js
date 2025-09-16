@@ -1,35 +1,137 @@
 // Simple Node.js + Express backend for demo site
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { body, validationResult } = require('express-validator');
+const multer = require('multer');
+const axios = require('axios');
+const { spawn } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // JWT Secret Key - in production this should be set as an environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-key-2025';
 
-// Security headers
+// Environment check
+const isProduction = process.env.NODE_ENV === 'production';
+
+// LaMa Service Management
+const LAMA_PORT = process.env.LAMA_PORT || 5000;
+const LAMA_HOST = process.env.LAMA_HOST || '127.0.0.1';
+const LAMA_URL = `http://${LAMA_HOST}:${LAMA_PORT}`;
+
+let lamaProcess = null;
+let lamaServiceReady = false;
+
+// Function to start LaMa service
+function startLamaService() {
+  if (lamaProcess) {
+    console.error('❌ LaMa процесс уже запущен');
+    return;
+  }
+
+  try {
+    const lamaDir = path.join(__dirname, 'lama');
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    
+    console.error('🐍 Запуск LaMa сервиса...');
+    
+    lamaProcess = spawn(pythonCmd, ['app.py'], {
+      cwd: lamaDir,
+      env: { ...process.env, PORT: LAMA_PORT, HOST: LAMA_HOST },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    lamaProcess.stdout.on('data', (data) => {
+      const output = data.toString();
+      if (output.includes('started server process') || output.includes('Application startup complete')) {
+        lamaServiceReady = true;
+        console.error('✅ LaMa сервис готов к работе');
+      }
+      console.error(`[LaMa] ${output.trim()}`);
+    });
+
+    lamaProcess.stderr.on('data', (data) => {
+      console.error(`[LaMa Error] ${data.toString().trim()}`);
+    });
+
+    lamaProcess.on('close', (code) => {
+      console.error(`🔄 LaMa процесс завершен с кодом ${code}`);
+      lamaProcess = null;
+      lamaServiceReady = false;
+      
+      // Автоматический перезапуск в продакшене
+      if (isProduction && code !== 0) {
+        console.error('🔄 Перезапуск LaMa сервиса через 5 секунд...');
+        setTimeout(startLamaService, 5000);
+      }
+    });
+
+    lamaProcess.on('error', (err) => {
+      console.error('❌ Ошибка запуска LaMa сервиса:', err.message);
+      lamaProcess = null;
+      lamaServiceReady = false;
+    });
+
+  } catch (error) {
+    console.error('❌ Критическая ошибка запуска LaMa:', error.message);
+  }
+}
+
+// Function to stop LaMa service
+function stopLamaService() {
+  if (lamaProcess) {
+    console.error('⏹️ Остановка LaMa сервиса...');
+    lamaProcess.kill('SIGTERM');
+    lamaProcess = null;
+    lamaServiceReady = false;
+  }
+}
+
+// Start LaMa service on server startup
+startLamaService();
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.error('\n🛑 Получен сигнал SIGINT, завершение работы...');
+  stopLamaService();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.error('\n🛑 Получен сигнал SIGTERM, завершение работы...');
+  stopLamaService();
+  process.exit(0);
+});
+
+// Security headers with production configuration
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://aframe.io", "https://cdnjs.cloudflare.com"],
+      scriptSrc: ["'self'", ...(isProduction ? [] : ["'unsafe-inline'", "'unsafe-eval'"]), "https://aframe.io", "https://cdnjs.cloudflare.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "https://images.unsplash.com", "data:", "https:", "http:"],
-      mediaSrc: ["'self'"]
+      imgSrc: ["'self'", "https://images.unsplash.com", "data:", "https:", ...(isProduction ? [] : ["http:"])],
+      mediaSrc: ["'self'"],
+      connectSrc: ["'self'", ...(isProduction ? [] : ["ws:", "wss:"])]
     }
-  }
+  },
+  hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
 }));
 
 // Parse cookies
 app.use(cookieParser());
+
+// Enable gzip compression
+app.use(compression());
 
 // Rate limiting
 const apiLimiter = rateLimit({
@@ -63,7 +165,7 @@ app.use(express.static(path.join(__dirname), {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     // More permissive CSP for static files to allow images and videos
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http:; media-src 'self';");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
     
     // Set proper MIME type for MP4 files
     if (path.endsWith('.mp4')) {
@@ -79,13 +181,43 @@ app.use('/pano', express.static(path.join(__dirname, 'pano'), {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     // More permissive CSP for pano app to allow required external resources
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http:; media-src 'self';");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
   }
 }));
 
 // For API routes under /pano subpath, we need to handle that as well
 // But for the main site, we serve from root
 app.use(bodyParser.json({ limit: '10kb' })); // Limit payload size
+
+// Serve uploaded avatars from /avatars
+const avatarsDir = path.join(__dirname, 'avatars');
+if (!fs.existsSync(avatarsDir)) {
+  try { fs.mkdirSync(avatarsDir); } catch (e) { console.error('Could not create avatars dir', e); }
+}
+// Max avatar upload size (200 KB)
+const MAX_AVATAR_BYTES = parseInt(process.env.MAX_AVATAR_BYTES) || 200 * 1024;
+app.use('/avatars', express.static(avatarsDir, {
+  setHeaders: (res, filePath) => {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.jpg' || ext === '.jpeg') res.setHeader('Content-Type', 'image/jpeg');
+    else res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+  }
+}));
+
+// Directory for news images
+const newsImagesDir = path.join(__dirname, 'news_images');
+if (!fs.existsSync(newsImagesDir)) {
+  try { fs.mkdirSync(newsImagesDir); } catch (e) { console.error('Could not create news_images dir', e); }
+}
+app.use('/news_images', express.static(newsImagesDir, {
+  setHeaders: (res, filePath) => {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.jpg' || ext === '.jpeg') res.setHeader('Content-Type', 'image/jpeg');
+    else res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+  }
+}));
 
 // In-memory user store (demo only)
 // Limit to 100 users as requested
@@ -200,7 +332,8 @@ app.post('/api/register', [
   // Input validation
   body('email').isEmail().normalizeEmail().withMessage('Неверный формат email'),
   body('password').isLength({ min: 8 }).withMessage('Пароль должен быть минимум 8 символов'),
-  body('name').trim().notEmpty().withMessage('Имя обязательно')
+  body('name').trim().notEmpty().withMessage('Имя обязательно'),
+  body('privacyConsent').equals('on').withMessage('Необходимо согласие на обработку персональных данных')
 ], async (req, res) => {
   // Check validation errors
   const errors = validationResult(req);
@@ -208,9 +341,14 @@ app.post('/api/register', [
     return res.status(400).json({ errors: errors.array() });
   }
   
-  const {name, email, password} = req.body || {};
+  const {name, email, password, privacyConsent} = req.body || {};
   
   try {
+    // Additional check for privacy consent
+    if (!privacyConsent) {
+      return res.status(400).json({message:'Необходимо согласие на обработку персональных данных'});
+    }
+    
     // Check user limit
     if (Object.keys(users).length >= MAX_USERS) {
       return res.status(400).json({message:'Достигнут лимит количества пользователей. Регистрация временно недоступна.'});
@@ -228,7 +366,8 @@ app.post('/api/register', [
       email, 
       password: hashedPassword, 
       registered: new Date().toISOString(),
-      isAdmin: false
+      isAdmin: false,
+      privacyConsentDate: new Date().toISOString() // Сохраняем дату согласия
     };
     
     // Create JWT token
@@ -330,7 +469,8 @@ app.post('/api/login', [
       user: {
         name: user.name,
         email: user.email,
-        isAdmin: user.isAdmin || false
+        isAdmin: user.isAdmin || false,
+        avatar: users[email].avatar || null
       }
     });
   } catch (error) {
@@ -352,6 +492,152 @@ app.post('/api/demo', (req, res) => {
   }
 });
 
+// Setup multer for file uploads (in-memory storage for retouch API)
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { 
+    fileSize: 50 * 1024 * 1024, // 50MB max file size
+    fields: 2, // image and mask
+    files: 2
+  }
+});
+
+// LaMa AI Inpainting API endpoint
+app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), async (req, res) => {
+  try {
+    const imageFile = req.files?.image?.[0];
+    const maskFile = req.files?.mask?.[0];
+    
+    if (!imageFile || !maskFile) {
+      return res.status(400).json({ error: 'Требуются файлы изображения и маски' });
+    }
+
+    console.error(`🎨 Запрос на удаление объектов: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
+    
+    // Check if LaMa service is ready
+    if (!lamaServiceReady) {
+      console.error('⚠️ LaMa сервис еще не готов, используем fallback');
+      
+      // Fallback: return original image
+      res.setHeader('Content-Type', imageFile.mimetype);
+      res.setHeader('Content-Length', imageFile.buffer.length);
+      res.setHeader('X-Retouch-Status', 'fallback-service-not-ready');
+      return res.send(imageFile.buffer);
+    }
+    
+    try {
+      // Create FormData for local LaMa service
+      const FormData = require('form-data');
+      const formData = new FormData();
+      formData.append('image', imageFile.buffer, { 
+        filename: 'image.png',
+        contentType: imageFile.mimetype 
+      });
+      formData.append('mask', maskFile.buffer, { 
+        filename: 'mask.png',
+        contentType: maskFile.mimetype 
+      });
+
+      console.error(`🚀 Отправляем запрос в LaMa сервис: ${LAMA_URL}/inpaint`);
+
+      // Send request to local LaMa service
+      const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
+        headers: { ...formData.getHeaders() },
+        responseType: 'arraybuffer',
+        timeout: 60000 // 60 seconds timeout for AI processing
+      });
+
+      console.error('✅ LaMa обработка завершена успешно');
+
+      // Return the processed image
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Length', response.data.length);
+      res.setHeader('X-Retouch-Status', 'success');
+      res.setHeader('X-Retouch-Method', 'lama-ai');
+      return res.send(response.data);
+      
+    } catch (lamaError) {
+      const errorMsg = lamaError?.response?.data?.toString() || lamaError?.message || 'Unknown error';
+      console.error('❌ LaMa service error:', errorMsg);
+      
+      // Fallback: return original image if LaMa service fails
+      console.error('🔄 Fallback: возвращаем оригинальное изображение');
+      res.setHeader('Content-Type', imageFile.mimetype);
+      res.setHeader('Content-Length', imageFile.buffer.length);
+      res.setHeader('X-Retouch-Status', 'fallback-lama-error');
+      res.setHeader('X-Retouch-Error', errorMsg.substring(0, 200)); // Limit error message length
+      return res.send(imageFile.buffer);
+    }
+    
+  } catch (error) {
+    console.error('❌ Retouch API error:', error);
+    return res.status(500).json({ 
+      error: 'Ошибка обработки изображения', 
+      details: error.message 
+    });
+  }
+});
+
+// Upload or update user avatar (expects JSON { dataUrl: 'data:image/png;base64,...' })
+app.post('/api/user/avatar', authenticateToken, async (req, res) => {
+  try {
+    const { dataUrl } = req.body || {};
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+      return res.status(400).json({ message: 'Неверный формат данных аватара' });
+    }
+
+    // Parse data URL
+  const matches = dataUrl.match(/^data:(image\/(png|jpeg|jpg));base64,(.+)$/);
+    if (!matches) return res.status(400).json({ message: 'Unsupported image format' });
+
+    const mime = matches[1];
+    const ext = matches[2] === 'jpeg' || matches[2] === 'jpg' ? 'jpg' : 'png';
+    const b64 = matches[3];
+    const buffer = Buffer.from(b64, 'base64');
+
+    // Validate size (limit to 200 KB)
+    const MAX_AVATAR_BYTES = 200 * 1024;
+    if (buffer.length > MAX_AVATAR_BYTES) {
+      return res.status(413).json({ message: 'Файл слишком большой. Максимум 200KB' });
+    }
+
+    const filename = `${encodeURIComponent(req.user.email)}.${ext}`;
+    const filepath = path.join(avatarsDir, filename);
+
+    await fs.promises.writeFile(filepath, buffer);
+
+    const url = `/avatars/${filename}`;
+
+    // Optionally store avatar URL in user profile (in-memory)
+    users[req.user.email] = users[req.user.email] || {};
+    users[req.user.email].avatar = url;
+
+    return res.json({ message: 'ok', url });
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    return res.status(500).json({ message: 'Ошибка сохранения аватара' });
+  }
+});
+
+// Get current authenticated user profile
+app.get('/api/user/profile', authenticateToken, (req, res) => {
+  try {
+    const email = req.user.email;
+    const user = users[email];
+    if (!user) return res.status(404).json({ message: 'Пользователь не найден' });
+
+    return res.json({
+      name: user.name,
+      email: user.email,
+      isAdmin: !!user.isAdmin,
+      avatar: user.avatar || null
+    });
+  } catch (err) {
+    console.error('Profile error:', err);
+    return res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
 // Get all news
 app.get('/api/news', (req, res) => {
   return res.json(newsItems);
@@ -359,7 +645,7 @@ app.get('/api/news', (req, res) => {
 
 // Add news (admin only)
 app.post('/api/admin/news', authenticateAdmin, (req, res) => {
-  const { title, date, text } = req.body;
+  const { title, date, text, imageDataUrl } = req.body;
   
   if (!title || !date || !text) {
     return res.status(400).json({ message: 'Заголовок, дата и текст обязательны' });
@@ -371,6 +657,26 @@ app.post('/api/admin/news', authenticateAdmin, (req, res) => {
     date,
     text
   };
+
+  // If image data provided, save it
+  if (imageDataUrl && typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:')) {
+    const m = imageDataUrl.match(/^data:(image\/(png|jpeg|jpg));base64,(.+)$/);
+    if (m) {
+      const ext = m[2] === 'jpeg' || m[2] === 'jpg' ? 'jpg' : 'png';
+      const buffer = Buffer.from(m[3], 'base64');
+      // Simple size limit: 500KB
+      if (buffer.length <= (500 * 1024)) {
+        const fname = `news-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+        const fpath = path.join(newsImagesDir, fname);
+        try {
+          fs.writeFileSync(fpath, buffer);
+          newNews.image = `/news_images/${fname}`;
+        } catch (e) {
+
+        }
+      }
+    }
+  }
   
   newsItems.push(newNews);
   
@@ -380,7 +686,7 @@ app.post('/api/admin/news', authenticateAdmin, (req, res) => {
 // Update news (admin only)
 app.put('/api/admin/news/:id', authenticateAdmin, (req, res) => {
   const id = parseInt(req.params.id);
-  const { title, date, text } = req.body;
+  const { title, date, text, imageDataUrl, removeImage } = req.body;
   
   if (!title || !date || !text) {
     return res.status(400).json({ message: 'Заголовок, дата и текст обязательны' });
@@ -392,7 +698,38 @@ app.put('/api/admin/news/:id', authenticateAdmin, (req, res) => {
     return res.status(404).json({ message: 'Новость не найдена' });
   }
   
-  newsItems[newsIndex] = { id, title, date, text };
+  // preserve previous image unless changed
+  const prev = newsItems[newsIndex];
+  const updated = { id, title, date, text };
+
+  // Handle image removal
+  if (removeImage && prev && prev.image) {
+    try { fs.unlinkSync(path.join(__dirname, prev.image.replace(/^\//, ''))); } catch (e) {}
+    // ensure removed
+  }
+
+  // If new image provided, save it
+  if (imageDataUrl && typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:')) {
+    const m = imageDataUrl.match(/^data:(image\/(png|jpeg|jpg));base64,(.+)$/);
+    if (m) {
+      const ext = m[2] === 'jpeg' || m[2] === 'jpg' ? 'jpg' : 'png';
+      const buffer = Buffer.from(m[3], 'base64');
+      if (buffer.length <= (500 * 1024)) {
+        const fname = `news-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+        const fpath = path.join(newsImagesDir, fname);
+        try {
+          fs.writeFileSync(fpath, buffer);
+          updated.image = `/news_images/${fname}`;
+        } catch (e) {
+
+        }
+      }
+    }
+  } else if (!removeImage && prev && prev.image) {
+    updated.image = prev.image;
+  }
+
+  newsItems[newsIndex] = updated;
   
   return res.json({ message: 'Новость обновлена', news: newsItems[newsIndex] });
 });
@@ -407,6 +744,10 @@ app.delete('/api/admin/news/:id', authenticateAdmin, (req, res) => {
   }
   
   newsItems.splice(newsIndex, 1);
+  // Also remove image file if exists
+  if (news && news.image) {
+    try { fs.unlinkSync(path.join(__dirname, news.image.replace(/^\//, ''))); } catch (e) {}
+  }
   
   return res.json({ message: 'Новость удалена' });
 });
@@ -442,6 +783,12 @@ app.get('/api/editor-sessions', authenticateToken, (req, res) => {
   const userSessions = editorSessions[req.user.email] || [];
   
   return res.json(userSessions);
+});
+
+// New: projects API (alias for editor-sessions) - list projects
+app.get('/api/projects', authenticateToken, (req, res) => {
+  const userProjects = editorSessions[req.user.email] || [];
+  return res.json(userProjects);
 });
 
 // Create new editor session
@@ -481,6 +828,42 @@ app.post('/api/editor-sessions', authenticateToken, (req, res) => {
     message: 'Сессия создана', 
     session: newSession 
   });
+});
+
+// New: create project (alias) with limit enforcement
+app.post('/api/projects', authenticateToken, (req, res) => {
+  const userEmail = req.user.email;
+  const subscription = userSubscriptions[userEmail] || { maxEditorSessions: 3 };
+
+  const userProjects = editorSessions[userEmail] || [];
+  const maxProjects = subscription.maxEditorSessions || 3;
+  if (userProjects.length >= maxProjects) {
+    return res.status(400).json({ message: `Достигнут лимит сохранённых проектов (${maxProjects})` });
+  }
+
+  const newProject = {
+    id: Date.now().toString(),
+    name: req.body.name || `Проект ${userProjects.length + 1}`,
+    created: new Date().toISOString(),
+    lastAccessed: new Date().toISOString(),
+    data: req.body.data || {}
+  };
+
+  if (!editorSessions[userEmail]) editorSessions[userEmail] = [];
+  editorSessions[userEmail].push(newProject);
+
+  return res.status(201).json({ message: 'Проект создан', project: newProject });
+});
+
+// New: delete project alias
+app.delete('/api/projects/:id', authenticateToken, (req, res) => {
+  const userEmail = req.user.email;
+  const projectId = req.params.id;
+  const userProjects = editorSessions[userEmail] || [];
+  const idx = userProjects.findIndex(p => p.id === projectId);
+  if (idx === -1) return res.status(404).json({ message: 'Проект не найден' });
+  userProjects.splice(idx, 1);
+  return res.json({ message: 'Проект удалён' });
 });
 
 // Update editor session
@@ -827,8 +1210,8 @@ app.post('/api/admin/delete-user', authenticateAdmin, async (req, res) => {
 // For serving the main page
 app.get('/', (req, res) => {
   // Более гибкая CSP, которая позволяет загружать изображения и видео с внешних источников
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http:; media-src 'self';");
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
+  res.sendFile(path.join(__dirname, 'main.html'));
 });
 
 // Middleware for dashboard protection
@@ -889,7 +1272,7 @@ function requireAdmin(req, res, next) {
 
 // For serving the dashboard page (protected)
 app.get('/dashboard', requireAuth, (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http:; media-src 'self';");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
   res.sendFile(path.join(__dirname, 'admin-dashboard.html'));
 });
 
@@ -901,13 +1284,13 @@ app.get('/admin', requireAdmin, (req, res) => {
 
 // Serve the pano application
 app.get('/pano', (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http:; media-src 'self';");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
   res.sendFile(path.join(__dirname, 'pano', 'index.html'));
 });
 
 // Serve the pano application for any sub-routes
 app.get('/pano/*', (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http:; media-src 'self';");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
   res.sendFile(path.join(__dirname, 'pano', 'index.html'));
 });
 
@@ -928,8 +1311,8 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Сервер запущен на порту ${PORT}`);
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`Admin credentials: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+    console.log(`Доступен по адресу: http://localhost:${PORT}`);
   }
 });

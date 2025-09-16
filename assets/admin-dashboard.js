@@ -193,6 +193,12 @@ async function loadUserProfile() {
           ? 'Без ограничений' 
           : userData.subscription.maxEditorSessions;
       }
+      // Load avatar if present
+      if (userData.avatar) {
+        const imgEl = document.getElementById('profile-avatar-img');
+        if (imgEl) { imgEl.src = userData.avatar; imgEl.style.display = 'block'; }
+        localStorage.setItem('color360_avatar', userData.avatar);
+      }
     } else {
       // If unauthorized, redirect to login
       if (response.status === 401) {
@@ -204,6 +210,54 @@ async function loadUserProfile() {
   } catch (error) {
     console.error('Error loading user profile:', error);
   }
+}
+
+// Avatar upload handling for admin dashboard
+const avatarFileInput = document.getElementById('profile-avatar-file');
+if (avatarFileInput) {
+  avatarFileInput.addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      // preview
+      const imgEl = document.getElementById('profile-avatar-img');
+      if (imgEl) { imgEl.src = dataUrl; imgEl.style.display = 'block'; }
+
+      // Upload to server if token exists
+      const token = localStorage.getItem('color360_token');
+      if (!token) {
+        alert('Сначала войдите в систему');
+        return;
+      }
+
+      try {
+        const resp = await fetch('/api/user/avatar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ dataUrl })
+        });
+        const json = await resp.json();
+        if (resp.ok) {
+          localStorage.setItem('color360_avatar', json.url);
+          // notify other windows
+          try { window.postMessage({ type: 'avatar-updated', url: json.url }, '*'); } catch (e) {}
+          try { window.opener && window.opener.postMessage({ type: 'avatar-updated', url: json.url }, '*'); } catch(e){}
+          alert('Аватар загружен');
+        } else {
+          alert(json.message || 'Ошибка загрузки аватара');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Ошибка при загрузке аватара');
+      }
+    };
+    reader.readAsDataURL(f);
+  });
 }
 
 // Helper functions for subscription display
@@ -634,7 +688,10 @@ function openAddNewsModal() {
       <label>Дата</label>
       <input name="date" type="date" required />
       <label>Текст</label>
-      <textarea name="text" required placeholder="Текст новости" rows="5"></textarea>
+  <textarea name="text" required placeholder="Текст новости" rows="5"></textarea>
+  <label>Изображение (опционально)</label>
+  <input type="file" id="news-image-file" accept="image/*" />
+  <div id="news-image-preview" style="margin-bottom:10px; display:none;"></div>
       <button class="btn primary add-news-submit-btn" type="submit">Добавить новость</button>
       <div class="message" id="add-news-msg"></div>
     </form>
@@ -643,6 +700,17 @@ function openAddNewsModal() {
   // Set today's date as default
   const today = new Date().toISOString().split('T')[0];
   document.querySelector('input[name="date"]').value = today;
+
+  // preview handler for add news image
+  const newsFileInput = document.getElementById('news-image-file');
+  const newsPreview = document.getElementById('news-image-preview');
+  if (newsFileInput) {
+    newsFileInput.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) { newsPreview.style.display = 'none'; newsPreview.innerHTML = ''; return; }
+      const r = new FileReader(); r.onload = () => { newsPreview.style.display = 'block'; newsPreview.innerHTML = `<img src="${r.result}" style="max-width:100%;border-radius:8px;">`; }; r.readAsDataURL(f);
+    });
+  }
   
   // Add the margin-top style via JavaScript to avoid CSP issues
   const addNewsSubmitBtn = document.querySelector('.add-news-submit-btn');
@@ -654,7 +722,14 @@ function openAddNewsModal() {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData);
-    
+    // If an image file was selected, convert to data URL
+    const fileInput = document.getElementById('news-image-file');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const file = fileInput.files[0];
+      data.imageDataUrl = await new Promise((res) => {
+        const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(file);
+      });
+    }
     try {
       const response = await fetch('./api/admin/news', {
         method: 'POST',
@@ -697,6 +772,12 @@ function openEditNewsModal(newsItem) {
       <input name="date" type="date" required value="${newsItem.date}" />
       <label>Текст</label>
       <textarea name="text" required placeholder="Текст новости" rows="5">${newsItem.text}</textarea>
+        <label>Изображение (опционально)</label>
+        <input type="file" id="edit-news-image-file" accept="image/*" />
+        <div id="edit-news-image-preview" style="margin-bottom:10px;">
+          ${newsItem.image ? `<img src="${newsItem.image}" style="max-width:100%;border-radius:8px;">` : ''}
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="remove-news-image" /> Удалить текущее изображение</label>
       <button class="btn primary edit-news-submit-btn" type="submit">Сохранить изменения</button>
       <div class="message" id="edit-news-msg"></div>
     </form>
@@ -713,6 +794,14 @@ function openEditNewsModal(newsItem) {
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData);
     const id = data.id;
+    // handle image file or removal
+    const removeImage = document.getElementById('remove-news-image')?.checked;
+    const editFileInput = document.getElementById('edit-news-image-file');
+    if (editFileInput && editFileInput.files && editFileInput.files[0]) {
+      data.imageDataUrl = await new Promise((res) => {
+        const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(editFileInput.files[0]);
+      });
+    }
     
     try {
       const response = await fetch(`./api/admin/news/${id}`, {
@@ -724,7 +813,9 @@ function openEditNewsModal(newsItem) {
         body: JSON.stringify({
           title: data.title,
           date: data.date,
-          text: data.text
+          text: data.text,
+          imageDataUrl: data.imageDataUrl,
+          removeImage: removeImage
         })
       });
       
@@ -794,10 +885,10 @@ async function deleteNews(id) {
   document.getElementById('cancel-delete-news').addEventListener('click', closeModal);
 }
 
-// Load editor sessions
+// Load editor projects
 async function loadEditorSessions() {
   try {
-    const response = await fetch('./api/editor-sessions', {
+  const response = await fetch('./api/projects', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${userToken}`
@@ -805,23 +896,23 @@ async function loadEditorSessions() {
     });
     
     if (response.ok) {
-      const sessions = await response.json();
+      const projects = await response.json();
       const sessionsListBody = document.getElementById('editor-sessions-list-body');
       const sessionCount = document.getElementById('editor-session-count');
       
       sessionsListBody.innerHTML = '';
-      sessionCount.textContent = sessions.length;
+      sessionCount.textContent = projects.length;
       
-      sessions.forEach(session => {
+      projects.forEach(project => {
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${session.name}</td>
-          <td>${new Date(session.created).toLocaleString('ru-RU')}</td>
-          <td>${new Date(session.lastAccessed).toLocaleString('ru-RU')}</td>
+          <td>${project.name}</td>
+          <td>${new Date(project.created).toLocaleString('ru-RU')}</td>
+          <td>${new Date(project.lastAccessed).toLocaleString('ru-RU')}</td>
           <td>
-            <button class="btn small secondary restore-session" data-session-id="${session.id}">Восстановить</button>
-            <button class="btn small warning rename-session" data-session-id="${session.id}">Переименовать</button>
-            <button class="btn small danger delete-session" data-session-id="${session.id}">Удалить</button>
+            <button class="btn small secondary restore-session" data-session-id="${project.id}">Восстановить</button>
+            <button class="btn small warning rename-session" data-session-id="${project.id}">Переименовать</button>
+            <button class="btn small danger delete-session" data-session-id="${project.id}">Удалить</button>
           </td>
         `;
         sessionsListBody.appendChild(row);
@@ -857,33 +948,43 @@ async function loadEditorSessions() {
       }
     }
   } catch (error) {
-    console.error('Error loading editor sessions:', error);
+    console.error('Error loading editor projects:', error);
+  }
+  // attach preview handler for edit modal
+  const editFileInputEl = document.getElementById('edit-news-image-file');
+  const editPreviewEl = document.getElementById('edit-news-image-preview');
+  if (editFileInputEl) {
+    editFileInputEl.addEventListener('change', (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) { editPreviewEl.innerHTML = ''; return; }
+      const r = new FileReader(); r.onload = () => { editPreviewEl.innerHTML = `<img src="${r.result}" style="max-width:100%;border-radius:8px;">`; }; r.readAsDataURL(f);
+    });
   }
 }
 
-// Create new editor session
+// Create new editor project
 async function createEditorSession() {
   try {
-    const sessionName = prompt('Введите название новой сессии:', `Сессия ${new Date().toLocaleString('ru-RU')}`);
-    if (!sessionName) return;
+    const projectName = prompt('Введите название нового проекта:', `Проект ${new Date().toLocaleString('ru-RU')}`);
+    if (!projectName) return;
     
-    const response = await fetch('./api/editor-sessions', {
+  const response = await fetch('./api/projects', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${userToken}`
       },
-      body: JSON.stringify({ name: sessionName })
+      body: JSON.stringify({ name: projectName })
     });
     
     const result = await response.json();
     
     if (response.ok) {
-      loadEditorSessions(); // Refresh the sessions list
+      loadEditorSessions(); // Refresh the projects list
     } else {
       openModal(`
         <h3>Ошибка</h3>
-        <p>${result.message || 'Ошибка при создании сессии.'}</p>
+        <p>${result.message || 'Ошибка при создании проекта.'}</p>
         <button id="close-modal" class="btn primary">OK</button>
       `);
       document.getElementById('close-modal').addEventListener('click', closeModal);
@@ -891,17 +992,17 @@ async function createEditorSession() {
   } catch (error) {
     openModal(`
       <h3>Ошибка</h3>
-      <p>Ошибка при создании сессии.</p>
+      <p>Ошибка при создании проекта.</p>
       <button id="close-modal" class="btn primary">OK</button>
     `);
     document.getElementById('close-modal').addEventListener('click', closeModal);
   }
 }
 
-// Restore editor session
+// Restore editor project
 async function restoreEditorSession(sessionId) {
   try {
-    const response = await fetch(`./api/editor-sessions/${sessionId}/restore`, {
+  const response = await fetch(`./api/projects/${sessionId}/restore`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${userToken}`
@@ -912,15 +1013,15 @@ async function restoreEditorSession(sessionId) {
     
     if (response.ok) {
       openModal(`
-        <h3>Сессия восстановлена</h3>
-        <p>Сессия "${result.session.name}" готова к работе.</p>
+        <h3>Проект восстановлен</h3>
+        <p>Проект "${result.session.name}" готов к работе.</p>
         <button id="close-modal" class="btn primary">OK</button>
       `);
       document.getElementById('close-modal').addEventListener('click', closeModal);
     } else {
       openModal(`
         <h3>Ошибка</h3>
-        <p>${result.message || 'Ошибка при восстановлении сессии.'}</p>
+        <p>${result.message || 'Ошибка при восстановлении проекта.'}</p>
         <button id="close-modal" class="btn primary">OK</button>
       `);
       document.getElementById('close-modal').addEventListener('click', closeModal);
@@ -928,20 +1029,20 @@ async function restoreEditorSession(sessionId) {
   } catch (error) {
     openModal(`
       <h3>Ошибка</h3>
-      <p>Ошибка при восстановлении сессии.</p>
+      <p>Ошибка при восстановлении проекта.</p>
       <button id="close-modal" class="btn primary">OK</button>
     `);
     document.getElementById('close-modal').addEventListener('click', closeModal);
   }
 }
 
-// Rename editor session
+// Rename editor project
 async function renameEditorSession(sessionId) {
   try {
-    const newName = prompt('Введите новое название сессии:');
+    const newName = prompt('Введите новое название проекта:');
     if (!newName) return;
     
-    const response = await fetch(`./api/editor-sessions/${sessionId}`, {
+  const response = await fetch(`./api/projects/${sessionId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -953,11 +1054,11 @@ async function renameEditorSession(sessionId) {
     const result = await response.json();
     
     if (response.ok) {
-      loadEditorSessions(); // Refresh the sessions list
+      loadEditorSessions(); // Refresh the projects list
     } else {
       openModal(`
         <h3>Ошибка</h3>
-        <p>${result.message || 'Ошибка при переименовании сессии.'}</p>
+        <p>${result.message || 'Ошибка при переименовании проекта.'}</p>
         <button id="close-modal" class="btn primary">OK</button>
       `);
       document.getElementById('close-modal').addEventListener('click', closeModal);
@@ -965,21 +1066,21 @@ async function renameEditorSession(sessionId) {
   } catch (error) {
     openModal(`
       <h3>Ошибка</h3>
-      <p>Ошибка при переименовании сессии.</p>
+      <p>Ошибка при переименовании проекта.</p>
       <button id="close-modal" class="btn primary">OK</button>
     `);
     document.getElementById('close-modal').addEventListener('click', closeModal);
   }
 }
 
-// Delete editor session
+// Delete editor project
 async function deleteEditorSession(sessionId) {
-  if (!confirm('Вы уверены, что хотите удалить эту сессию? Это действие нельзя отменить.')) {
+  if (!confirm('Вы уверены, что хотите удалить этот проект? Это действие нельзя отменить.')) {
     return;
   }
   
   try {
-    const response = await fetch(`./api/editor-sessions/${sessionId}`, {
+  const response = await fetch(`./api/projects/${sessionId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${userToken}`
@@ -987,12 +1088,12 @@ async function deleteEditorSession(sessionId) {
     });
     
     if (response.ok) {
-      loadEditorSessions(); // Refresh the sessions list
+      loadEditorSessions(); // Refresh the projects list
     } else {
       const result = await response.json();
       openModal(`
         <h3>Ошибка</h3>
-        <p>${result.message || 'Ошибка при удалении сессии.'}</p>
+        <p>${result.message || 'Ошибка при удалении проекта.'}</p>
         <button id="close-modal" class="btn primary">OK</button>
       `);
       document.getElementById('close-modal').addEventListener('click', closeModal);
@@ -1000,7 +1101,7 @@ async function deleteEditorSession(sessionId) {
   } catch (error) {
     openModal(`
       <h3>Ошибка</h3>
-      <p>Ошибка при удалении сессии.</p>
+      <p>Ошибка при удалении проекта.</p>
       <button id="close-modal" class="btn primary">OK</button>
     `);
     document.getElementById('close-modal').addEventListener('click', closeModal);

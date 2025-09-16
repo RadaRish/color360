@@ -34,6 +34,36 @@ export default class ViewerManager {
     this.initializeViewer();
   }
 
+  // Обновление debug overlay (элемент в index.html)
+  updateDebugOverlay(info) {
+    try {
+      const pre = document.getElementById('debug-overlay-pre');
+      if (!pre) return;
+      const lines = [];
+      if (info) {
+        for (const k of Object.keys(info)) {
+          let v = info[k];
+          if (typeof v === 'object') {
+            try { v = JSON.stringify(v, null, 0); } catch(e) { v = String(v); }
+          }
+          lines.push(`${k}: ${v}`);
+        }
+      }
+      pre.textContent = lines.join('\n');
+    } catch (e) { console.warn('Не удалось обновить debug overlay:', e); }
+  }
+
+  _hashString(str) {
+    // Простая хеш-функция для генерации идентификатора из строки
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const chr = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + chr;
+      hash |= 0; // Приводим к 32bit
+    }
+    return hash;
+  }
+
   initializeViewer() {
     // Инициализируем A-Frame сцену
     this.initializeAFrame();
@@ -288,8 +318,7 @@ export default class ViewerManager {
     
             // Если клик произошел очень быстро после другого клика - это может быть двойной клик
             if (timeSinceMouseDown < 50 && (currentTime - lastClickTime) < 300) {
-              console.log('🎯 A-Frame БЫСТРЫЙ ДВОЙНОЙ КЛИК для редактирования:', data.hotspotTitle);
-    
+
               doubleClickHandled = true;
               el.parentElement._doubleClickHandled = true;
     
@@ -298,7 +327,7 @@ export default class ViewerManager {
     
               const hotspotId = data.hotspotId;
               if (window.hotspotManager) {
-                console.log('✅ Открываем редактор маркера:', data.hotspotTitle);
+
                 window.hotspotManager.editHotspot(hotspotId);
               }
     
@@ -433,15 +462,15 @@ export default class ViewerManager {
 
             if (hotspot) {
               if (hotspot.type === 'hotspot' && hotspot.targetSceneId) {
-                console.log('🎯 A-Frame обработчик обнаружил хотспот - передаем управление DOM обработчику');
+
                 // НЕ ВЫЗЫВАЕМ switchToScene здесь - это делает DOM обработчик с защитой!
                 // window.sceneManager.switchToScene(hotspot.targetSceneId);
               } else if (hotspot.type === 'info-point') {
-                console.log('Показ модального окна для инфоточки');
+
                 window.viewerManager.showInfoPointModal(hotspot);
               } else if (hotspot.type === 'video-area') {
                 // Обработка уже выполнена в блоке выше для data.hotspotType === 'video-area'
-                console.log('🎬 Видео-область уже обработана');
+
               }
             }
           });
@@ -455,7 +484,7 @@ export default class ViewerManager {
    */
   playVideoElement(videoEl, hotspot) {
     try {
-      console.log('🎬 Упрощенная логика воспроизведения для:', hotspot.title);
+
       console.log('🔍 Текущее состояние:', {
         paused: videoEl.paused,
         readyState: videoEl.readyState
@@ -463,7 +492,7 @@ export default class ViewerManager {
 
       // Простая логика toggle
       if (videoEl.paused) {
-        console.log('▶️ Запуск видео...');
+
         videoEl.play().catch(err => {
           console.error('❌ Ошибка запуска:', err);
           if (err.name === 'NotAllowedError') {
@@ -472,7 +501,7 @@ export default class ViewerManager {
           }
         });
       } else {
-        console.log('⏸️ Пауза видео...');
+
         videoEl.pause();
       }
     } catch (err) {
@@ -491,7 +520,7 @@ export default class ViewerManager {
    * Создает недостающий видео элемент для хотспота
    */
   createMissingVideoElement(hotspot) {
-    console.log('🔧 Создаем недостающий видео элемент для:', hotspot.id);
+
     console.log('🔍 Параметры hotspot:', {
       id: hotspot.id,
       title: hotspot.title,
@@ -517,7 +546,7 @@ export default class ViewerManager {
           try { plane.removeAttribute('text'); } catch (_) { }
         }
       } catch (err) {
-        console.warn('⚠️ Ошибка при удалении text перед видео-материалом:', err);
+
       }
     };
 
@@ -539,20 +568,19 @@ export default class ViewerManager {
     // Если видео уже существует — обновляем и настраиваем привязку материала
     const existingVideo = document.getElementById(videoId);
     if (existingVideo) {
-      console.log('✅ Видео элемент уже существует:', videoId);
 
       const attachOneTimeListeners = () => {
         const onLoadedMeta = () => {
-          console.log('✅ loadedmetadata (existing video)');
+
           ensureVideoMaterialApplied(videoPlane, existingVideo);
         };
         const onLoadedData = () => {
-          console.log('✅ loadeddata (existing video)');
+
           ensureVideoMaterialApplied(videoPlane, existingVideo);
           cleanup();
         };
         const onCanPlay = () => {
-          console.log('✅ canplay (existing video)');
+
           ensureVideoMaterialApplied(videoPlane, existingVideo);
           cleanup();
         };
@@ -568,17 +596,17 @@ export default class ViewerManager {
 
       // Проверяем и обновляем src если нужно
       if (hotspot.videoUrl && hotspot.videoUrl !== existingVideo.src) {
-        console.log('🔄 Обновляем src существующего видео:', hotspot.videoUrl);
+
         attachOneTimeListeners();
         if (existingVideo.readyState !== undefined) {
           existingVideo.src = hotspot.videoUrl;
           existingVideo.load();
-          console.log('✅ Src обновлен для существующего видео');
+
         } else {
           setTimeout(() => {
             existingVideo.src = hotspot.videoUrl;
             existingVideo.load();
-            console.log('✅ Отложенное обновление src');
+
           }, 100);
         }
       } else {
@@ -602,12 +630,10 @@ export default class ViewerManager {
     // НЕ устанавливаем poster - он может блокировать отображение
     // videoEl.poster = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-    console.log('🎬 Создан новый видео элемент:', videoId);
-
     // Добавляем в assets
     let assets = this.aframeScene.querySelector('a-assets');
     if (!assets) {
-      console.log('🏗️ Создаем a-assets для видео элементов');
+
       assets = document.createElement('a-assets');
       this.aframeScene.appendChild(assets);
     }
@@ -615,7 +641,6 @@ export default class ViewerManager {
 
     // Обработчики загрузки
     videoEl.addEventListener('loadeddata', () => {
-      console.log('✅ Недостающее видео загружено:', hotspot.title);
 
       // ИСПРАВЛЯЕМ: ждем полной готовности видео перед созданием текстуры
       if (videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
@@ -634,12 +659,11 @@ export default class ViewerManager {
         }
       } else {
         // Если видео еще не готово, ждем события canplay
-        console.warn('⚠️ Видео загружено, но не готово для текстуры, ждем canplay');
+
       }
     });
 
     videoEl.addEventListener('canplay', () => {
-      console.log('✅ Недостающее видео готово к воспроизведению:', hotspot.title);
 
       // ИСПРАВЛЯЕМ: настраиваем материал в canplay если не было настроено в loadeddata
       const currentMaterial = videoPlane ? videoPlane.getAttribute('material') : null;
@@ -658,7 +682,7 @@ export default class ViewerManager {
       setTimeout(() => ensureVideoMaterialApplied(videoPlane, videoEl), 100);
 
       // НЕ запускаем автоматически - видео должно запускаться только по клику пользователя
-      console.log('✅ Видео готово, но НЕ запускаем автоматически - ждем клика пользователя');
+
     });
 
     videoEl.addEventListener('error', (e) => {
@@ -686,11 +710,10 @@ export default class ViewerManager {
     if (hotspot.videoUrl && hotspot.videoUrl.trim() !== '') {
       try {
         videoEl.src = hotspot.videoUrl;
-        console.log('✅ Установлен src для недостающего видео:', hotspot.videoUrl);
 
         // Принудительная загрузка
         videoEl.load();
-        console.log('🔄 Запущена загрузка недостающего видео');
+
         // Если данные уже готовы/прилетят сразу — попробуем применить материал
         const plane = videoPlane;
         setTimeout(() => {
@@ -703,21 +726,20 @@ export default class ViewerManager {
         console.error('❌ Ошибка установки src для недостающего видео:', error);
       }
     } else {
-      console.warn('⚠️ Недостающее видео создано без src - videoUrl пустой');
+
     }
 
-    console.log('🔧 Недостающий видео элемент создан:', videoId);
   }
 
   initializeAFrame() {
     // Создаем A-Frame сцену
     this.aframeScene = document.createElement('a-scene');
     this.aframeScene.setAttribute('embedded', 'true');
-    this.aframeScene.setAttribute('style', 'width: 100%; height: 100%; cursor: grab; background: transparent !important;');
+    this.aframeScene.setAttribute('style', 'width: 100%; height: 100%; cursor: grab; background: #000000 !important;'); // ИСПРАВЛЕНИЕ: Устанавливаем черный фон
     this.aframeScene.setAttribute('cursor', 'rayOrigin: mouse');
     this.aframeScene.setAttribute('raycaster', 'objects: .interactive');
     this.aframeScene.setAttribute('vr-mode-ui', 'enabled: false');
-    this.aframeScene.setAttribute('background', 'color: #000000; transparent: true');
+    this.aframeScene.setAttribute('background', 'color: #000000'); // ИСПРАВЛЕНИЕ: Устанавливаем черный фон
 
     // Создаем assets для шрифтов
     const assets = document.createElement('a-assets');
@@ -731,7 +753,23 @@ export default class ViewerManager {
     // Создаем камеру
     this.aframeCamera = document.createElement('a-entity');
     this.aframeCamera.setAttribute('camera', 'fov: 80; zoom: 1');
-    this.aframeCamera.setAttribute('look-controls', 'enabled: true');
+    this.aframeCamera.setAttribute('look-controls', {
+      enabled: true,
+      reverseMouseDrag: false,
+      touchEnabled: true,
+      mouseEnabled: true,
+      pointerLockEnabled: false,
+      magicWindowTrackingEnabled: false,
+      // Ограничиваем наклон по вертикали для предотвращения нежелательных наклонов
+      verticalLook: true,
+      horizontalLook: true,
+      pitchObject: 'camera', // Используем сам объект камеры для pitch
+      yawObject: 'camera',   // Используем сам объект камеры для yaw
+      // Ограничиваем углы поворота
+      lookSpeed: 1,
+      maxPitch: 90,
+      minPitch: -90
+    });
     this.aframeCamera.setAttribute('wasd-controls', 'enabled: false');
     this.aframeCamera.id = 'camera';
     this.aframeScene.appendChild(this.aframeCamera);
@@ -743,7 +781,7 @@ export default class ViewerManager {
     // Создаем элемент неба для панорамы
     this.aframeSky = document.createElement('a-sky');
     this.aframeSky.setAttribute('color', '#000000'); // Черный по умолчанию
-    this.aframeSky.setAttribute('opacity', '0'); // Скрыто до загрузки панорамы
+    this.aframeSky.setAttribute('opacity', '1'); // Всегда показываем небо
     this.aframeScene.appendChild(this.aframeSky);
 
     // Добавляем сцену в контейнер
@@ -764,14 +802,29 @@ export default class ViewerManager {
       this.setupEventHandlers();
       this.setupZoomControls(); // Добавляем поддержку зума колесиком мыши
       this.updateZoomIndicator(80); // Инициализируем индикатор зума
-      console.log('🎯 Обработчики событий для маркеров инициализированы');
-      console.log('🔍 Управление зумом колесиком мыши активировано');
 
       // Настраиваем обработчики пользовательского взаимодействия для паузы авторотации
       this._setupAutorotateUserInteractivity();
     }, 100);
 
-    console.log('A-Frame сцена инициализирована с поддержкой кириллицы');
+    // Подключаем кнопку debug-overlay, если она есть
+    setTimeout(() => {
+      try {
+        const dbgBtn = document.getElementById('debug-toggle-btn');
+        const dbgBox = document.getElementById('debug-overlay');
+        if (dbgBtn && dbgBox) {
+          dbgBtn.addEventListener('click', () => {
+            dbgBox.style.display = dbgBox.style.display === 'block' ? 'none' : 'block';
+            try {
+              const mesh = this.aframeSky && this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+              const canvas = this.aframeScene && this.aframeScene.querySelector && this.aframeScene.querySelector('canvas');
+              this.updateDebugOverlay({ stage: 'idle', src: this.aframeSky && this.aframeSky.getAttribute && this.aframeSky.getAttribute('src'), meshHasMap: !!(mesh && mesh.material && mesh.material.map), canvasRect: canvas ? canvas.getBoundingClientRect() : null });
+            } catch (e) { /* ignore */ }
+          });
+        }
+      } catch (e) { console.warn('Не удалось зарегистрировать debug toggle:', e); }
+    }, 500);
+
   }
 
   removeLAFrame() {
@@ -798,27 +851,26 @@ export default class ViewerManager {
     // Убираем фон с canvas
     const canvases = document.querySelectorAll('canvas');
     canvases.forEach(canvas => {
-      canvas.style.background = 'transparent';
-      canvas.style.backgroundColor = 'transparent';
+      canvas.style.background = '#000000'; // ИСПРАВЛЕНИЕ: Устанавливаем черный фон вместо transparent
+      canvas.style.backgroundColor = '#000000'; // ИСПРАВЛЕНИЕ: Устанавливаем черный фон
     });
 
-    // Убираем фон сцены Three.js
+    // Убираем фон сцены Three.js и устанавливаем черный
     if (this.aframeScene && this.aframeScene.object3D && this.aframeScene.object3D.background) {
-      this.aframeScene.object3D.background = null;
+      this.aframeScene.object3D.background = new THREE.Color(0x000000); // ИСПРАВЛЕНИЕ: Устанавливаем черный фон
     }
 
-    // Устанавливаем прозрачный фон для renderer Three.js
+    // Устанавливаем черный непрозрачный фон для renderer Three.js
     setTimeout(() => {
       if (this.aframeScene && this.aframeScene.renderer) {
-        this.aframeScene.renderer.setClearColor(0x000000, 0); // Прозрачный черный
-        this.aframeScene.renderer.alpha = true;
+        this.aframeScene.renderer.setClearColor(0x000000, 1); // Черный непрозрачный фон
+        this.aframeScene.renderer.alpha = false;
       }
     }, 100);
 
-    console.log('🧹 Фон A-Frame удален');
   }
 
-  // === Глобовый индикатор загрузки ===
+  // === Глобальный индикатор загрузки ===
   showGlobalLoading(label = 'Загрузка панорам...') {
     const box = document.getElementById('futuristic-progress');
     if (!box) return;
@@ -837,41 +889,31 @@ export default class ViewerManager {
     // Добавляем глобальные обработчики для отладки и резервной обработки событий
     const canvas = this.aframeScene.querySelector('canvas');
     if (canvas) {
-      console.log('📱 Настраиваем глобальные обработчики событий мыши на canvas');
 
       canvas.addEventListener('contextmenu', (e) => {
-        console.log('🎯 Canvas contextmenu event detected - button:', e.button, 'which:', e.which, 'buttons:', e.buttons);
-        console.log('🎯 Canvas contextmenu - rightClickDetected:', this._rightClickDetected);
 
         // Всегда предотвращаем стандартное контекстное меню
         e.preventDefault();
 
         // ВАЖНО: проверяем, не обработал ли уже событие маркер
         if (this._contextMenuHandled) {
-          console.log('🎯 Contextmenu уже обработано маркером - пропускаем canvas обработку');
+
           return;
         }
 
         // ИСПРАВЛЯЕМ: НЕ проверяем глобальную блокировку для contextmenu
         // Контекстное меню должно работать независимо от системы перетаскивания
-        console.log('🎯 Обрабатываем contextmenu независимо от глобальной блокировки');
-        console.log('🎯 Event target:', e.target.tagName, e.target.className, e.target.id);
-        console.log('🎯 Event coordinates:', e.clientX, e.clientY);
 
         // ИСПРАВЛЯЕМ: используем координатный менеджер для определения позиции
-        console.log('🎯 Используем CoordinateManager для определения позиции');
+
         const intersection = this.getIntersectionPoint(e);
 
         if (intersection) {
-          console.log('✅ Позиция получена через CoordinateManager:', intersection);
 
           // Проверяем, есть ли маркер рядом с позицией клика
           const nearestMarker = this.findNearestMarker(intersection);
 
           if (nearestMarker) {
-            console.log('🎯 НАЙДЕН МАРКЕР РЯДОМ! Canvas contextmenu НА МАРКЕРЕ - показываем контекстное меню редактирования маркера');
-            console.log('🎯 Маркер данные:', nearestMarker.hotspot.title, 'ID:', nearestMarker.hotspot.id, 'distance:', nearestMarker.distance);
-            console.log('🎯 ВЫЗЫВАЕМ handleMarkerRightClick()');
 
             // Устанавливаем флаг обработки ПЕРЕД вызовом функции
             this._contextMenuHandled = true;
@@ -881,24 +923,22 @@ export default class ViewerManager {
             // Сбрасываем флаг после завершения обработки
             setTimeout(() => {
               this._contextMenuHandled = false;
-              console.log('🔄 Флаг _contextMenuHandled сброшен после обработки маркера');
+
             }, 300);
 
             // КРИТИЧЕСКИ ВАЖНО: НЕМЕДЛЕННО ПРЕРЫВАЕМ ВЫПОЛНЕНИЕ
-            console.log('🟢 Canvas contextmenu - МАРКЕР ОБРАБОТАН, прерываем выполнение');
+
             return;
           }
 
           // Маркер НЕ найден - показываем меню создания
-          console.log('❌ МАРКЕР НЕ НАЙДЕН! Canvas contextmenu на пустом месте - показываем меню создания маркера');
-          console.log('🎯 ВЫЗЫВАЕМ handleCanvasRightClick()');
+
           this.handleCanvasRightClick(e);
           return;
         }
 
         // Intersection НЕ получен - показываем меню создания
-        console.log('❌ INTERSECTION НЕ ПОЛУЧЕН! Canvas contextmenu без intersection - показываем меню создания маркера');
-        console.log('🎯 ВЫЗЫВАЕМ handleCanvasRightClick()');
+
         this.handleCanvasRightClick(e);
         return;
 
@@ -907,11 +947,10 @@ export default class ViewerManager {
       // ДВОЙНОЙ КЛИК ОТКЛЮЧЕН ПО ПРОСЬБЕ ПОЛЬЗОВАТЕЛЯ
       /*
       canvas.addEventListener('dblclick', (e) => {
-          console.log('🎯 Canvas dblclick event detected - button:', e.button, 'which:', e.which, 'buttons:', e.buttons);
-          
+
           // Проверяем глобальную блокировку dblclick
           if (this._dblClickHandled) {
-              console.log('🚫 Canvas dblclick заблокирован - уже обработан приоритетным обработчиком');
+
               e.preventDefault();
               return;
           }
@@ -928,15 +967,12 @@ export default class ViewerManager {
           // НЕМЕДЛЕННАЯ глобальная блокировка ТОЛЬКО системы перетаскивания
           // НЕ блокируем контекстное меню!
           window._dragSystemBlocked = true;
-          console.log('🔥 МГНОВЕННАЯ ГЛОБАЛЬНАЯ БЛОКИРОВКА установлена для правого клика');
 
           setTimeout(() => {
             window._dragSystemBlocked = false;
-            console.log('🔥 ГЛОБАЛЬНАЯ БЛОКИРОВКА снята через 200ms');
+
           }, 200);
         }
-
-        console.log('🎯 Canvas mousedown event detected - button:', e.button, 'which:', e.which, 'buttons:', e.buttons);
 
         // Флаг для отслеживания навигации по сцене
         this._isNavigating = false;
@@ -945,7 +981,6 @@ export default class ViewerManager {
         if (!isRightClick) {
           const resizeHandle = this.getResizeHandleAt(e);
           if (resizeHandle && !this._isResizing) {
-            console.log('🎯 Canvas обнаружил клик по углу изменения размера:', resizeHandle.corner);
 
             // Сохраняем информацию о текущем изменении размера
             this._currentResizeHandle = resizeHandle;
@@ -967,7 +1002,6 @@ export default class ViewerManager {
           // Проверяем, кликнули ли по кнопке вращения
           const rotationHandle = this.getRotationHandleAt(e);
           if (rotationHandle) {
-            console.log('🎯 Canvas обнаружил клик по кнопке вращения:', rotationHandle.action);
 
             this.rotateVideoArea(
               rotationHandle.marker,
@@ -984,7 +1018,6 @@ export default class ViewerManager {
           // ТОЛЬКО ПОСЛЕ ВСЕХ ПРОВЕРОК проверяем зону перемещения
           const moveZone = this.getMoveZoneAt(e);
           if (moveZone && this.coordinateManager) {
-            console.log('🎯 Canvas обнаружил клик по зоне перемещения');
 
             // Запускаем перетаскивание видео-области
             this.coordinateManager.startVideoAreaDragging(
@@ -1001,18 +1034,17 @@ export default class ViewerManager {
 
           // Если не попали ни в какую специальную зону - это навигация по сцене
           if (!isRightClick) {
-            console.log('🎯 Начинаем навигацию по сцене (левая кнопка мыши)');
+
             this._isNavigating = true;
 
             // Устанавливаем курсор для навигации
             canvas.style.cursor = 'move';
             document.body.style.cursor = 'move';
-            console.log('🔄 Курсор изменен на: move (навигация)');
+
           }
         }
 
         if (isRightClick) {
-          console.log('🎯 Canvas ОПРЕДЕЛИЛ правый клик через mousedown');
 
           // АГРЕССИВНАЯ блокировка систем перетаскивания для правого клика
           this._blockDraggingForRightClick = true;
@@ -1063,37 +1095,37 @@ export default class ViewerManager {
         const resizeHandle = this.getResizeHandleAt(e);
         if (resizeHandle) {
           const corner = resizeHandle.corner;
-          console.log('🎯 Курсор на углу изменения размера:', corner, resizeHandle.handle.getAttribute('data-corner'));
+
           switch (corner) {
             case 'top-left':
               newCursor = 'nw-resize';
-              console.log('🎯 Установлен курсор nw-resize для top-left');
+
               break;
             case 'top-right':
               newCursor = 'ne-resize';
-              console.log('🎯 Установлен курсор ne-resize для top-right');
+
               break;
             case 'bottom-left':
               newCursor = 'ne-resize';
-              console.log('🎯 Установлен курсор ne-resize для bottom-left');
+
               break;
             case 'bottom-right':
               newCursor = 'nw-resize';
-              console.log('🎯 Установлен курсор nw-resize для bottom-right');
+
               break;
           }
         } else {
           // 2. Кнопки вращения
           const rotationHandle = this.getRotationHandleAt(e);
           if (rotationHandle) {
-            console.log('🎯 Курсор на контроле вращения:', rotationHandle.action);
+
             // Используем курсоры с круглыми стрелками для поворотов
             if (rotationHandle.action === 'rotate-left') {
               newCursor = 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M12,5V1L7,6L12,11V7A6,6 0 0,1 18,13A6,6 0 0,1 12,19A6,6 0 0,1 6,13H4A8,8 0 0,0 12,21A8,8 0 0,0 20,13A8,8 0 0,0 12,5Z\' fill=\'%23ffffff\'/%3E%3C/svg%3E") 12 12, auto';
-              console.log('🎯 Установлен курсор поворота против часовой стрелки');
+
             } else if (rotationHandle.action === 'rotate-right') {
               newCursor = 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M12,5V1L17,6L12,11V7A6,6 0 0,0 6,13A6,6 0 0,0 12,19A6,6 0 0,0 18,13H20A8,8 0 0,1 12,21A8,8 0 0,1 4,13A8,8 0 0,1 12,5Z\' fill=\'%23ffffff\'/%3E%3C/svg%3E") 12 12, auto';
-              console.log('🎯 Установлен курсор поворота по часовой стрелке');
+
             } else {
               newCursor = 'ew-resize'; // fallback
             }
@@ -1101,7 +1133,7 @@ export default class ViewerManager {
             // 3. Зона перемещения (самый низкий приоритет)
             const moveZone = this.getMoveZoneAt(e);
             if (moveZone) {
-              console.log('🎯 Курсор на зоне перемещения');
+
               newCursor = 'move';
             }
           }
@@ -1111,33 +1143,33 @@ export default class ViewerManager {
         if (canvas.style.cursor !== newCursor) {
           canvas.style.cursor = newCursor;
           document.body.style.cursor = newCursor; // Дублируем для надежности
-          console.log('🔄 Курсор изменен на:', newCursor);
+
         }
       });
 
       // Добавляем обработчик mouseup для сброса навигации
       canvas.addEventListener('mouseup', (e) => {
         if (this._isNavigating) {
-          console.log('🎯 Завершение навигации по сцене');
+
           this._isNavigating = false;
 
           // Возвращаем курсор по умолчанию
           canvas.style.cursor = 'default';
           document.body.style.cursor = 'default';
-          console.log('🔄 Курсор сброшен на: default (завершение навигации)');
+
         }
       });
 
       // Добавляем обработчик mouseleave для сброса навигации при уходе мыши с canvas
       canvas.addEventListener('mouseleave', (e) => {
         if (this._isNavigating) {
-          console.log('🎯 Мышь покинула canvas - завершение навигации');
+
           this._isNavigating = false;
 
           // Возвращаем курсор по умолчанию
           canvas.style.cursor = 'default';
           document.body.style.cursor = 'default';
-          console.log('🔄 Курсор сброшен на: default (мышь покинула canvas)');
+
         }
       });
     }
@@ -1146,7 +1178,7 @@ export default class ViewerManager {
     document.addEventListener('keydown', (e) => {
       // Escape - закрытие всех контекстных меню
       if (e.key === 'Escape') {
-        console.log('🎯 Нажата клавиша Escape - закрываем все контекстные меню');
+
         this.hideAllContextMenus();
         this.cleanupAutoCloseHandlers();
         e.preventDefault();
@@ -1155,7 +1187,6 @@ export default class ViewerManager {
 
       // E + маркер под курсором = редактирование
       if (e.key === 'e' || e.key === 'E' || e.key === 'у' || e.key === 'У') {
-        console.log('🎯 Нажата клавиша E для редактирования');
 
         // Находим маркер под курсором мыши
         this.editMarkerUnderCursor();
@@ -1164,36 +1195,51 @@ export default class ViewerManager {
   }
 
   handleMarkerRightClick(event, markerElement, hotspot) {
-    console.log('🟢 ===== НАЧАЛО handleMarkerRightClick =====');
-    console.log('🎯 Обрабатываем правый клик на маркере:', hotspot.title, 'ID:', hotspot.id);
+
+    // ИСПРАВЛЕНИЕ БАГА: убираем все drag-tooltips при ПКМ
+    this.removeAllDragTooltips();
 
     // Показываем контекстное меню маркера (редактирования)
-    console.log('🎯 Вызываем showMarkerContextMenu для маркера:', hotspot.title);
-    console.log('🎯 Координаты меню:', event.clientX, event.clientY);
-    this.showMarkerContextMenu(event.clientX, event.clientY, hotspot);
-    console.log('✅ showMarkerContextMenu вызван успешно');
 
-    console.log('🟢 ===== КОНЕЦ handleMarkerRightClick =====');
+    this.showMarkerContextMenu(event.clientX, event.clientY, hotspot);
 
     // КРИТИЧЕСКИ ВАЖНО: предотвращаем дальнейшее распространение события
     event.stopPropagation();
     event.preventDefault();
   }
 
+  // Новый метод для удаления всех drag-tooltips
+  removeAllDragTooltips() {
+
+    // Ищем все элементы с tooltip
+    const allMarkers = document.querySelectorAll('a-plane[data-hotspot-id], a-entity[data-hotspot-id]');
+    allMarkers.forEach(markerEl => {
+      if (markerEl._domTooltip) {
+
+        window.removeEventListener('mousemove', markerEl._domTooltipMove);
+        try { 
+          document.body.removeChild(markerEl._domTooltip); 
+        } catch (_) { 
+
+        }
+        markerEl._domTooltip = null; 
+        markerEl._domTooltipMove = null;
+      }
+    });
+  }
+
   handleCanvasRightClick(event) {
     // НОВАЯ ЛОГИКА: более агрессивная обработка правых кликов
-    console.log('🔴 ===== НАЧАЛО handleCanvasRightClick =====');
-    console.log('🎯 Обрабатываем правый клик на canvas');
 
     // КРИТИЧЕСКИ ВАЖНО: проверяем, не было ли уже обработано контекстное меню
     if (this._contextMenuHandled) {
-      console.log('🚫 Canvas правый клик заблокирован - контекстное меню уже обработано');
+
       return;
     }
 
     // Проверяем, не происходит ли перетаскивание
     if (this.coordinateManager && this.coordinateManager.isDragging) {
-      console.log('🚫 Canvas правый клик заблокирован - происходит перетаскивание');
+
       return;
     }
 
@@ -1203,27 +1249,24 @@ export default class ViewerManager {
     }
 
     // Если мы дошли до сюда, то это клик на пустом месте - показываем обычное контекстное меню
-    console.log('🎯 Правый клик на пустом месте - показываем обычное контекстное меню СОЗДАНИЯ');
-    console.log('🎯 Координаты меню:', event.clientX, event.clientY);
+
     this.showContextMenu(event.clientX, event.clientY);
-    console.log('✅ showContextMenu (создание маркеров) вызван успешно');
-    console.log('🔴 ===== КОНЕЦ handleCanvasRightClick =====');
+
   }
 
   handleCanvasDoubleClick(event) {
     // НОВАЯ ЛОГИКА: более агрессивная обработка двойных кликов
-    console.log('🎯 Обрабатываем двойной клик на canvas');
 
     // Проверяем, не происходит ли перетаскивание
     if (this.coordinateManager && this.coordinateManager.isDragging) {
-      console.log('🚫 Canvas двойной клик заблокирован - происходит перетаскивание');
+
       return;
     }
 
     // Проверяем, был ли клик непосредственно на маркере (через event.target)
     const target = event.target;
     if (target && target.closest && target.closest('.interactive')) {
-      console.log('🚫 Canvas dblclick заблокирован - клик был на интерактивном элементе');
+
       return;
     }
 
@@ -1242,12 +1285,11 @@ export default class ViewerManager {
     });
 
     if (targetMarker) {
-      console.log('🎯 Canvas РЕЗЕРВНАЯ обработка двойного клика на маркере (по tooltip):', targetMarker.hotspot.title);
 
       event.preventDefault();
 
       if (this.hotspotManager) {
-        console.log('✅ Открываем редактор маркера через резервный обработчик canvas (по tooltip)');
+
         this.hotspotManager.editHotspot(targetMarker.hotspot.id);
       }
       return;
@@ -1259,31 +1301,26 @@ export default class ViewerManager {
       // Находим ближайший маркер к точке клика
       const marker = this.findNearestMarker(intersection);
       if (marker && marker.hotspot) {
-        console.log('🎯 Canvas РЕЗЕРВНАЯ обработка двойного клика на маркере (по координатам):', marker.hotspot.title);
 
         event.preventDefault();
 
         if (this.hotspotManager) {
-          console.log('✅ Открываем редактор маркера через резервный обработчик canvas (по координатам)');
+
           this.hotspotManager.editHotspot(marker.hotspot.id);
         }
         return;
       }
     }
 
-    console.log('⚠️ Двойной клик не на маркере');
     // Если мы здесь, то double click был не на маркере
   }
 
   findNearestMarker(position) {
     // Находим маркер ближайший к указанной позиции
-    console.log('🎯 Поиск ближайшего маркера к позиции:', position);
 
     const markers = this.aframeScene.querySelectorAll('[data-hotspot-id]');
     let nearestMarker = null;
     let nearestDistance = Infinity;
-
-    console.log('🎯 Проверяем', markers.length, 'маркеров в сцене');
 
     markers.forEach((markerEl, index) => {
       const markerPosition = markerEl.getAttribute('position');
@@ -1302,17 +1339,17 @@ export default class ViewerManager {
               hotspot: hotspot,
               distance: distance
             };
-            console.log('✅ Найден более близкий маркер:', hotspot.title, 'расстояние:', distance.toFixed(3));
+
           }
         }
       }
     });
 
     if (nearestMarker) {
-      console.log('🎯 Итоговый ближайший маркер:', nearestMarker.hotspot.title, 'расстояние:', nearestMarker.distance.toFixed(3));
+
       return nearestMarker;
     } else {
-      console.log('⚠️ Не найдено маркеров в радиусе 1.5 единиц');
+
       return null;
     }
   }
@@ -1333,12 +1370,12 @@ export default class ViewerManager {
     });
 
     if (targetMarker) {
-      console.log('🎯 Редактирование маркера под курсором (клавиша E):', targetMarker.hotspot.title);
+
       if (this.hotspotManager) {
         this.hotspotManager.editHotspot(targetMarker.hotspot.id);
       }
     } else {
-      console.log('⚠️ Нет маркера под курсором для редактирования');
+
     }
   }
 
@@ -1352,91 +1389,336 @@ export default class ViewerManager {
   async setPanorama(imageSrc) {
     if (!this.aframeSky) {
       console.error('A-Frame sky элемент не найден');
+      // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке
+      if (this.aframeScene) {
+        this.aframeScene.setAttribute('background', 'color: #000000');
+      }
       return false;
     }
 
     try {
-      console.log('🔄 Загружаем панораму:', imageSrc);
+
+  try { this.updateDebugOverlay({ stage: 'start', src: imageSrc }); } catch (e) {}
+
+      // ИСПРАВЛЕНИЕ: Устанавливаем черный фон до загрузки изображения
+      this.aframeSky.setAttribute('color', '#000000');
+      this.aframeSky.setAttribute('opacity', '1');
+      this.aframeSky.setAttribute('visible', 'true');
 
       // Показываем индикатор загрузки панорамы
       this.showGlobalLoading('Загрузка панорамы...');
 
       // Спрятать индикатор после загрузки текстуры/ошибки/тайм-аута
       let hideTimer = setTimeout(() => {
-        console.warn('⏱️ Тайм-аут ожидания загрузки панорамы');
-        this.hideGlobalLoading();
-      }, 10000);
 
-      const onTextureLoadedOnce = () => {
-        clearTimeout(hideTimer);
         this.hideGlobalLoading();
-        this.aframeSky.removeEventListener('materialtextureloaded', onTextureLoadedOnce);
-      };
-      this.aframeSky.addEventListener('materialtextureloaded', onTextureLoadedOnce, { once: true });
+  try { this.showToast('Тайм-аут загрузки панорамы — показ возможен позже. Проверьте сеть или формат файла.', 'warn', 8000); } catch (e) {}
+        // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при тайм-ауте
+        this.aframeSky.setAttribute('color', '#000000');
+        this.aframeSky.setAttribute('opacity', '1');
+        this.aframeSky.setAttribute('visible', 'true');
+      }, 15000); // Увеличиваем тайм-аут до 15 секунд
+
+      // Более надежный способ отслеживания загрузки текстуры
+      const textureLoadPromise = new Promise((resolve, reject) => {
+        const onTextureLoadedOnce = () => {
+          clearTimeout(hideTimer);
+          this.hideGlobalLoading();
+          this.aframeSky.removeEventListener('materialtextureloaded', onTextureLoadedOnce);
+          // ИСПРАВЛЕНИЕ: Убедимся, что небо видимо после загрузки
+          this.aframeSky.setAttribute('opacity', '1');
+          this.aframeSky.setAttribute('visible', 'true');
+
+          resolve();
+        };
+        
+        const onErrorOnce = (error) => {
+          clearTimeout(hideTimer);
+          this.hideGlobalLoading();
+          this.aframeSky.removeEventListener('materialerror', onErrorOnce);
+          console.error('❌ Ошибка загрузки текстуры:', error);
+          try { this.showToast('Ошибка загрузки панорамы. Смотрите консоль для деталей.', 'error', 9000); } catch (e) {}
+          // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке
+          this.aframeSky.setAttribute('color', '#000000');
+          this.aframeSky.setAttribute('opacity', '1');
+          this.aframeSky.setAttribute('visible', 'true');
+          reject(error);
+        };
+        
+        // Добавляем обработчики событий
+        this.aframeSky.addEventListener('materialtextureloaded', onTextureLoadedOnce);
+        this.aframeSky.addEventListener('materialerror', onErrorOnce);
+        
+        // Добавляем тайм-аут для обработки случаев, когда события не срабатывают
+        setTimeout(() => {
+          // Проверяем, была ли уже загрузка
+          if (!this.aframeSky._textureLoaded) {
+            clearTimeout(hideTimer);
+            this.hideGlobalLoading();
+            this.aframeSky.removeEventListener('materialtextureloaded', onTextureLoadedOnce);
+            this.aframeSky.removeEventListener('materialerror', onErrorOnce);
+            // Убедимся, что небо видимо
+            this.aframeSky.setAttribute('opacity', '1');
+            this.aframeSky.setAttribute('visible', 'true');
+
+            resolve();
+          }
+        }, 5000);
+      });
 
       // Проверяем, является ли это Data URL (загруженный файл)
       if (imageSrc.startsWith('data:')) {
-        console.log('✅ Обнаружен Data URL, устанавливаем напрямую');
 
-        // Убираем цвет перед установкой изображения
-        this.aframeSky.removeAttribute('color');
-
-        // Попробуем сначала напрямую установить Data URL
+        // ИСПРАВЛЕНИЕ: Конвертируем Data URL в Blob без использования fetch
         try {
-          this.aframeSky.setAttribute('src', imageSrc);
-          this.aframeSky.setAttribute('opacity', '1');
-          this.currentPanorama = imageSrc;
-          console.log('✅ Панорама из Data URL загружена напрямую');
-          return true;
-        } catch (error) {
-          console.warn('⚠️ Прямая установка Data URL не сработала, пробуем через blob:', error);
-
-          // Fallback: конвертируем Data URL в blob URL
-          try {
-            // Конвертируем data URL в blob
-            const response = await fetch(imageSrc);
-            const blob = await response.blob();
-            const blobUrl = URL.createObjectURL(blob);
-
-            this.aframeSky.setAttribute('src', blobUrl);
-            this.aframeSky.setAttribute('opacity', '1');
-            this.currentPanorama = imageSrc;
-
-            // Освобождаем blob URL через некоторое время
-            setTimeout(() => {
-              URL.revokeObjectURL(blobUrl);
-            }, 5000);
-
-            console.log('✅ Панорама из Data URL загружена через blob URL');
-            return true;
-          } catch (blobError) {
-            console.error('❌ Ошибка конвертации в blob URL:', blobError);
-            clearTimeout(hideTimer);
-            this.hideGlobalLoading();
-            return false;
+          // Функция для конвертации Data URL в Blob
+          function dataURLtoBlob(dataurl) {
+            var arr = dataurl.split(',');
+            var mime = arr[0].match(/:(.*?);/)[1];
+            var bstr = atob(arr[1]);
+            var n = bstr.length;
+            var u8arr = new Uint8Array(n);
+            while (n--) {
+              u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], { type: mime });
           }
+
+          // Конвертируем Data URL в Blob
+          const blob = dataURLtoBlob(imageSrc);
+          const blobUrl = URL.createObjectURL(blob);
+
+          // Убираем цвет перед установкой изображения и принудительно сбрасываем src
+          this.aframeSky.removeAttribute('color');
+          try { this.aframeSky.setAttribute('src', ''); } catch(e) {}
+          // Небольшая пауза, чтобы A-Frame успел обработать очистку
+          await new Promise(r => setTimeout(r, 40));
+          this.aframeSky.setAttribute('src', blobUrl);
+          this.aframeSky.setAttribute('opacity', '1');
+          this.aframeSky.setAttribute('visible', 'true');
+          this.currentPanorama = imageSrc;
+
+          // Ждем загрузку текстуры или тайм-аут
+          await Promise.race([
+            textureLoadPromise,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Тайм-аут загрузки текстуры')), 15000)
+            )
+          ]);
+
+          // FALLBACK: иногда A-Frame не успевает создать material.map — попробуем установить вручную через THREE
+          try {
+            const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+            if (mesh && (!mesh.material || !mesh.material.map)) {
+              if (typeof THREE !== 'undefined') {
+                await new Promise((res) => {
+                  try {
+                    const loader = new THREE.TextureLoader();
+                    // Кросс-оригин для blob URL не требуется, но оставим пустой
+                    loader.load(blobUrl, (tex) => {
+                      try {
+                        if (mesh.material) {
+                          mesh.material.map = tex;
+                          mesh.material.needsUpdate = true;
+                        } else {
+                          mesh.material = new THREE.MeshBasicMaterial({ map: tex });
+                        }
+
+                      } catch (e) {
+
+                      }
+                      res();
+                    }, undefined, (err) => {
+
+                      res();
+                    });
+                  } catch (e) { console.warn('⚠️ TextureLoader fallback failed:', e); res(); }
+                });
+              }
+            }
+          } catch (e) {
+
+          }
+
+          // Освобождаем blob URL через некоторое время
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+          }, 5000);
+          // Принудительное обновление текстуры/рендера — помогает гарантировать, что новая панорама отобразится
+          try {
+            const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+            if (mesh && mesh.material) {
+              if (mesh.material.map) mesh.material.map.needsUpdate = true;
+              mesh.material.needsUpdate = true;
+            }
+            if (this.aframeScene && this.aframeScene.renderer && this.aframeScene.camera) {
+              try { this.aframeScene.renderer.render(this.aframeScene.object3D, this.aframeScene.camera); } catch (e) {}
+            }
+          } catch (e) { console.warn('⚠️ Принудительное обновление текстуры не удалось:', e); }
+
+          // Скрываем уведомление об успешной загрузке — не показываем toast
+          try { this.updateDebugOverlay({ stage: 'loaded', src: blobUrl, meshHasMap: !!(this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh') && this.aframeSky.getObject3D('mesh').material && this.aframeSky.getObject3D('mesh').material.map) }); } catch (e) {}
+          return true;
+        } catch (blobError) {
+          console.error('❌ Ошибка конвертации в blob URL:', blobError);
+          clearTimeout(hideTimer);
+          this.hideGlobalLoading();
+          // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке
+          this.aframeSky.setAttribute('color', '#000000');
+          this.aframeSky.setAttribute('opacity', '1');
+          this.aframeSky.setAttribute('visible', 'true');
+          return false;
         }
       }
 
-      // Если это URL файла, проверяем его доступность
-      console.log('🔍 Проверяем доступность файла:', imageSrc);
-      const response = await fetch(imageSrc, { method: 'HEAD' });
+      // Если это URL файла — создаём/используем img в a-assets и привязываем a-sky к id
 
-      if (!response.ok) {
-        throw new Error(`Файл недоступен: ${response.status} ${response.statusText}`);
+      // Генерируем безопасный ID для asset
+      const safeId = 'panorama-asset-' + Math.abs(this._hashString(imageSrc)).toString();
+
+      // Создаем a-assets если нужно
+      let assets = this.aframeScene.querySelector('a-assets');
+      if (!assets) {
+        assets = document.createElement('a-assets');
+        this.aframeScene.appendChild(assets);
       }
 
-      // Убираем цвет перед установкой изображения
-      this.aframeSky.removeAttribute('color');
-      this.aframeSky.setAttribute('src', imageSrc);
+      // Проверяем, есть ли уже img с таким id
+      let img = document.getElementById(safeId);
+      if (!img) {
+        img = document.createElement('img');
+        img.id = safeId;
+        img.crossOrigin = 'anonymous';
+        img.style.display = 'none';
+        assets.appendChild(img);
+      }
+
+      // Устанавливаем src и слушаем события загрузки/ошибки
+      const loadPromise = new Promise((resolve, reject) => {
+        const onLoad = () => {
+          img.removeEventListener('load', onLoad);
+          img.removeEventListener('error', onError);
+          resolve();
+        };
+        const onError = (e) => {
+          img.removeEventListener('load', onLoad);
+          img.removeEventListener('error', onError);
+          reject(new Error('Ошибка загрузки изображения как asset'));
+        };
+        img.addEventListener('load', onLoad);
+        img.addEventListener('error', onError);
+      });
+
+      // Устанавливаем src (даже если уже установлен — переприсвоение безопасно)
+      img.src = imageSrc;
+
+  // Убираем цвет перед установкой изображения и принудительно сбрасываем src у a-sky
+  this.aframeSky.removeAttribute('color');
+  try { this.aframeSky.setAttribute('src', ''); } catch(e) {}
+  await new Promise(r => setTimeout(r, 40));
+  this.aframeSky.setAttribute('src', `#${safeId}`);
       this.aframeSky.setAttribute('opacity', '1'); // Показываем небо после загрузки
+      this.aframeSky.setAttribute('visible', 'true');
       this.currentPanorama = imageSrc;
-      console.log('✅ Панорама загружена успешно:', imageSrc);
+
+      // Ждем либо загрузки asset, либо texture события, либо таймаута
+      await Promise.race([
+        loadPromise,
+        textureLoadPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Тайм-аут загрузки текстуры')), 15000))
+      ]);
+
+      // FALLBACK: если A-Frame не создал material.map — попробуем создать текстуру из <img> или через TextureLoader
+      try {
+        const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+        // Если a-sky потерял src (null), выставим его заново — иногда атрибут удаляется A-Frame
+        const currentSrc = this.aframeSky.getAttribute('src');
+        if (!currentSrc) {
+          try {
+            if (typeof blobUrl !== 'undefined' && blobUrl) {
+              this.aframeSky.setAttribute('src', blobUrl);
+            } else if (typeof safeId !== 'undefined' && safeId) {
+              this.aframeSky.setAttribute('src', `#${safeId}`);
+            } else {
+              // последняя надежда — пробуем установить исходный URL
+              this.aframeSky.setAttribute('src', imageSrc);
+            }
+
+          } catch (e) {
+
+          }
+        }
+        // Дадим A-Frame короткую паузу после (возможной) повторной установки src
+        await new Promise(r => setTimeout(r, 180));
+
+        if (mesh && (!mesh.material || !mesh.material.map)) {
+          // Попробуем взять изображение из a-assets
+          const assetImg = document.getElementById(safeId);
+          if (assetImg && typeof THREE !== 'undefined') {
+            try {
+              const tex = new THREE.Texture(assetImg);
+              tex.needsUpdate = true;
+              if (mesh.material) {
+                mesh.material.map = tex;
+                mesh.material.needsUpdate = true;
+              } else {
+                mesh.material = new THREE.MeshBasicMaterial({ map: tex });
+              }
+
+            } catch (e) {
+
+            }
+          } else if (typeof THREE !== 'undefined') {
+            // Последняя попытка — использовать TextureLoader по оригинальному URL
+            await new Promise((res) => {
+              try {
+                const loader = new THREE.TextureLoader();
+                loader.load(imageSrc, (tex) => {
+                  try {
+                    if (mesh.material) {
+                      mesh.material.map = tex;
+                      mesh.material.needsUpdate = true;
+                    } else {
+                      mesh.material = new THREE.MeshBasicMaterial({ map: tex });
+                    }
+
+                  } catch (e) { console.warn('⚠️ Ошибка при применении текстуры (fallback imageSrc):', e); }
+                  res();
+                }, undefined, (err) => { console.warn('⚠️ TextureLoader не смог загрузить imageSrc:', err); res(); });
+              } catch (e) { console.warn('⚠️ TextureLoader final fallback failed:', e); res(); }
+            });
+          }
+        }
+      } catch (e) {
+
+      }
+
+  // Принудительное обновление текстуры/рендера после asset load
+  try {
+    const mesh2 = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+    if (mesh2 && mesh2.material) {
+      if (mesh2.material.map) mesh2.material.map.needsUpdate = true;
+      mesh2.material.needsUpdate = true;
+    }
+    if (this.aframeScene && this.aframeScene.renderer && this.aframeScene.camera) {
+      try { this.aframeScene.renderer.render(this.aframeScene.object3D, this.aframeScene.camera); } catch (e) {}
+    }
+  } catch (e) { console.warn('⚠️ Принудительное обновление текстуры не удалось:', e); }
+
+  try { this.updateDebugOverlay({ stage: 'loaded', src: imageSrc, meshHasMap: !!(this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh') && this.aframeSky.getObject3D('mesh').material && this.aframeSky.getObject3D('mesh').material.map) }); } catch (e) {}
+  // Скрываем уведомление об успешной загрузке — не показываем toast
       return true;
 
     } catch (error) {
       console.error('❌ Ошибка при загрузке панорамы:', error.message);
       console.error('📁 Путь к файлу:', imageSrc);
+  try { this.showToast('Не удалось загрузить панораму — проверьте путь/формат/права доступа.', 'error', 9000); } catch (e) {}
+      try { this.updateDebugOverlay({ stage: 'error', src: imageSrc, error: error.message }); } catch (e) {}
+      
+      // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке загрузки
+      this.aframeSky.setAttribute('color', '#000000');
+      this.aframeSky.setAttribute('opacity', '1');
+      this.aframeSky.setAttribute('visible', 'true');
       this.hideGlobalLoading();
       return false;
     }
@@ -1508,7 +1790,7 @@ export default class ViewerManager {
    */
   initializeCoordinateManager() {
     this.coordinateManager.initialize(this.aframeScene);
-    console.log('📐 Координатный менеджер инициализирован');
+
   }
 
   setupEventHandlers() {
@@ -1522,7 +1804,6 @@ export default class ViewerManager {
     this.container.addEventListener('click', (e) => {
       // ПОЛНОСТЬЮ ОТКЛЮЧАЕМ автоматическое закрытие в глобальном обработчике
       // Теперь меню закрывается только через специальные auto-close обработчики
-      console.log('🛡️ ГЛОБАЛЬНЫЙ обработчик click - НЕ закрываем контекстное меню (полная защита)');
 
       // НЕ вызываем this.hideContextMenu() - пусть меню остается видимым
       // Закрытие происходит только через auto-close обработчики в showMarkerContextMenu
@@ -1530,13 +1811,11 @@ export default class ViewerManager {
   }
 
   showContextMenu(x, y, event) {
-    console.log('🔴 ===== НАЧАЛО showContextMenu (создание маркеров) =====');
-    console.log('🎯 ПОКАЗЫВАЕМ контекстное меню СОЗДАНИЯ маркеров, позиция:', x, y);
 
     // СЕЛЕКТИВНОЕ удаление: удаляем только обычные контекстные меню, НЕ трогаем меню маркеров
     const existingGeneralMenus = document.querySelectorAll('.custom-context-menu');
     existingGeneralMenus.forEach(menu => {
-      console.log('🗑️ Удаляем старое общее контекстное меню');
+
       menu.remove();
     });
 
@@ -1563,7 +1842,7 @@ export default class ViewerManager {
         // Получаем 3D координаты клика
         const intersection = this.getIntersectionPoint(event);
         if (!intersection) {
-          console.warn("Не удалось определить точку пересечения.");
+
           return;
         }
 
@@ -1593,9 +1872,29 @@ export default class ViewerManager {
     // СЕЛЕКТИВНОЕ закрытие: закрываем только обычные контекстные меню
     const generalMenus = document.querySelectorAll('.custom-context-menu');
     generalMenus.forEach(menu => {
-      console.log('🗑️ Закрываем общее контекстное меню');
+
       menu.remove();
     });
+  }
+
+  // Небольшой toast для уведомлений в UI (временный, лёгкий)
+  showToast(message, level = 'info', timeout = 6000) {
+    try {
+      const id = `viewer-toast-${Date.now()}`;
+      const el = document.createElement('div');
+      el.id = id;
+      el.className = 'viewer-toast';
+      const bg = level === 'error' ? 'rgba(204,51,51,0.95)' : (level === 'warn' ? 'rgba(238,165,60,0.95)' : 'rgba(50,50,50,0.9)');
+  el.style.cssText = `position:fixed; right:80px; bottom:16px; z-index:2147483647; background:${bg}; color:#fff; padding:10px 14px; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,0.4); font-family:Arial, sans-serif; font-size:13px; max-width:320px;`;
+      el.textContent = message;
+      document.body.appendChild(el);
+      setTimeout(() => {
+        try { el.style.transition = 'opacity 240ms ease'; el.style.opacity = '0'; } catch (e) {}
+      }, Math.max(1200, timeout - 300));
+      setTimeout(() => { try { document.body.removeChild(el); } catch (e) {} }, timeout);
+    } catch (err) {
+
+    }
   }
 
   /**
@@ -1645,7 +1944,6 @@ export default class ViewerManager {
         const markerEl = handleElement.parentElement;
 
         if (corner && markerEl) {
-          console.log('🎯 Обнаружен клик по углу изменения размера:', corner);
 
           // Находим видео-область в этом маркере
           const videoPlane = markerEl.querySelector('[data-video-plane]');
@@ -1754,7 +2052,6 @@ export default class ViewerManager {
         const markerEl = handleElement.parentElement;
 
         if (action && markerEl) {
-          console.log('🎯 Обнаружен клик по кнопке вращения:', action);
 
           // Находим видео-область в этом маркере
           const videoPlane = markerEl.querySelector('[data-video-plane]');
@@ -1829,7 +2126,6 @@ export default class ViewerManager {
         const markerEl = zoneElement.parentElement;
 
         if (markerEl) {
-          console.log('🎯 Обнаружен клик по зоне перемещения');
 
           // Находим видео-область в этом маркере
           const videoPlane = markerEl.querySelector('[data-video-plane]');
@@ -1865,10 +2161,10 @@ export default class ViewerManager {
 
     // Используем CoordinateManager если он доступен для максимальной точности
     if (this.coordinateManager && typeof this.coordinateManager.getMousePositionOnSphere === 'function') {
-      console.log('🎯 Используем CoordinateManager для определения позиции');
+
       const position = this.coordinateManager.getMousePositionOnSphere(event);
       if (position) {
-        console.log('✅ Позиция получена через CoordinateManager:', position);
+
         return position;
       }
     }
@@ -1878,7 +2174,7 @@ export default class ViewerManager {
     const scene = this.aframeScene;
 
     if (!camera || !scene || !scene.canvas) {
-      console.warn('⚠️ Не удалось получить камеру или canvas для ray-casting');
+
       return null;
     }
 
@@ -1900,7 +2196,7 @@ export default class ViewerManager {
       const intersectionPoint = new THREE.Vector3();
 
       if (raycaster.ray.intersectSphere(sphere, intersectionPoint)) {
-        console.log('🎯 Точная позиция через ray-casting:', intersectionPoint);
+
         return {
           x: intersectionPoint.x,
           y: intersectionPoint.y,
@@ -1910,7 +2206,7 @@ export default class ViewerManager {
     }
 
     // Последний fallback к старому методу
-    console.warn('⚠️ THREE.js недоступен, используется упрощенный метод');
+
     const phi = (x * Math.PI);
     const theta = ((y + 1) * Math.PI / 2);
 
@@ -1927,19 +2223,30 @@ export default class ViewerManager {
   createVisualMarker(hotspot) {
     if (!this.aframeScene) return;
 
+    // ВАЖНО: Проверяем, не существует ли уже маркер с таким ID
+    const existingMarker = document.getElementById(`marker-${hotspot.id}`);
+    if (existingMarker) {
+
+      return existingMarker;
+    }
+
     const markerEl = document.createElement('a-entity');
     // Устанавливаем уникальный ID для DOM-элемента, связанный с ID хотспота
     markerEl.id = `marker-${hotspot.id}`;
     markerEl.setAttribute('data-hotspot-id', hotspot.id);
     markerEl.setAttribute('data-marker-id', hotspot.id); // Для поиска в getResizeHandleAt
 
+  // Трекинг ассетов (img в a-assets) и blob URL, чтобы корректно чистить при пересоздании
+  markerEl._assetIds = [];
+  markerEl._assetUrls = [];
+
     // Позиционируем маркер
     if (hotspot.position && hotspot.position.x !== undefined && hotspot.position.y !== undefined && hotspot.position.z !== undefined) {
       const posStr = `${hotspot.position.x} ${hotspot.position.y} ${hotspot.position.z}`;
-      console.log('🎯 Устанавливаем позицию маркера:', hotspot.id, 'позиция:', posStr);
+
       markerEl.setAttribute('position', posStr);
     } else {
-      console.warn('⚠️ Маркер без позиции:', hotspot.id, 'позиция:', hotspot.position);
+
       markerEl.setAttribute('position', '0 0 -5'); // Позиция по умолчанию
     }
 
@@ -1965,13 +2272,15 @@ export default class ViewerManager {
     let color;
     if (hotspot.color && hotspot.color !== 'undefined' && hotspot.color !== '') {
       color = hotspot.color;
-      console.log('🎨 Используем сохраненный цвет хотспота:', hotspot.id, color);
+
     } else {
       color = (hotspot.type === 'hotspot' ? defaultSettings.hotspotColor : defaultSettings.infopointColor);
-      console.log('🎨 Используем цвет по умолчанию для типа', hotspot.type, ':', color);
+
     }
 
-    const icon = hotspot.icon || (hotspot.type === 'hotspot' ? 'arrow' : 'sphere');
+  let icon = hotspot.icon || (hotspot.type === 'hotspot' ? 'arrow' : 'sphere');
+  // Убираем дублирование: 'scene-transition' ведём как 'arrow'
+  if (icon === 'scene-transition') icon = 'arrow';
 
     // Для видео-области создаем плоскость вместо маркера
     if (hotspot.type === 'video-area') {
@@ -1990,17 +2299,15 @@ export default class ViewerManager {
 
     // Создаем геометрию
     let shape;
-    console.log('Создаем фигуру:', icon, 'размер:', radius, 'цвет:', color);
 
     // Проверяем, есть ли пользовательская иконка
     if (icon === 'custom' && hotspot.customIconData) {
-      console.log('Создаем пользовательскую иконку');
 
       // Создаем плоскость для изображения
       shape = document.createElement('a-plane');
 
       // Создаем уникальный ID для текстуры
-      const textureId = `custom-texture-${hotspot.id}`;
+      const textureId = `custom-texture-${hotspot.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`;
 
       // Создаем элемент img для текстуры
       const img = document.createElement('img');
@@ -2017,6 +2324,9 @@ export default class ViewerManager {
       }
       assets.appendChild(img);
 
+      // Запоминаем ID ассета для последующей очистки
+      markerEl._assetIds.push(textureId);
+
       // Настраиваем материал с текстурой
       shape.setAttribute('material', {
         src: `#${textureId}`,
@@ -2028,20 +2338,117 @@ export default class ViewerManager {
       shape.setAttribute('width', radius * 2);
       shape.setAttribute('height', radius * 2);
 
-      console.log('Пользовательская иконка создана с ID текстуры:', textureId);
+      // Добавляем billboard атрибут для предотвращения наклона при перемещении
+      shape.setAttribute('billboard', '');
+
+  } else if (icon === 'profile' || (icon === 'custom' && !hotspot.customIconData)) {
+      // Если иконка должна быть профиля пользователя или пользовательская иконка не задана,
+      // используем иконку профиля с главной страницы (портретная фигура человечка)
+
+      // Создаем плоскость для изображения профиля
+      shape = document.createElement('a-plane');
+
+      // Создаем SVG иконку профиля (портретная фигура человечка)
+      const profileSvg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      `;
+
+      // Создаем уникальный ID для текстуры
+  const textureId = `profile-marker-${hotspot.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`;
+
+      // Конвертируем SVG в data URL
+      const svgBlob = new Blob([profileSvg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      // Создаем элемент img для текстуры
+      const img = document.createElement('img');
+      img.id = textureId;
+      img.src = url;
+      img.crossOrigin = 'anonymous';
+      img.style.display = 'none';
+
+      // Добавляем изображение в assets
+      let assets = this.aframeScene.querySelector('a-assets');
+      if (!assets) {
+        assets = document.createElement('a-assets');
+        this.aframeScene.appendChild(assets);
+      }
+      assets.appendChild(img);
+
+      // Ждем загрузки изображения
+      img.onload = () => {
+        // Настраиваем материал с текстурой
+        shape.setAttribute('material', {
+          src: `#${textureId}`,
+          transparent: true,
+          alphaTest: 0.1,
+          side: 'double'
+        });
+      };
+
+  // Запоминаем ID ассета и blob URL для очистки при удалении
+  markerEl._assetIds.push(textureId);
+  markerEl._assetUrls.push(url);
+
+  // Устанавливаем размер (уменьшили множитель для более естественного масштаба)
+  const markerSize = radius * 2.0;
+      shape.setAttribute('width', markerSize);
+      shape.setAttribute('height', markerSize);
+
+  } else if (icon === 'cube' || icon === 'cylinder' || icon === 'octahedron') {
+      // Примитивные иконки A-Frame
+
+      switch (icon) {
+        case 'cube':
+          shape = document.createElement('a-box');
+          shape.setAttribute('width', radius);
+          shape.setAttribute('height', radius);
+          shape.setAttribute('depth', radius);
+          break;
+        case 'cylinder':
+          shape = document.createElement('a-cylinder');
+          shape.setAttribute('radius', radius);
+          shape.setAttribute('height', radius * 2);
+          break;
+        case 'octahedron':
+          shape = document.createElement('a-octahedron');
+          shape.setAttribute('radius', radius);
+          break;
+        default:
+          shape = document.createElement('a-sphere');
+          shape.setAttribute('radius', radius);
+      }
+
+      // Материал/цвет
+      const material = { color: color, metalness: 0, roughness: 1 };
+  // Режим "без контура" (ранее: без заливки) для примитивов: делаем полупрозрачным или каркасом
+      if (hotspot.noFill) {
+        // wireframe может выглядеть "сеткой", поэтому применим прозрачность
+        material.transparent = true;
+        material.opacity = 0.15;
+      }
+      shape.setAttribute('material', material);
+
+      // Немного сглаживания граней куба
+      if (icon === 'cube') {
+        try { shape.setAttribute('radius', Math.max(0.01, radius * 0.05)); } catch (_) {}
+      }
 
     } else {
       // Создаем современный SVG маркер высокого разрешения
-      const modernMarkerSvg = this.modernMarkerGenerator.createModernMarker(hotspot.type, 1024, {
-        color: color,
-        hotspot: hotspot
-      });
+      // Особый случай: иконка "Круг" (sphere) должна быть стилизованным кругом как в PNG — рисуем специальный круглый маркер
+      const modernMarkerSvg = (icon === 'sphere')
+        ? this.modernMarkerGenerator.createCircleOnlyMarker(1024, { color, noFill: !!hotspot.noFill })
+        : this.modernMarkerGenerator.createModernMarker(hotspot.type, 1024, { color, hotspot, noFill: !!hotspot.noFill });
 
       // Создаем плоскость для SVG маркера
       shape = document.createElement('a-plane');
 
       // Создаем уникальный ID для текстуры
-      const textureId = `modern-marker-${hotspot.type}-${hotspot.id}`;
+      const textureId = `modern-marker-${hotspot.type}-${hotspot.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`;
 
       // Конвертируем SVG в data URL
       const svgData = new XMLSerializer().serializeToString(modernMarkerSvg);
@@ -2074,15 +2481,14 @@ export default class ViewerManager {
         });
       };
 
-      // Устанавливаем размер (больше для лучшей видимости)
-      const markerSize = radius * 2.5;
+      // Запоминаем ID ассета и blob URL для очистки при удалении
+      markerEl._assetIds.push(textureId);
+      markerEl._assetUrls.push(url);
+
+  // Устанавливаем размер (скорректированный множитель для соответствия пресетам UI)
+  const markerSize = radius * 2.0;
       shape.setAttribute('width', markerSize);
       shape.setAttribute('height', markerSize);
-
-      // Делаем маркер всегда повернутым к камере
-      shape.setAttribute('billboard', '');
-
-      console.log('Современный маркер создан:', hotspot.type, 'размер:', markerSize);
     }
 
     // Добавляем класс для raycaster
@@ -2094,25 +2500,22 @@ export default class ViewerManager {
     // Современные анимации с плавными переходами
     shape.setAttribute('animation__float', 'property: position; to: 0 0.3 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine;');
 
-    // Плавные анимации при наведении (используем transform вместо scale для лучшей производительности)
+  // Плавные анимации при наведении (используем transform вместо scale для лучшей производительности)
     shape.setAttribute('animation__hover_on', 'property: scale; to: 1.3 1.3 1.3; startEvents: mouseenter; dur: 300; easing: easeOutElastic;');
     shape.setAttribute('animation__hover_off', 'property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200; easing: easeInOutQuad;');
-
-    console.log('Фигура создана:', shape.tagName, shape.getAttribute('radius') || shape.getAttribute('width'));
 
     // Удалено: 3D-текстовые подписи над маркерами (оставляем только 2D tooltip на hover)
     const textContainer = null;
 
     // События для показа/скрытия текста и перетаскивания
-    console.log('Создаем события для маркера:', hotspot.id, hotspot.title);
 
     // Простой тест наведения
     markerEl.addEventListener('mouseenter', (e) => {
-      console.log('MOUSEENTER на маркер:', hotspot.title);
+
       e.stopPropagation();
       if (!markerEl._isDragging && !markerEl._tooltipVisible) {
         markerEl._tooltipVisible = true;
-        console.log('Tooltip показан для:', hotspot.title);
+
       }
 
       // 2D тултип: Название + Описание (как в экспорте), с экранированием и переносами строк
@@ -2131,8 +2534,45 @@ export default class ViewerManager {
         const descHtml = hasDesc ? `<div class="desc">${escapeHtml(hotspot.description).replace(/\n/g, '<br>')}</div>` : '';
         const sep = hasDesc ? '<hr class="tour-tip-sep" />' : '';
         tip.innerHTML = `<div class="title">${title}</div>${sep}${descHtml}`;
+        // Применяем цвет, размер, семейство шрифтов, жирность и подчёркивание из настроек хотспота
+        try {
+          const titleEl = tip.querySelector('.title');
+          const descEl = tip.querySelector('.desc');
+          const color = hotspot.textColor || '#ffffff';
+          if (titleEl) titleEl.style.color = color;
+          if (descEl) descEl.style.color = color;
+          const fontSizePx = Math.round((hotspot.textSize || 1) * 16);
+          if (titleEl && hotspot.textSize) titleEl.style.fontSize = `${fontSizePx}px`;
+          if (descEl && hotspot.textSize) descEl.style.fontSize = `${fontSizePx}px`;
+          const family = hotspot.textFamily || 'Arial, sans-serif';
+          if (titleEl) titleEl.style.fontFamily = family;
+          if (descEl) descEl.style.fontFamily = family;
+          const weight = hotspot.textBold ? '700' : '400';
+          if (titleEl) titleEl.style.fontWeight = weight;
+          if (descEl) descEl.style.fontWeight = weight;
+          const decoration = hotspot.textUnderline ? 'underline' : 'none';
+          if (titleEl) titleEl.style.textDecoration = decoration;
+          if (descEl) descEl.style.textDecoration = decoration;
+        } catch (_) { /* noop */ }
         document.body.appendChild(tip);
-        const move = (ev) => { tip.style.left = (ev.clientX + 12) + 'px'; tip.style.top = (ev.clientY + 12) + 'px'; };
+        // Tooltip: use fixed positioning to avoid layout shifts and page scrollbars
+        tip.style.position = 'fixed';
+        tip.style.pointerEvents = 'none';
+        tip.style.zIndex = '2147483647';
+        // small padding
+        const padding = 12;
+        const move = (ev) => {
+          // clamp tooltip inside viewport
+          const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+          const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+          const rect = tip.getBoundingClientRect();
+          let left = ev.clientX + padding;
+          let top = ev.clientY + padding;
+          if (left + rect.width + 8 > vw) left = Math.max(8, vw - rect.width - 8);
+          if (top + rect.height + 8 > vh) top = Math.max(8, vh - rect.height - 8);
+          tip.style.left = left + 'px';
+          tip.style.top = top + 'px';
+        };
         window.addEventListener('mousemove', move);
         markerEl._domTooltip = tip; markerEl._domTooltipMove = move;
       }
@@ -2142,11 +2582,11 @@ export default class ViewerManager {
     });
 
     markerEl.addEventListener('mouseleave', (e) => {
-      console.log('MOUSELEAVE с маркера:', hotspot.title);
+
       e.stopPropagation();
       if (!markerEl._isDragging && markerEl._tooltipVisible) {
         markerEl._tooltipVisible = false;
-        console.log('Tooltip скрыт для:', hotspot.title);
+
       }
 
       // Скрываем 2D тултип
@@ -2178,7 +2618,6 @@ export default class ViewerManager {
 
     // Клик без перетаскивания - основная функция
     markerEl.addEventListener('click', (e) => {
-      console.log('CLICK на маркер:', hotspot.title, 'wasDragged:', markerEl._wasDragged);
 
       // 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: блокируем клик после правого клика (как в A-Frame компоненте)
       const currentTime = Date.now();
@@ -2186,24 +2625,24 @@ export default class ViewerManager {
       const timeSinceRightClick = currentTime - (lastRightClickTime || 0);
 
       if (timeSinceRightClick < 300) {
-        console.log('🚫 СТАРЫЙ обработчик клика заблокирован - недавний правый клик (', timeSinceRightClick, 'ms назад)');
+
         return;
       }
 
       // Дополнительная проверка глобальной блокировки
       if (window._dragSystemBlocked) {
-        console.log('🚫 СТАРЫЙ обработчик клика заблокирован - глобальная блокировка активна');
+
         return;
       }
 
       // Проверяем флаги блокировки от приоритетных обработчиков
       if (markerEl._rightClickHandled) {
-        console.log('🚫 Клик заблокирован - обработан как contextmenu');
+
         return;
       }
 
       if (markerEl._doubleClickHandled) {
-        console.log('🚫 Клик заблокирован - обработан как dblclick');
+
         return;
       }
 
@@ -2213,49 +2652,47 @@ export default class ViewerManager {
       // Проверяем флаг перетаскивания
       if (!markerEl._wasDragged) {
         if (hotspot.type === 'hotspot' && hotspot.targetSceneId) {
-          console.log('🎯 Попытка переключения на сцену:', hotspot.targetSceneId, 'от хотспота:', hotspot.title);
 
           // ЗАЩИТА: проверяем, что целевая сцена существует
           const targetScene = window.sceneManager?.getSceneById(hotspot.targetSceneId);
           if (!targetScene) {
-            console.warn('⚠️ Целевая сцена не найдена:', hotspot.targetSceneId, '- переключение отменено');
+
             return;
           }
 
           // ЗАЩИТА: проверяем, что мы не на целевой сцене уже
           const currentScene = window.sceneManager?.getCurrentScene();
           if (currentScene && currentScene.id === hotspot.targetSceneId) {
-            console.log('ℹ️ Уже на целевой сцене:', hotspot.targetSceneId, '- переключение не требуется');
+
             return;
           }
 
           // ЗАЩИТА: добавляем небольшую задержку для предотвращения случайных кликов при загрузке
           const markerAge = Date.now() - (markerEl._creationTime || 0);
           if (markerAge < 500) { // Уменьшаем время защиты
-            console.log('🛡️ Маркер слишком молодой для переключения (', markerAge, 'ms) - игнорируем клик');
+
             return;
           }
 
           // Дополнительная проверка: не переходим если предыдущий переход был недавно
           const timeSinceLastTransition = Date.now() - (window._lastTransitionTime || 0);
           if (timeSinceLastTransition < 1000) {
-            console.log('🛡️ Слишком рано для нового перехода (', timeSinceLastTransition, 'ms назад) - игнорируем клик');
+
             return;
           }
 
-          console.log('✅ Переключение на сцену разрешено:', hotspot.targetSceneId);
           window._lastTransitionTime = Date.now();
           window.sceneManager.switchToScene(hotspot.targetSceneId);
         } else if (hotspot.type === 'info-point') {
-          console.log('Показ модального окна для инфоточки');
+
           this.showInfoPointModal(hotspot);
         } else if (hotspot.type === 'video-area') {
           // Клик по видео-области обрабатывается строго внутри createVisualMarker() на самой плоскости.
           // Здесь не дублируем, чтобы избежать двойного play/pause и AbortError.
-          console.log('🎬 DOM обработчик: клик по видео-области — пропущен (обрабатывается локально на плоскости)');
+
         }
       } else {
-        console.log('🚫 Клик заблокирован - маркер был перетащен');
+
       }
 
       // Сбрасываем флаг с задержкой чтобы не мешать проверке выше
@@ -2264,11 +2701,21 @@ export default class ViewerManager {
       }, 10);
     });
 
+    // Добавляем billboard только для плоских маркеров (a-plane)
+    if (shape && shape.tagName && shape.tagName.toLowerCase() === 'a-plane') {
+      shape.setAttribute('billboard', '');
+    }
+    
+    // Сохраняем текущие параметры для отслеживания изменений
+    markerEl._lastColor = color;
+    markerEl._lastNoFill = !!hotspot.noFill;
+    markerEl._lastIcon = icon;
+    markerEl._lastSize = radius;
+    
     markerEl.appendChild(shape);
 
     // СНАЧАЛА добавляем маркер в сцену
     this.aframeScene.appendChild(markerEl);
-    console.log('✅ Маркер визуально добавлен в DOM:', markerEl.id, 'для хотспота:', hotspot.id);
 
     // ПОТОМ настраиваем перетаскивание через координатный менеджер (чтобы его обработчики добавились ПОСЛЕ приоритетных)
     if (this.coordinateManager) {
@@ -2276,7 +2723,7 @@ export default class ViewerManager {
         // Обновляем позицию в менеджере хотспотов
         this.hotspotManager.updateHotspotPosition(hotspot.id, newPosition);
         markerEl._wasDragged = true;
-        console.log('🎯 Позиция маркера обновлена через координатный менеджер:', hotspot.id, newPosition);
+
       });
     }
 
@@ -2292,7 +2739,7 @@ export default class ViewerManager {
     // Проверяем через небольшую задержку, что элемент действительно в DOM
     setTimeout(() => {
       const checkEl = document.getElementById(`marker-${hotspot.id}`);
-      console.log('Проверка маркера через 100ms:', !!checkEl, checkEl ? checkEl.className : 'не найден');
+
     }, 100);
   }
 
@@ -2529,7 +2976,7 @@ export default class ViewerManager {
         videoEl.play().catch((err) => {
           // Игнорируем AbortError как безопасный
           if (!(err && err.name === 'AbortError')) {
-            console.warn('⚠️ Ошибка play() в раннем обработчике:', err);
+
           }
         }).finally(() => { setTimeout(() => { plane._playToggleLock = false; }, 50); });
       } else {
@@ -2544,13 +2991,16 @@ export default class ViewerManager {
   }
 
   showInfoPointModal(hotspot) {
+    // Принудительно удаляем все tooltip'ы чтобы они не "прилипли" к курсору
+    this.removeAllDragTooltips();
+    
     // Удаляем существующее модальное окно если оно есть
     if (this._currentInfoModal) {
       try {
         this._currentInfoModal.backdrop.remove();
         this._currentInfoModal.element.remove();
       } catch (e) {
-        console.warn('Ошибка при удалении старого модального окна:', e);
+
       }
       this._currentInfoModal = null;
     }
@@ -2743,8 +3193,6 @@ export default class ViewerManager {
   }
 
   showMarkerContextMenu(x, y, hotspot) {
-    console.log('🟢 ===== НАЧАЛО showMarkerContextMenu =====');
-    console.log('🎯 ПОКАЗЫВАЕМ контекстное меню РЕДАКТИРОВАНИЯ для маркера:', hotspot.title, 'позиция:', x, y);
 
     // ЗАЩИТА: Блокируем автоматическое закрытие меню СРАЗУ - ДО очистки
     this._contextMenuCreationTime = Date.now();
@@ -2756,10 +3204,10 @@ export default class ViewerManager {
       // Проверяем время создания
       const creationTime = menu._creationTime || 0;
       if (currentTime - creationTime > 100) { // Удаляем только старые меню
-        console.log('🗑️ Удаляем старое контекстное меню (возраст:', currentTime - creationTime, 'ms)');
+
         menu.remove();
       } else {
-        console.log('🛡️ Защищаем недавно созданное меню от удаления (возраст:', currentTime - creationTime, 'ms)');
+
       }
     });
 
@@ -2886,7 +3334,6 @@ export default class ViewerManager {
 
     // КРИТИЧЕСКИ ВАЖНО: настраиваем обработчики кликов для основного меню
     this.setupMenuHandlers(menu, hotspot);
-    console.log('✅ Обработчики кликов настроены для основного меню');
 
     // Проверяем видимость
     const rect = menu.getBoundingClientRect();
@@ -2899,7 +3346,7 @@ export default class ViewerManager {
 
     // Если меню все еще невидимо - создаем супер-простое аварийное меню
     if (rect.width === 0 || rect.height === 0) {
-      console.log('🚨 СОЗДАЕМ АВАРИЙНОЕ МЕНЮ - основное невидимо');
+
       menu.remove();
 
       // Создаем максимально простое меню
@@ -2915,7 +3362,6 @@ export default class ViewerManager {
       document.body.appendChild(emergency);
       this.setupMenuHandlers(emergency.firstElementChild, hotspot);
 
-      console.log('🚨 АВАРИЙНОЕ меню создано и отображено');
       return;
     }
 
@@ -2936,7 +3382,7 @@ export default class ViewerManager {
         // Проверяем существование меню
         const stillExists = document.getElementById(menuId);
         if (stillExists) {
-          console.log('🎯 МГНОВЕННОЕ закрытие меню по ЛКМ');
+
           stillExists.remove();
           this._contextMenuCreationTime = null;
 
@@ -2956,26 +3402,26 @@ export default class ViewerManager {
       // Проверяем, что меню еще существует перед установкой обработчиков
       const currentMenu = document.getElementById(menuId);
       if (!currentMenu) {
-        console.log('🛡️ AUTO-CLOSE отменен - меню уже удалено до установки обработчиков');
+
         return;
       }
 
       const closeHandler = (e) => {
         // Игнорируем правые клики полностью
         if (e.button === 2 || e.type === 'contextmenu') {
-          console.log('🛡️ AUTO-CLOSE игнорирует правый клик');
+
           return;
         }
 
         // Игнорируем клики по самому меню и его дочерним элементам
         if (e.target.closest('.marker-context-menu') || e.target.closest(`#${menuId}`)) {
-          console.log('🛡️ AUTO-CLOSE игнорирует клик по меню');
+
           return;
         }
 
         // Игнорируем клики по маркерам/хотспотам
         if (e.target.closest('a-text') || e.target.closest('[hotspot-marker]') || e.target.closest('.hotspot')) {
-          console.log('🛡️ AUTO-CLOSE игнорирует клик по маркеру');
+
           return;
         }
 
@@ -2983,11 +3429,11 @@ export default class ViewerManager {
         const menuAge = Date.now() - (menu._creationTime || 0);
         if (e.button === 0 && e.type === 'click') {
           // Левый клик - немедленное закрытие без задержки
-          console.log('🎯 МГНОВЕННОЕ закрытие меню по ЛКМ по свободному пространству');
+
         } else {
           // Для других событий - защищаем меню первые 3 секунды
           if (menuAge < 3000) {
-            console.log('🛡️ AUTO-CLOSE защищает молодое меню (возраст:', menuAge, 'ms)');
+
             return;
           }
         }
@@ -2995,14 +3441,13 @@ export default class ViewerManager {
         // Финальная проверка существования меню
         const stillExists = document.getElementById(menuId);
         if (!stillExists) {
-          console.log('🛡️ AUTO-CLOSE - меню уже удалено');
+
           // Удаляем обработчики если меню уже нет
           document.removeEventListener('click', closeHandler, true);
           document.removeEventListener('mousedown', closeHandler, true);
           return;
         }
 
-        console.log('🎯 AUTO-CLOSE закрывает контекстное меню');
         stillExists.remove();
         this._contextMenuCreationTime = null;
 
@@ -3021,15 +3466,12 @@ export default class ViewerManager {
       document.addEventListener('click', closeHandler, true);
       document.addEventListener('mousedown', closeHandler, true);
 
-      console.log('✅ AUTO-CLOSE обработчики установлены через', 3000, 'ms с защитой 3 секунды');
     }, 3000); // УВЕЛИЧИЛИ до 3000ms для максимальной стабильности
 
-    console.log('✅ Контекстное меню создано и настроено');
   }
 
   hideAllContextMenus() {
     // Простое удаление всех контекстных меню без сложной логики
-    console.log('�️ hideAllContextMenus - удаляем ВСЕ контекстные меню');
 
     const selectors = [
       '.marker-context-menu',
@@ -3041,7 +3483,7 @@ export default class ViewerManager {
 
     selectors.forEach(selector => {
       document.querySelectorAll(selector).forEach(menu => {
-        console.log('🗑️ Удаляем контекстное меню:', selector);
+
         menu.remove();
       });
     });
@@ -3062,7 +3504,7 @@ export default class ViewerManager {
 
     selectors.forEach(selector => {
       document.querySelectorAll(selector).forEach(menu => {
-        console.log('🗑️ ПРИНУДИТЕЛЬНО удаляем контекстное меню:', selector);
+
         menu.remove();
       });
     });
@@ -3078,34 +3520,33 @@ export default class ViewerManager {
 
     if (editBtn) {
       editBtn.addEventListener('click', (e) => {
-        console.log('🎯 Клик по "Редактировать" для маркера:', hotspot.title);
+
         e.stopPropagation();
         e.preventDefault();
 
         if (this.hotspotManager) {
           this.hotspotManager.editHotspot(hotspot.id);
-          console.log('✅ Редактор маркера вызван для:', hotspot.id);
+
         }
 
         // БЕЗОПАСНОЕ закрытие: удаляем только текущее меню
         menu.remove();
-        console.log('✅ Контекстное меню закрыто после редактирования');
+
       });
     }
 
     if (deleteBtn) {
       deleteBtn.addEventListener('click', (e) => {
-        console.log('🎯 Клик по "Удалить" для маркера:', hotspot.title);
+
         e.stopPropagation();
         e.preventDefault();
 
-        console.log(`🗑️ Удаление маркера "${hotspot.title}"`);
         // ИСПРАВЛЯЕМ: используем правильный метод удаления
         try {
           // Используем правильное название метода
           if (this.hotspotManager && this.hotspotManager.removeHotspotById) {
             this.hotspotManager.removeHotspotById(hotspot.id);
-            console.log('✅ Маркер удален через removeHotspotById:', hotspot.id);
+
           } else if (this.hotspotManager && this.hotspotManager.hotspots) {
             // Fallback: удаляем напрямую из массива
             const index = this.hotspotManager.hotspots.findIndex(h => h.id === hotspot.id);
@@ -3120,7 +3561,6 @@ export default class ViewerManager {
                 this.hotspotManager.saveHotspots();
               }
 
-              console.log('✅ Маркер удален через прямое удаление из массива:', hotspot.id);
             }
           }
         } catch (error) {
@@ -3140,7 +3580,6 @@ export default class ViewerManager {
               }
             }
 
-            console.log('⚠️ Маркер удален принудительно после ошибки');
           } catch (fallbackError) {
             console.error('❌ Критическая ошибка при принудительном удалении:', fallbackError);
           }
@@ -3148,11 +3587,10 @@ export default class ViewerManager {
 
         // БЕЗОПАСНОЕ закрытие: удаляем только текущее меню
         menu.remove();
-        console.log('✅ Контекстное меню закрыто после удаления');
+
       });
     }
 
-    console.log('✅ Обработчики меню настроены для кнопок:', !!editBtn, !!deleteBtn);
   } startMoveMode(hotspot) {
     const markerEl = document.getElementById(`marker-${hotspot.id}`);
     if (!markerEl) return;
@@ -3207,6 +3645,7 @@ export default class ViewerManager {
   }
 
   updateVisualMarker(hotspot) {
+
     const markerEl = document.getElementById(`marker-${hotspot.id}`);
     if (!markerEl) return;
 
@@ -3219,7 +3658,6 @@ export default class ViewerManager {
         const lastUpdate = videoPlane._lastMaterialUpdate || 0;
         const timeSinceUpdate = now - lastUpdate;
 
-        console.log('🎬 updateVisualMarker для видео-области:', hotspot.id, 'время с последнего обновления:', timeSinceUpdate);
         // Обновляем размеры
         videoPlane.setAttribute('width', hotspot.videoWidth || 4);
         videoPlane.setAttribute('height', hotspot.videoHeight || 3);
@@ -3233,7 +3671,7 @@ export default class ViewerManager {
         const isVideoCurrentlyPlaying = videoEl && !videoEl.paused && !videoEl.ended && videoEl.currentTime > 0;
 
         if (isVideoCurrentlyPlaying) {
-          console.log('🛡️ ЗАЩИТА: видео воспроизводится - НЕ трогаем материал при изменении размеров');
+
           // НО обновляем размеры и позицию названия
           videoPlane.setAttribute('width', hotspot.videoWidth || 4);
           videoPlane.setAttribute('height', hotspot.videoHeight || 3);
@@ -3244,7 +3682,6 @@ export default class ViewerManager {
 
         // Обновляем видео источник если изменился или создаем новый
         if (hotspot.videoUrl && hotspot.videoUrl.trim() !== '') {
-          console.log('🎬 Обновляем видео-область с videoUrl:', hotspot.videoUrl);
 
           let videoEl = this.aframeScene.querySelector(`#video-${hotspot.id}`);
 
@@ -3261,7 +3698,7 @@ export default class ViewerManager {
           });
           if (!videoEl) {
             // Создаем новый видео элемент
-            console.log('🎬 Создаем новый видео элемент');
+
             const videoId = `video-${hotspot.id}`;
             videoEl = document.createElement('video');
             videoEl.id = videoId;
@@ -3286,7 +3723,6 @@ export default class ViewerManager {
 
             // Обработчики
             videoEl.addEventListener('loadeddata', () => {
-              console.log('✅ Видео загружено при обновлении:', hotspot.title);
 
               // ИСПРАВЛЯЕМ: ждем полной готовности видео перед созданием текстуры
               if (videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
@@ -3296,12 +3732,11 @@ export default class ViewerManager {
                   side: 'double'
                 });
               } else {
-                console.warn('⚠️ Видео загружено при обновлении, но не готово для текстуры');
+
               }
             });
 
             videoEl.addEventListener('canplay', () => {
-              console.log('✅ Видео готово к воспроизведению при обновлении:', hotspot.title);
 
               // ИСПРАВЛЯЕМ: настраиваем материал в canplay если не было настроено
               const currentMaterial = videoPlane.getAttribute('material');
@@ -3314,7 +3749,7 @@ export default class ViewerManager {
               }
 
               // НЕ запускаем видео автоматически - только по клику пользователя
-              console.log('✅ Видео готово к воспроизведению:', hotspot.title);
+
             });
 
             videoEl.addEventListener('error', (e) => {
@@ -3335,7 +3770,7 @@ export default class ViewerManager {
           const shouldUpdateMaterial = (!isVideoPlaying && !hasVideoMaterial) || timeSinceUpdate > 1000; // Обновляем не чаще раза в секунду
 
           if (shouldUpdateMaterial && !isVideoPlaying && !hasVideoMaterial) {
-            console.log('🎬 Устанавливаем видео материал (видео не воспроизводится и материал не установлен)');
+
             try { videoPlane.removeAttribute('text'); } catch (_) { }
             videoPlane.setAttribute('material', {
               src: `#video-${hotspot.id}`,
@@ -3344,17 +3779,17 @@ export default class ViewerManager {
             });
             videoPlane._lastMaterialUpdate = now;
           } else if (isVideoPlaying && hasVideoMaterial) {
-            console.log('🎬 НЕ обновляем материал - видео воспроизводится и материал уже установлен');
+
           } else if (hasVideoMaterial) {
-            console.log('🎬 НЕ обновляем материал - видео материал уже установлен');
+
           } else if (timeSinceUpdate <= 1000) {
-            console.log('🎬 НЕ обновляем материал - слишком частые обновления (', timeSinceUpdate, 'ms)');
+
           } else {
-            console.log('🎬 НЕ обновляем материал - видео воспроизводится, ждем завершения');
+
           }
         } else {
           // Нет videoUrl - показываем заглушку
-          console.log('🎬 Нет videoUrl - показываем заглушку');
+
           // Нейтральный фон без текста — никакого центрального текста при обычной работе
           videoPlane.setAttribute('material', {
             color: '#333333',
@@ -3399,12 +3834,39 @@ export default class ViewerManager {
     }
 
     // Если иконка изменилась, пересоздаем маркер
-    const currentShape = markerEl.querySelector('a-sphere, a-box, a-cylinder, a-octahedron, a-plane');
-    const newIcon = hotspot.icon || (hotspot.type === 'hotspot' ? 'arrow' : 'sphere');
-    const currentIcon = this.getShapeType(currentShape);
+  const currentShape = markerEl.querySelector('a-sphere, a-box, a-cylinder, a-octahedron, a-plane');
+  let newIcon = hotspot.icon || (hotspot.type === 'hotspot' ? 'arrow' : 'sphere');
+  if (newIcon === 'scene-transition') newIcon = 'arrow';
+  // Используем кэш последней иконки, чтобы не пересоздавать a-plane маркеры без нужды
+  const currentIcon = markerEl._lastIcon || this.getShapeType(currentShape);
 
-    if (currentIcon !== newIcon) {
-      // Пересоздаем маркер с новой геометрией
+    // Проверяем, нужно ли пересоздать маркер
+  const defaultSettings = this.getDefaultSettings();
+  const rawSize = hotspot.size != null ? hotspot.size : (hotspot.type === 'hotspot' ? defaultSettings.hotspotSize : defaultSettings.infopointSize);
+  const currentSize = parseFloat(rawSize);
+    
+    console.log('🔄 Проверка пересоздания маркера:', {
+      currentIcon,
+      newIcon,
+      lastColor: markerEl._lastColor,
+      newColor: hotspot.color,
+      lastNoFill: markerEl._lastNoFill,
+      newNoFill: hotspot.noFill,
+      lastSize: markerEl._lastSize,
+      newSize: currentSize,
+      isPlane: currentShape && currentShape.tagName.toLowerCase() === 'a-plane'
+    });
+    
+    const needsRecreation = currentIcon !== newIcon || 
+      // Для современных SVG маркеров (a-plane) нужно пересоздание при изменении цвета, noFill или размера
+      (currentShape && currentShape.tagName.toLowerCase() === 'a-plane' && 
+  (markerEl._lastColor !== hotspot.color || 
+   markerEl._lastNoFill !== hotspot.noFill ||
+   parseFloat(markerEl._lastSize) !== currentSize));
+
+  if (needsRecreation) {
+
+      // Пересоздаем маркер с новой геометрией или обновленными параметрами
       this.removeVisualMarker(hotspot.id);
       this.createVisualMarker(hotspot);
       return;
@@ -3413,7 +3875,7 @@ export default class ViewerManager {
     // Обновляем позицию
     markerEl.setAttribute('position', `${hotspot.position.x} ${hotspot.position.y} ${hotspot.position.z}`);
 
-    // Обновляем текст
+    // Обновляем текст (3D-текст отключен; оставлено на случай будущего включения)
     const textContainer = markerEl.querySelector('a-entity');
     const textEl = textContainer ? textContainer.querySelector('[cyrillic-text]') : null;
     if (textEl) {
@@ -3433,28 +3895,91 @@ export default class ViewerManager {
       }
     }
 
-    // Обновляем цвет и размер маркера
+    // Обновляем цвет/материал и размер маркера
     if (currentShape) {
       const defaultSettings = this.getDefaultSettings();
       const size = hotspot.size || (hotspot.type === 'hotspot' ? defaultSettings.hotspotSize : defaultSettings.infopointSize);
       const color = hotspot.color || (hotspot.type === 'hotspot' ? defaultSettings.hotspotColor : defaultSettings.infopointColor);
 
-      currentShape.setAttribute('color', color);
+      // Обновляем материал корректно: для примитивов обязательно через material-компонент
+      if (currentShape.tagName && currentShape.tagName.toLowerCase() !== 'a-plane') {
+        const existingMat = currentShape.getAttribute('material') || {};
+        const transparent = !!hotspot.noFill;
+        const opacity = transparent ? 0.15 : 1.0;
+        currentShape.setAttribute('material', {
+          ...existingMat,
+          color: color,
+          transparent,
+          opacity,
+          metalness: 0,
+          roughness: 1
+        });
+      }
 
-      // Устанавливаем размер в зависимости от типа геометрии
-      switch (newIcon) {
-        case 'cube':
-          currentShape.setAttribute('width', size);
-          currentShape.setAttribute('height', size);
-          currentShape.setAttribute('depth', size);
-          break;
-        case 'cylinder':
-          currentShape.setAttribute('radius', size);
-          currentShape.setAttribute('height', size * 2);
-          break;
-        default: // sphere, octahedron
-          currentShape.setAttribute('radius', size);
-          break;
+  // Устанавливаем размер в зависимости от типа геометрии
+      // Для современных маркеров (a-plane с текстурой) нужно обновлять width/height
+      if (currentShape.tagName && currentShape.tagName.toLowerCase() === 'a-plane') {
+        // marker size is radius-like; use adjusted scale (radius * 2.0) to match UI presets
+        const markerSize = (size * 2.0);
+        currentShape.setAttribute('width', markerSize);
+        currentShape.setAttribute('height', markerSize);
+      } else {
+        switch (newIcon) {
+          case 'cube':
+            currentShape.setAttribute('width', size);
+            currentShape.setAttribute('height', size);
+            currentShape.setAttribute('depth', size);
+            break;
+          case 'cylinder':
+            currentShape.setAttribute('radius', size);
+            currentShape.setAttribute('height', size * 2);
+            break;
+          default: // sphere, octahedron
+            currentShape.setAttribute('radius', size);
+            break;
+        }
+      }
+
+      // После успешного обновления без пересоздания — синхронизируем кэш сравнения
+      markerEl._lastColor = hotspot.color || markerEl._lastColor;
+      markerEl._lastNoFill = !!hotspot.noFill;
+      markerEl._lastSize = parseFloat(size);
+      markerEl._lastIcon = newIcon;
+
+      // Если tooltip уже открыт — обновим его содержимое на лету
+      if (markerEl._domTooltip) {
+        const tip = markerEl._domTooltip;
+        const title = this.removeFileExtension(hotspot.title || 'Информация');
+        const escapeHtml = (s) => String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+        const hasDesc = !!hotspot.description;
+        const descHtml = hasDesc ? `<div class=\"desc\">${escapeHtml(hotspot.description).replace(/\n/g, '<br>')}</div>` : '';
+        const sep = hasDesc ? '<hr class=\"tour-tip-sep\" />' : '';
+        tip.innerHTML = `<div class=\"title\">${title}</div>${sep}${descHtml}`;
+        // Обновляем стили текста у уже открытого тултипа (цвет, размер, шрифт, жирность, подчёркивание)
+        try {
+          const titleEl = tip.querySelector('.title');
+          const descEl = tip.querySelector('.desc');
+          const color = hotspot.textColor || '#ffffff';
+          if (titleEl) titleEl.style.color = color;
+          if (descEl) descEl.style.color = color;
+          const fontSizePx = Math.round((hotspot.textSize || 1) * 16);
+          if (titleEl && hotspot.textSize) titleEl.style.fontSize = `${fontSizePx}px`;
+          if (descEl && hotspot.textSize) descEl.style.fontSize = `${fontSizePx}px`;
+          const family = hotspot.textFamily || 'Arial, sans-serif';
+          if (titleEl) titleEl.style.fontFamily = family;
+          if (descEl) descEl.style.fontFamily = family;
+          const weight = hotspot.textBold ? '700' : '400';
+          if (titleEl) titleEl.style.fontWeight = weight;
+          if (descEl) descEl.style.fontWeight = weight;
+          const decoration = hotspot.textUnderline ? 'underline' : 'none';
+          if (titleEl) titleEl.style.textDecoration = decoration;
+          if (descEl) descEl.style.textDecoration = decoration;
+        } catch (_) { /* noop */ }
       }
     }
   }
@@ -3466,6 +3991,7 @@ export default class ViewerManager {
       case 'a-box': return 'cube';
       case 'a-cylinder': return 'cylinder';
       case 'a-octahedron': return 'octahedron';
+  case 'a-plane': return 'plane';
       default: return 'sphere';
     }
   }
@@ -3473,12 +3999,10 @@ export default class ViewerManager {
   removeVisualMarker(hotspotId) {
     const markerEl = document.getElementById(`marker-${hotspotId}`);
     if (markerEl) {
-      console.log('🗑️ Удаляем визуальный маркер:', hotspotId);
 
       // ВАЖНО: Очищаем видео ресурсы для видео-областей
       const videoEl = document.getElementById(`video-${hotspotId}`);
       if (videoEl) {
-        console.log('🎬 Очищаем видео ресурсы для:', hotspotId);
 
         // Останавливаем видео
         if (!videoEl.paused) {
@@ -3510,12 +4034,34 @@ export default class ViewerManager {
         this.coordinateManager.cleanupMarker(hotspotId);
       }
 
+      // Очистка ассетов (img в a-assets) и освобождение blob URL, привязанных к маркеру
+      try {
+        const assets = this.aframeScene && this.aframeScene.querySelector ? this.aframeScene.querySelector('a-assets') : null;
+        if (assets && markerEl._assetIds && Array.isArray(markerEl._assetIds)) {
+          markerEl._assetIds.forEach(id => {
+            const img = document.getElementById(id);
+            if (img && img.parentElement === assets) {
+              try { assets.removeChild(img); } catch (e) { /* noop */ }
+            } else if (img) {
+              // если элемент переехал, все равно пытаемся удалить
+              try { img.remove(); } catch (e) { /* noop */ }
+            }
+          });
+        }
+        if (markerEl._assetUrls && Array.isArray(markerEl._assetUrls)) {
+          markerEl._assetUrls.forEach(url => {
+            try { URL.revokeObjectURL(url); } catch (_) { /* noop */ }
+          });
+        }
+      } catch (e) {
+
+      }
+
       // Удаляем маркер из DOM (это автоматически удалит все дочерние элементы и их обработчики)
       markerEl.remove();
 
-      console.log('✅ Маркер и ресурсы очищены:', hotspotId);
     } else {
-      console.warn('⚠️ Маркер не найден для удаления:', hotspotId);
+
     }
   }
 
@@ -3528,12 +4074,32 @@ export default class ViewerManager {
     };
   }
 
+  // Скрывает визуальный маркер (для предотвращения следования за курсором при редактировании)
+  hideMarker(hotspotId) {
+    try {
+      const markerEl = document.getElementById(`marker-${hotspotId}`);
+      if (markerEl) {
+        markerEl.style.display = 'none';
+        markerEl._wasHiddenForEdit = true;
+      }
+    } catch (e) { console.warn('hideMarker error', e); }
+  }
+
+  // Показывает визуальный маркер, если он был скрыт для редактирования
+  showMarker(hotspotId) {
+    try {
+      const markerEl = document.getElementById(`marker-${hotspotId}`);
+      if (markerEl && markerEl._wasHiddenForEdit) {
+        markerEl.style.display = '';
+        markerEl._wasHiddenForEdit = false;
+      }
+    } catch (e) { console.warn('showMarker error', e); }
+  }
+
   clearMarkers() {
     const markers = this.aframeScene.querySelectorAll('[data-hotspot-id]');
-    console.log('🗑️ clearMarkers: удаляем', markers.length, 'маркеров');
+
     console.trace('📍 Стек вызовов clearMarkers'); // Показываем, кто вызвал удаление
-    console.warn('🚨 ВНИМАНИЕ: clearMarkers вызван! Это удалит ВСЕ видео-области и маркеры!');
-    console.warn('🚨 Если это происходит при вращении камеры - это БАГ!');
 
     markers.forEach(marker => {
       const hotspotId = marker.getAttribute('data-hotspot-id');
@@ -3597,7 +4163,7 @@ export default class ViewerManager {
         const hotspot = this.hotspotManager.hotspots.find(h => h.id === markerId);
 
         if (!hotspot) {
-          console.warn('⚠️ Хотспот не найден для изменения размера');
+
           return;
         }
 
@@ -3628,7 +4194,7 @@ export default class ViewerManager {
 
         // Дополнительная проверка на корректность новых размеров
         if (isNaN(newWidth) || isNaN(newHeight)) {
-          console.warn('⚠️ Некорректные новые размеры, используем значения по умолчанию');
+
           newWidth = 4;
           newHeight = 3;
         }
@@ -3650,7 +4216,6 @@ export default class ViewerManager {
         // Сохраняем изменения
         this.hotspotManager.saveHotspots();
 
-        console.log(`📏 Размер видео-области изменен: ${currentWidth.toFixed(1)}×${currentHeight.toFixed(1)} → ${newWidth.toFixed(1)}×${newHeight.toFixed(1)}`);
         return; // Выходим, чтобы НЕ обрабатывать зум
       }
 
@@ -3662,7 +4227,7 @@ export default class ViewerManager {
 
       // Проверяем готовность сцены и камеры
       if (!this.aframeCamera || !this.aframeScene) {
-        console.warn('⚠️ Зум колесиком недоступен - камера или сцена не готовы');
+
         return;
       }
 
@@ -3692,8 +4257,8 @@ export default class ViewerManager {
           this.aframeCamera.getObject3D('camera').updateProjectionMatrix();
         }
         // Дополнительно принудительно обновляем A-Frame компонент
-        if (this.aframeCamera.components && this.aframeCamera.components.camera && this.aframeCamera.components.camera.tick) {
-          this.aframeCamera.components.camera.tick();
+        if (this.aframeCamera.components && this.aframeCamera.components.camera) {
+          this.aframeCamera.flushToDOM();
         }
       }, 0);
 
@@ -3703,7 +4268,7 @@ export default class ViewerManager {
       // Отладочная информация с процентами
       const oldZoom = Math.round((80 / currentFov) * 100);
       const newZoom = Math.round((80 / newFov) * 100);
-      console.log(`🔍 Зум колесиком: ${oldZoom}% → ${newZoom}% (FOV ${currentFov.toFixed(1)}° → ${newFov.toFixed(1)}°, дельта: ${delta.toFixed(1)}°)`);
+
     }, { passive: false }); // ВАЖНО: passive: false для возможности preventDefault()
 
     // Управление зумом кнопками + и -
@@ -3792,7 +4357,7 @@ export default class ViewerManager {
 
   zoomIn() {
     if (!this.aframeCamera || !this.aframeScene) {
-      console.warn('⚠️ Зум недоступен - камера или сцена не готовы');
+
       return;
     }
 
@@ -3811,19 +4376,19 @@ export default class ViewerManager {
       }
       // Дополнительно принудительно обновляем A-Frame компонент
       if (this.aframeCamera.components && this.aframeCamera.components.camera) {
-        this.aframeCamera.components.camera.tick();
+        this.aframeCamera.flushToDOM();
       }
     }, 0);
     this.updateZoomIndicator(newFov);
 
     const oldZoom = Math.round((80 / currentFov) * 100);
     const newZoom = Math.round((80 / newFov) * 100);
-    console.log(`🔍 Зум кнопкой +: ${oldZoom}% → ${newZoom}% (FOV ${currentFov.toFixed(1)}° → ${newFov.toFixed(1)}°)`);
+
   }
 
   zoomOut() {
     if (!this.aframeCamera || !this.aframeScene) {
-      console.warn('⚠️ Зум недоступен - камера или сцена не готовы');
+
       return;
     }
 
@@ -3842,19 +4407,19 @@ export default class ViewerManager {
       }
       // Дополнительно принудительно обновляем A-Frame компонент
       if (this.aframeCamera.components && this.aframeCamera.components.camera) {
-        this.aframeCamera.components.camera.tick();
+        this.aframeCamera.flushToDOM();
       }
     }, 0);
     this.updateZoomIndicator(newFov);
 
     const oldZoom = Math.round((80 / currentFov) * 100);
     const newZoom = Math.round((80 / newFov) * 100);
-    console.log(`🔍 Зум кнопкой -: ${oldZoom}% → ${newZoom}% (FOV ${currentFov.toFixed(1)}° → ${newFov.toFixed(1)}°)`);
+
   }
 
   resetZoom() {
     if (!this.aframeCamera || !this.aframeScene) {
-      console.warn('⚠️ Зум недоступен - камера или сцена не готовы');
+
       return;
     }
 
@@ -3871,13 +4436,13 @@ export default class ViewerManager {
       }
       // Дополнительно принудительно обновляем A-Frame компонент
       if (this.aframeCamera.components && this.aframeCamera.components.camera) {
-        this.aframeCamera.components.camera.tick();
+        this.aframeCamera.flushToDOM();
       }
     }, 0);
     this.updateZoomIndicator(80);
 
     const oldZoom = Math.round((80 / currentFov) * 100);
-    console.log(`🔍 Сброс зума: ${oldZoom}% → 100% (FOV ${currentFov.toFixed(1)}° → 80.0°)`);
+
   }
 
   /**
@@ -3981,7 +4546,6 @@ export default class ViewerManager {
   cleanupAutoCloseHandlers() {
     // КРИТИЧЕСКИ ВАЖНО: Очищаем все активные auto-close обработчики
     if (this._activeAutoCloseHandlers) {
-      console.log('🧹 Очищаем', this._activeAutoCloseHandlers.size, 'активных auto-close обработчиков');
 
       this._activeAutoCloseHandlers.forEach(handler => {
         document.removeEventListener('click', handler, true);
@@ -3989,7 +4553,7 @@ export default class ViewerManager {
       });
 
       this._activeAutoCloseHandlers.clear();
-      console.log('✅ Все auto-close обработчики удалены');
+
     }
   }
 
@@ -3998,10 +4562,11 @@ export default class ViewerManager {
    */
   getDefaultSettings() {
     return {
-      hotspotSize: 0.3,
-      hotspotColor: '#ff0000',
-      infopointSize: 0.25,
-      infopointColor: '#0066cc'
+  // Базовые размеры: "Обычный" теперь 0.6 (в 2 раза больше прежнего 0.3)
+  hotspotSize: 0.6,
+  hotspotColor: '#ffffff',
+  infopointSize: 0.6,
+  infopointColor: '#ffffff'
     };
   }
 
@@ -4036,14 +4601,14 @@ export default class ViewerManager {
     // Удаляем старые кнопки воспроизведения (зеленые элементы)
     const oldPlayButtons = document.querySelectorAll('.video-play-button');
     oldPlayButtons.forEach(button => {
-      console.log('🧹 Удаляем старую кнопку воспроизведения');
+
       button.remove();
     });
 
     // Удаляем старые текстовые элементы без подложки
     const oldTitleTexts = document.querySelectorAll('.video-title-text');
     oldTitleTexts.forEach(text => {
-      console.log('🧹 Удаляем старый текстовый заголовок без подложки');
+
       text.remove();
     });
 
@@ -4052,7 +4617,7 @@ export default class ViewerManager {
     videoPlanes.forEach(plane => {
       const material = plane.getAttribute('material');
       if (material && material.opacity && parseFloat(material.opacity) < 0.5) {
-        console.log('🧹 Исправляем прозрачный материал видео-области');
+
         plane.setAttribute('material', {
           color: '#666666',
           opacity: 1.0,
@@ -4068,9 +4633,6 @@ export default class ViewerManager {
    * Создание видео-области с улучшенной интеграцией и поддержкой налипания на объекты сцены
    */
   createVideoArea(hotspot, markerEl) {
-    console.log('🎬 Создаем видео-область:', hotspot);
-    console.log('🎬 videoUrl в hotspot:', hotspot.videoUrl);
-    console.log('🎬 Все свойства hotspot:', Object.keys(hotspot));
 
     // ОЧИСТКА: Удаляем старые темные элементы если они есть
     this.removeOldDarkElements();
@@ -4083,15 +4645,13 @@ export default class ViewerManager {
 
     // Проверяем и устанавливаем позицию по умолчанию если нужно
     if (!hotspot.position) {
-      console.warn('⚠️ Hotspot без позиции, устанавливаем по умолчанию');
+
       hotspot.position = { x: 0, y: 0, z: -3 };
     }
 
-    console.log('🎬 Проверенная позиция hotspot:', hotspot.position);
-
     // Если markerEl не передан, создаем его
     if (!markerEl) {
-      console.log('🎬 Создаем новый маркер для видео-области');
+
       markerEl = document.createElement('a-entity');
       markerEl.id = `marker-${hotspot.id}`;
       markerEl.setAttribute('data-hotspot-id', hotspot.id);
@@ -4099,7 +4659,7 @@ export default class ViewerManager {
 
       // Позиционируем маркер
       const posStr = `${hotspot.position.x} ${hotspot.position.y} ${hotspot.position.z}`;
-      console.log('🎯 Устанавливаем позицию нового маркера:', hotspot.id, 'позиция:', posStr);
+
       markerEl.setAttribute('position', posStr);
 
       // Устанавливаем класс для интерактивности
@@ -4112,7 +4672,7 @@ export default class ViewerManager {
             this.cameraEl = null;
             this.tick = this.tick.bind(this);
             this.findCamera();
-            console.log('🎥 Компонент face-camera инициализирован для элемента:', this.el.id);
+
           },
 
           findCamera: function () {
@@ -4129,9 +4689,9 @@ export default class ViewerManager {
             }
 
             if (this.cameraEl) {
-              console.log('📷 Камера найдена для face-camera компонента:', this.cameraEl.id || 'без ID');
+
             } else {
-              console.warn('⚠️ Камера не найдена для face-camera компонента');
+
             }
           },
 
@@ -4164,7 +4724,7 @@ export default class ViewerManager {
             }
           }
         });
-        console.log('✅ Зарегистрирован улучшенный компонент face-camera');
+
       }
 
       // Регистрируем компонент для навигационной стрелки
@@ -4174,7 +4734,7 @@ export default class ViewerManager {
             this.cameraEl = null;
             this.tick = this.tick.bind(this);
             this.findCamera();
-            console.log('🧭 Компонент navigation-arrow инициализирован для элемента:', this.el.id);
+
           },
 
           findCamera: function () {
@@ -4191,9 +4751,9 @@ export default class ViewerManager {
             }
 
             if (this.cameraEl) {
-              console.log('🧭 Камера найдена для navigation-arrow компонента:', this.cameraEl.id || 'без ID');
+
             } else {
-              console.warn('⚠️ Камера не найдена для navigation-arrow компонента');
+
             }
           },
 
@@ -4226,7 +4786,7 @@ export default class ViewerManager {
             }
           }
         });
-        console.log('✅ Зарегистрирован компонент navigation-arrow для навигационных стрелок');
+
       }
 
       // НЕ применяем компонент face-camera к самому маркеру для избежания конфликтов
@@ -4248,8 +4808,6 @@ export default class ViewerManager {
     // Сохраняем корректные размеры обратно в хотспот
     hotspot.videoWidth = width;
     hotspot.videoHeight = height;
-
-    console.log('🎬 Установленные размеры видео-области:', { width, height });
 
     videoPlane.setAttribute('width', width);
     videoPlane.setAttribute('height', height);
@@ -4313,7 +4871,6 @@ export default class ViewerManager {
         }
       }
     }
-    console.log('🎬 Обработанный videoUrl:', videoUrl, 'тип:', typeof videoUrl);
 
     // ВСЕГДА создаем видео элемент для будущего использования
     const videoId = `video-${hotspot.id}`;
@@ -4321,7 +4878,7 @@ export default class ViewerManager {
 
     // Добавляем улучшенный обработчик событий для видео
     if (!videoEl) {
-      console.log('🎬 Создаем новый видео элемент с ID:', videoId);
+
       videoEl = document.createElement('video');
       videoEl.id = videoId;
       videoEl.crossOrigin = 'anonymous';
@@ -4338,11 +4895,10 @@ export default class ViewerManager {
 
       // НОВОЕ: Улучшенное отслеживание состояния видео и звука
       videoEl.addEventListener('loadeddata', () => {
-        console.log('✅ Видео загружено:', hotspot.title);
 
         // КРИТИЧЕСКИ ВАЖНО: Применяем видео-материал КАК ТОЛЬКО данные загружены
         if (videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
-          console.log('🎬 Применяем видео-материал сразу после загрузки данных');
+
           videoPlane.setAttribute('material', {
             src: `#${videoId}`,
             transparent: false,
@@ -4351,7 +4907,6 @@ export default class ViewerManager {
           });
           // Убираем любой текст-заглушку
           try { videoPlane.removeAttribute('text'); } catch (_) { }
-          console.log('✅ Видео-материал установлен из loadeddata:', `#${videoId}`);
 
           // Попытка сгенерировать постер из текущего кадра, если он ещё не сохранён
           try {
@@ -4370,7 +4925,7 @@ export default class ViewerManager {
               }
             }
           } catch (e) {
-            console.warn('⚠️ Не удалось создать постер из кадра:', e);
+
           }
         }
 
@@ -4382,7 +4937,6 @@ export default class ViewerManager {
           (videoEl.readyState >= 1 && videoEl.duration > 0);
 
         videoEl.setAttribute('data-has-audio', hasAudio.toString());
-        console.log(`🔊 Аудио в видео "${hotspot.title}": ${hasAudio ? 'обнаружено' : 'отсутствует'}`);
 
         // Аудио управление отключено по запросу пользователя
         // if (hasAudio) {
@@ -4427,12 +4981,11 @@ export default class ViewerManager {
       });
 
       videoEl.addEventListener('canplay', () => {
-        console.log('✅ Видео готово к воспроизведению:', hotspot.title);
 
         // КРИТИЧЕСКИ ВАЖНО: Убеждаемся, что видео-материал применен
         const currentMaterial = videoPlane.getAttribute('material');
         if (!currentMaterial || !currentMaterial.src || currentMaterial.src !== `#${videoId}`) {
-          console.log('🎬 Применяем видео-материал в canplay');
+
           videoPlane.setAttribute('material', {
             src: `#${videoId}`,
             transparent: false,
@@ -4440,7 +4993,7 @@ export default class ViewerManager {
             shader: 'flat'
           });
           try { videoPlane.removeAttribute('text'); } catch (_) { }
-          console.log('✅ Видео-материал установлен из canplay:', `#${videoId}`);
+
         }
 
         // НОВОЕ: НЕ показываем кнопку воспроизведения
@@ -4476,8 +5029,6 @@ export default class ViewerManager {
 
       // Добавляем обработчики play/pause (с улучшенными индикаторами)
       videoEl.addEventListener('play', () => {
-        console.log('▶️ Видео начало воспроизведение');
-        console.log('✅ Видео запущено:', hotspot.title);
 
         // НОВОЕ: Скрываем кнопку воспроизведения
         const playButton = markerEl.querySelector('.video-play-button');
@@ -4490,7 +5041,6 @@ export default class ViewerManager {
       });
 
       videoEl.addEventListener('pause', () => {
-        console.log('⏸️ Видео поставлено на паузу');
 
         // НОВОЕ: НЕ показываем кнопку воспроизведения
         // this.showPlayButton(markerEl, videoPlane);
@@ -4501,23 +5051,22 @@ export default class ViewerManager {
 
       // НОВОЕ: Обработчик окончания видео
       videoEl.addEventListener('ended', () => {
-        console.log('🔄 Видео завершилось, НЕ показываем кнопку повторного воспроизведения');
+
         // this.showPlayButton(markerEl, videoPlane, true); // ОТКЛЮЧЕНО
       });
 
       // Устанавливаем источник видео
       if (videoUrl) {
-        console.log('🎬 Обрабатываем источник видео:', videoUrl);
 
         // Проверяем совместимость URL
         const embeddableUrl = this.convertToEmbeddableUrl(videoUrl);
 
         if (embeddableUrl) {
-          console.log('🎬 Устанавливаем совместимый источник видео:', embeddableUrl);
+
           videoEl.src = embeddableUrl;
 
           // ПРИНУДИТЕЛЬНАЯ ЗАГРУЗКА для немедленного применения
-          console.log('🔄 Принудительно загружаем видео');
+
           videoEl.load();
 
           // Дополнительная диагностика
@@ -4543,7 +5092,6 @@ export default class ViewerManager {
             reason = 'Facebook видео не поддерживается';
           }
 
-          console.log('⚠️ Неподдерживаемый формат видео:', videoUrl);
           this.showVideoPlaceholder(videoPlane, hotspot, reason);
         }
       }
@@ -4559,13 +5107,12 @@ export default class ViewerManager {
 
     // Принудительно загружаем видео если src установлен
     if (videoEl.src && videoEl.readyState === 0) {
-      console.log('🎬 Принудительно загружаем видео:', videoEl.src);
+
       videoEl.load();
     }
 
     // Устанавливаем источник видео или показываем заглушку
     if (videoUrl && videoUrl.trim() !== '') {
-      console.log('✅ Устанавливаем videoUrl:', videoUrl);
 
       // Улучшенная установка видео URL с проверками
       if (videoEl && typeof videoEl.setAttribute === 'function') {
@@ -4573,11 +5120,10 @@ export default class ViewerManager {
           // Убеждаемся, что элемент полностью готов
           if (videoEl.readyState !== undefined) {
             videoEl.src = videoUrl;
-            console.log('🎬 Видео src установлен напрямую:', videoUrl);
 
             // Принудительная загрузка
             videoEl.load();
-            console.log('🔄 Запущена загрузка видео');
+
             // Регистрируем URL в реестре для надежного восстановления
             if (window.hotspotManager && typeof window.hotspotManager.registerVideoUrl === 'function') {
               window.hotspotManager.registerVideoUrl(hotspot.id, videoUrl);
@@ -4587,7 +5133,7 @@ export default class ViewerManager {
             setTimeout(() => {
               videoEl.src = videoUrl;
               videoEl.load();
-              console.log('🔄 Отложенная установка видео src:', videoUrl);
+
               if (window.hotspotManager && typeof window.hotspotManager.registerVideoUrl === 'function') {
                 window.hotspotManager.registerVideoUrl(hotspot.id, videoUrl);
               }
@@ -4600,7 +5146,6 @@ export default class ViewerManager {
         console.error('❌ videoEl недоступен для установки src');
       }
     } else {
-      console.log('🎬 Нет videoUrl - показываем видимую заглушку');
 
       // Устанавливаем видимый серый фон для видео-области без видео
       videoPlane.setAttribute('material', {
@@ -4629,7 +5174,7 @@ export default class ViewerManager {
     videoPlane.addEventListener('mouseenter', (e) => {
       if (!markerEl._isDragging) {
         document.body.style.cursor = 'pointer';
-        console.log('🎬 Mouse ENTER на видео-область:', hotspot.title);
+
         // НЕ создаем никаких визуальных индикаторов
       }
     });
@@ -4637,7 +5182,7 @@ export default class ViewerManager {
     videoPlane.addEventListener('mouseleave', (e) => {
       if (!markerEl._isDragging) {
         document.body.style.cursor = 'default';
-        console.log('🎬 Mouse LEAVE видео-область:', hotspot.title);
+
         // НЕ удаляем индикаторы, так как не создавали их
       }
     });
@@ -4646,17 +5191,16 @@ export default class ViewerManager {
     if (!videoPlane._playToggleLock) videoPlane._playToggleLock = false;
     videoPlane.addEventListener('click', (e) => {
       // Проверяем, что это именно левая кнопка мыши (в A-Frame event.button может отсутствовать)
-      console.log('🖱️ Клик по видео-области:', e.button);
 
       // Если явно определено, что это не левая кнопка мыши - игнорируем
       if (e.button !== undefined && e.button !== 0) {
-        console.log('🖱️ Игнорируем клик не левой кнопкой:', e.button);
+
         return;
       }
 
       // Проверяем, что это не событие перетаскивания
       if (markerEl._isDragging) {
-        console.log('🖱️ Игнорируем клик во время перетаскивания');
+
         return;
       }
 
@@ -4664,11 +5208,9 @@ export default class ViewerManager {
       e.stopPropagation();
       e.stopImmediatePropagation(); // Останавливаем все другие обработчики
 
-      console.log('🖱️ ОСНОВНОЙ ЛКМ клик по видео-области:', hotspot.title);
-
       // Анти-дребезг/замок на быстрые клики
       if (videoPlane._playToggleLock) {
-        console.log('⏱️ Игнор клика: операция play/pause еще выполняется');
+
         return;
       }
       videoPlane._playToggleLock = true;
@@ -4697,13 +5239,10 @@ export default class ViewerManager {
             reason = 'Facebook ссылки не поддерживаются. Используйте прямые ссылки на видео файлы (.mp4, .webm)';
           }
 
-          console.warn('⚠️ Попытка воспроизвести неподдерживаемое видео:', currentVideoUrl);
-
           // Обновляем заглушку
           this.showVideoPlaceholder(videoPlane, fullHotspot, reason);
 
           // НЕ открываем редактор автоматически - пользователь может использовать ПКМ
-          console.log('💡 Совет: используйте ПКМ на заглушке для редактирования URL');
 
           return;
         }
@@ -4718,7 +5257,6 @@ export default class ViewerManager {
           });
 
           if (videoEl.paused || videoEl.ended) {
-            console.log('▶️ Запускаем видео:', hotspot.title);
 
             // Если видео закончилось, возвращаем к началу
             if (videoEl.ended) {
@@ -4734,40 +5272,40 @@ export default class ViewerManager {
                 shader: 'flat'
               });
               try { videoPlane.removeAttribute('text'); } catch (_) { }
-              console.log('✅ Видео материал установлен:', `#${videoId}`);
+
             }
 
             // Запускаем воспроизведение
             videoEl.play().then(() => {
-              console.log('✅ Видео запущено:', hotspot.title);
+
             }).catch(err => {
               // Игнорируем AbortError (обычно из-за немедленного pause), логируем NotAllowedError
               if (err && err.name === 'AbortError') {
-                console.warn('⚠️ play() прерван AbortError (обычно из-за параллельного pause) — игнорируем');
+
               } else if (err && err.name === 'NotAllowedError') {
-                console.warn('⚠️ NotAllowedError, пытаемся запустить без звука');
+
                 videoEl.muted = true;
                 videoEl.play().then(() => {
-                  console.log('✅ Видео запущено без звука');
+
                 }).catch(e => {
                   console.error('❌ Не удалось запустить видео:', e);
                 });
               } else {
-                console.warn('⚠️ Ошибка воспроизведения:', err);
+
               }
             }).finally(() => {
               setTimeout(() => { videoPlane._playToggleLock = false; }, 50);
             });
           } else {
-            console.log('⏸️ Ставим видео на паузу:', hotspot.title);
+
             try { videoEl.pause(); } catch (_) { }
-            console.log('✅ Видео поставлено на паузу');
+
             setTimeout(() => { videoPlane._playToggleLock = false; }, 50);
           }
         }
       } else {
         // Нет videoUrl — НЕ открываем редактор по ЛКМ. Показываем заглушку и выходим.
-        console.log('🎬 Нет videoUrl — клики ЛКМ только показывают заглушку, редактирование через ПКМ');
+
         setTimeout(() => { videoPlane._playToggleLock = false; }, 50);
         try {
           this.showVideoPlaceholder(videoPlane, fullHotspot, 'Видео не настроено');
@@ -4779,7 +5317,7 @@ export default class ViewerManager {
     videoPlane.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      console.log('🖱️ ПКМ клик заблокирован на видео-области (без действий)');
+
     });
 
     // Добавляем углы для изменения размера
@@ -4799,14 +5337,14 @@ export default class ViewerManager {
           side: 'double',
           shader: 'flat'
         });
-        console.log('✅ Начальный материал для видео-области установлен (ожидание загрузки)');
+
       }
 
       // Если видео уже загружено, сразу применяем видео-материал
       if (videoEl && videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
-        console.log('🎬 Видео уже загружено, применяем материал немедленно');
+
         videoPlane.setAttribute('material', { src: `#${videoId}`, transparent: false, side: 'double', shader: 'flat' });
-        console.log('✅ Видео-материал применен немедленно:', `#${videoId}`);
+
       }
     } else {
       // Если нет видео URL - ставим видимый серый материал
@@ -4817,13 +5355,12 @@ export default class ViewerManager {
         side: 'double',
         shader: 'flat'
       });
-      console.log('✅ Материал для видео-области установлен (без видео URL)');
+
     }
 
     // ИСПРАВЛЕНИЕ: Добавляем face-camera компонент к МАРКЕРУ, а не к видео-плоскости
     // Это обеспечит правильную ориентацию всей видео-области как единого целого
     markerEl.setAttribute('face-camera', '');
-    console.log('✅ Face-camera компонент добавлен к маркеру видео-области');
 
     // Добавляем плоскость к маркеру
     markerEl.appendChild(videoPlane);
@@ -4834,17 +5371,15 @@ export default class ViewerManager {
     if (hotspot.rotation) {
       const rotationStr = `${hotspot.rotation.x || 0} ${hotspot.rotation.y || 0} ${hotspot.rotation.z || 0}`;
       markerEl.setAttribute('rotation', rotationStr);
-      console.log('🔄 Установлен поворот видео-области:', rotationStr);
+
     }
 
     // Добавляем маркер в сцену
     this.aframeScene.appendChild(markerEl);
-    console.log('🎬 Маркер добавлен в A-Frame сцену');
 
     // ФИНАЛЬНАЯ проверка видимости - убеждаемся что маркер видимый
     markerEl.setAttribute('visible', 'true');
     videoPlane.setAttribute('visible', 'true');
-    console.log('🎬 Маркер добавлен в сцену, видимость принудительно установлена:', markerEl.id);
 
     // Дополнительная проверка после добавления
     setTimeout(() => {
@@ -4863,17 +5398,16 @@ export default class ViewerManager {
         // Обновляем позицию в менеджере хотспотов
         this.hotspotManager.updateHotspotPosition(hotspot.id, newPosition);
         markerEl._wasDragged = true;
-        console.log('🎯 Позиция видео-области обновлена через координатный менеджер:', hotspot.id, newPosition);
+
       });
     }
 
     // Принудительно сохраняем позицию видео-области в hotspotManager
     if (hotspot.position) {
-      console.log('💾 Принудительно сохраняем позицию видео-области:', hotspot.id, hotspot.position);
+
       this.hotspotManager.updateHotspotPosition(hotspot.id, hotspot.position);
     }
 
-    console.log('✅ Видео-область создана:', hotspot.id);
     return markerEl;
   }
 
@@ -4913,11 +5447,11 @@ export default class ViewerManager {
     videoPlane.addEventListener('mouseenter', (e) => {
       if (mouseEnterTimeout) clearTimeout(mouseEnterTimeout);
       mouseEnterTimeout = setTimeout(() => {
-        console.log('MOUSEENTER на видео-область:', hotspot.title);
+
         e.stopPropagation();
         if (!markerEl._isDragging) {
           // НЕ меняем материал видео при наведении - только сохраняем информацию о наведении
-          console.log('🎬 НЕ изменяем материал видео при mouseenter');
+
         }
         // Показ 2D тултипа (Название + Описание) для видео-области
         const hasInfo = (hotspot && (hotspot.title || hotspot.description));
@@ -4935,7 +5469,22 @@ export default class ViewerManager {
           const descHtml = hasDesc ? `<div class=\"desc\">${escapeHtml(hotspot.description).replace(/\\n/g, '<br>')}</div>` : '';
           const sep = hasDesc ? '<hr class=\"tour-tip-sep\" />' : '';
           tip.innerHTML = `<div class=\"title\">${title}</div>${sep}${descHtml}`;
+          // Применяем цвет текста тултипа из настроек хотспота
+          try { tip.style.color = hotspot.textColor || '#ffffff'; } catch (e) { /* noop */ }
           document.body.appendChild(tip);
+          try {
+            const titleEl = tip.querySelector('.title');
+            const descEl = tip.querySelector('.desc');
+            if (titleEl) titleEl.style.color = hotspot.textColor || '#ffffff';
+            if (descEl) descEl.style.color = hotspot.textColor || '#ffffff';
+          } catch (e) { /* noop */ }
+          // Устанавливаем цвет для внутренних элементов, если они переопределены в CSS
+          try {
+            const titleEl = tip.querySelector('.title');
+            const descEl = tip.querySelector('.desc');
+            if (titleEl) titleEl.style.color = hotspot.textColor || '#ffffff';
+            if (descEl) descEl.style.color = hotspot.textColor || '#ffffff';
+          } catch (e) { /* noop */ }
           const move = (ev) => { tip.style.left = (ev.clientX + 12) + 'px'; tip.style.top = (ev.clientY + 12) + 'px'; };
           window.addEventListener('mousemove', move);
           markerEl._domTooltip = tip; markerEl._domTooltipMove = move;
@@ -4949,11 +5498,11 @@ export default class ViewerManager {
     videoPlane.addEventListener('mouseleave', (e) => {
       if (mouseLeaveTimeout) clearTimeout(mouseLeaveTimeout);
       mouseLeaveTimeout = setTimeout(() => {
-        console.log('MOUSELEAVE видео-область:', hotspot.title);
+
         e.stopPropagation();
         if (!markerEl._isDragging) {
           // НЕ меняем материал видео при mouseleave - только сохраняем информацию
-          console.log('🎬 НЕ изменяем материал видео при mouseleave');
+
         }
         // Скрытие 2D тултипа
         if (markerEl._domTooltip) {
@@ -4972,13 +5521,13 @@ export default class ViewerManager {
 
     // Настраиваем перетаскивание через координатный менеджер
     if (this.coordinateManager) {
-      console.log('� Настраиваем перетаскивание видео-области через координатный менеджер');
+
       // this.coordinateManager.setupDraggable(markerEl, hotspot); - метод не существует
     }
 
     // Обработчик для предотвращения стандартного контекстного меню - оставляем только этот
     videoPlane.addEventListener('contextmenu', (e) => {
-      console.log('🎬 Контекстное меню на видео-области:', hotspot.title);
+
       e.stopPropagation();
       e.preventDefault();
       return false;
@@ -5004,49 +5553,49 @@ export default class ViewerManager {
         }
 
         if (videoId) {
-          console.log('🎬 Конвертирую YouTube URL в встраиваемый формат:', videoId);
+
           return null; // Пока отключаем встраивание YouTube
         }
       }
 
       // Instagram ссылки
       if (url.includes('instagram.com/reel/') || url.includes('instagram.com/p/')) {
-        console.log('🎬 Instagram видео не поддерживается для прямого встраивания');
+
         return null;
       }
 
       // VK Video ссылки
       if (url.includes('vkvideo.ru') || url.includes('vk.com/video')) {
-        console.log('🎬 VK Video не поддерживается для прямого встраивания');
+
         return null;
       }
 
       // TikTok ссылки
       if (url.includes('tiktok.com') || url.includes('vm.tiktok.com')) {
-        console.log('🎬 TikTok видео не поддерживается для прямого встраивания');
+
         return null;
       }
 
       // Facebook ссылки
       if (url.includes('facebook.com') || url.includes('fb.watch')) {
-        console.log('🎬 Facebook видео не поддерживается для прямого встраивания');
+
         return null;
       }
 
       // Data URL (base64 видео) - поддерживаем напрямую
       if (url.startsWith('data:video/')) {
-        console.log('🎬 Data URL видео (base64):', url.substring(0, 50) + '...');
+
         return url;
       }
 
       // Для обычных видео файлов возвращаем как есть
       if (url.match(/\.(mp4|webm|ogg|mov|avi)(\?.*)?$/i)) {
-        console.log('🎬 Обычный видео файл:', url);
+
         return url;
       }
 
       // Для остальных ссылок возвращаем null (неподдерживаемые)
-      console.log('🎬 Неподдерживаемый формат видео:', url);
+
       return null;
 
     } catch (error) {
@@ -5059,7 +5608,6 @@ export default class ViewerManager {
    * Показывает заглушку для неподдерживаемых видео
    */
   showVideoPlaceholder(videoPlane, hotspot, reason = 'Неподдерживаемый формат') {
-    console.warn(`⚠️ Показываем заглушку для видео: ${reason}`);
 
     videoPlane.setAttribute('material', {
       color: '#2a2a2a',
@@ -5105,8 +5653,6 @@ export default class ViewerManager {
   updateVideoSource(markerEl, videoPlane, hotspotId, videoUrl) {
     if (!videoUrl || !hotspotId) return;
 
-    console.log('🔄 Обновляем источник видео:', videoUrl);
-
     // Проверяем, можно ли воспроизвести это видео
     const embeddableUrl = this.convertToEmbeddableUrl(videoUrl);
 
@@ -5148,7 +5694,6 @@ export default class ViewerManager {
 
       // Добавляем обработчики событий
       videoEl.addEventListener('loadeddata', () => {
-        console.log('✅ Видео загружено:', embeddableUrl);
 
         // Скрываем индикатор загрузки
         const loadingIndicator = markerEl.querySelector('.video-loading-indicator');
@@ -5395,7 +5940,6 @@ export default class ViewerManager {
    */
   isMouseOverVideoArea(event, markerEl, width, height) {
     try {
-      console.log('🎯 isMouseOverVideoArea вызван (строгая проверка):', { width, height, eventType: event.type });
 
       // Строгая проверка: только если событие именно от элементов видео-области
       if (event.target) {
@@ -5421,7 +5965,7 @@ export default class ViewerManager {
         const hasValidClass = validClasses.some(cls => targetClasses.includes(cls));
 
         if (hasValidClass) {
-          console.log('✅ Элемент имеет валидный класс:', targetClasses, '- разрешаем перетаскивание');
+
           return true;
         }
 
@@ -5439,7 +5983,7 @@ export default class ViewerManager {
         );
 
         if (hasValidAttribute) {
-          console.log('✅ Элемент имеет валидный атрибут - разрешаем перетаскивание');
+
           return true;
         }
 
@@ -5447,7 +5991,7 @@ export default class ViewerManager {
         if (targetEl.id === markerId ||
           targetEl.parentElement?.id === markerId ||
           targetEl.closest(`#${markerId}`) === markerEl) {
-          console.log('🎯 Событие от элементов видео-области - разрешаем:', targetEl.tagName, targetEl.className);
+
           return true;
         }
 
@@ -5459,14 +6003,14 @@ export default class ViewerManager {
           targetEl.classList?.contains('rotation-arrow-indicator');
 
         if (isVideoAreaElement && markerEl.contains(targetEl)) {
-          console.log('🎯 Событие от элемента управления видео - разрешаем');
+
           return true;
         }
 
         // Дополнительная проверка для A-Frame событий
         if (event.detail && event.detail.intersection &&
           event.detail.intersection.object?.el?.id === markerId) {
-          console.log('🎯 A-Frame событие от видео-области - разрешаем');
+
           return true;
         }
 
@@ -5482,14 +6026,11 @@ export default class ViewerManager {
             targetEl.tagName === 'A-RING';
 
           if (isInteractiveChild) {
-            console.log('🎯 Событие от дочернего элемента видео-области - разрешаем');
+
             return true;
           }
         }
       }
-
-      console.log('🚫 Событие НЕ от видео-области - запрещаем перетаскивание');
-      console.log('   Событие от:', event.target.tagName, event.target.className);
 
       return false;
     } catch (error) {
@@ -5560,7 +6101,6 @@ export default class ViewerManager {
 
           // Воспроизводим видео
           videoEl.play().then(() => {
-            console.log('✅ Видео запущено через кнопку воспроизведения');
 
             // Устанавливаем видео материал
             videoPlane.setAttribute('material', {
@@ -5577,7 +6117,6 @@ export default class ViewerManager {
             if (err.name === 'NotAllowedError') {
               videoEl.muted = true;
               videoEl.play().then(() => {
-                console.log('✅ Видео запущено без звука');
 
                 // Устанавливаем видео материал
                 videoPlane.setAttribute('material', {
@@ -5595,7 +6134,7 @@ export default class ViewerManager {
             }
           });
         } else {
-          console.warn('⚠️ Видео не готово к воспроизведению, readyState:', videoEl.readyState);
+
         }
       }
     });
@@ -5637,7 +6176,7 @@ export default class ViewerManager {
     // Убеждаемся, что компонент face-camera активен
     if (!markerEl.getAttribute('face-camera')) {
       markerEl.setAttribute('face-camera', '');
-      console.log('✅ Восстановлен компонент face-camera для ориентации к камере');
+
     }
 
     // Пересоздаем невидимые углы изменения размера
@@ -5687,17 +6226,15 @@ export default class ViewerManager {
       markerEl.appendChild(resizeHandle);
     });
 
-    console.log('✅ Невидимые углы изменения размера пересозданы');
   }  /**
    * Проверяет, находится ли мышь над обычным маркером хотспота
    */
   isMouseOverMarker(event, markerEl) {
     try {
-      console.log('🎯 isMouseOverMarker вызван для маркера:', markerEl.id);
 
       const canvas = this.aframeScene.canvas;
       if (!canvas) {
-        console.warn('⚠️ Canvas не найден');
+
         return true;
       }
 
@@ -5706,7 +6243,7 @@ export default class ViewerManager {
 
       // Проверяем, что event содержит валидные координаты
       if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') {
-        console.warn('⚠️ Невалидные координаты мыши в event:', event);
+
         // Возвращаем true как fallback - считаем что мышь над маркером
         return true;
       }
@@ -5716,23 +6253,21 @@ export default class ViewerManager {
 
       // Проверяем что координаты не NaN
       if (isNaN(mouseX) || isNaN(mouseY)) {
-        console.warn('⚠️ Получены NaN координаты:', { mouseX, mouseY, event });
+
         return true; // Fallback - считаем что над маркером
       }
-
-      console.log('🎯 Координаты мыши:', { mouseX, mouseY });
 
       // Создаем raycaster для проверки пересечения
       const camera = this.aframeCamera;
       if (!camera) {
-        console.warn('⚠️ Camera не найдена');
+
         return true;
       }
 
       // Проверяем наличие камеры THREE.js
       const threeCamera = camera.getObject3D('camera');
       if (!threeCamera) {
-        console.warn('⚠️ THREE.js camera недоступна');
+
         return true;
       }
 
@@ -5742,7 +6277,7 @@ export default class ViewerManager {
       // Проверяем пересечение с маркером
       const markerObject3D = markerEl.object3D;
       if (!markerObject3D) {
-        console.warn('⚠️ Object3D маркера не найден');
+
         return true;
       }
 
@@ -5799,7 +6334,7 @@ export default class ViewerManager {
       // Добавляем обработчики событий для изменения курсора
       handle.addEventListener('mouseenter', (e) => {
         document.body.style.cursor = corner.cursor;
-        console.log(`🎯 Наведение на угол ${corner.name}, курсор: ${corner.cursor}`);
+
       });
 
       handle.addEventListener('mouseleave', (e) => {
@@ -5817,7 +6352,6 @@ export default class ViewerManager {
       markerEl.appendChild(handle);
     });
 
-    console.log('✅ Невидимые углы изменения размера созданы');
   }
 
   /**
@@ -5828,8 +6362,6 @@ export default class ViewerManager {
 
     this._isResizing = true;
     this._currentResizeHandle = cornerName;
-
-    console.log(`🎯 Начало изменения размера видео-области, угол: ${cornerName}`);
 
     // Используем согласованные поля videoWidth/videoHeight
     const initialWidth = parseFloat(hotspot.videoWidth) || 4;
@@ -5880,8 +6412,6 @@ export default class ViewerManager {
       document.removeEventListener('mousemove', mouseMoveHandler);
       document.removeEventListener('mouseup', mouseUpHandler);
 
-      console.log('✅ Изменение размера видео-области завершено');
-
       // Сохраняем изменения
       if (this.hotspotManager && this.hotspotManager.saveProject) {
         this.hotspotManager.saveProject();
@@ -5902,11 +6432,11 @@ export default class ViewerManager {
     newHeight = parseFloat(newHeight);
 
     if (isNaN(newWidth) || newWidth <= 0) {
-      console.warn('⚠️ Некорректная ширина видео-области, используем значение по умолчанию');
+
       newWidth = 4;
     }
     if (isNaN(newHeight) || newHeight <= 0) {
-      console.warn('⚠️ Некорректная высота видео-области, используем значение по умолчанию');
+
       newHeight = 3;
     }
 
@@ -5924,7 +6454,6 @@ export default class ViewerManager {
     // Обновляем позицию заголовка если есть
     this.updateVideoAreaTitle(markerEl, newHeight);
 
-    console.log(`📏 Размеры видео-области обновлены: ${newWidth.toFixed(2)} x ${newHeight.toFixed(2)}`);
   }
 
   /**
@@ -5953,7 +6482,6 @@ export default class ViewerManager {
       }
     });
 
-    console.log('✅ Позиции невидимых углов изменения размера обновлены');
   }
 
   /**
@@ -5977,7 +6505,7 @@ export default class ViewerManager {
    */
   setupInvisibleZoneHandlers(markerEl, videoPlane, hotspot) {
     // По запросу пользователя, все подсвечивающие линии и круги убраны.
-    console.log('✅ Обработчики для зон вращения и изменения размеров отключены по запросу');
+
   }
 
   /**
@@ -5986,12 +6514,11 @@ export default class ViewerManager {
   startResize(markerEl, videoPlane, hotspot, corner, startEvent) {
     // Предотвращаем множественные вызовы
     if (this._isResizing) {
-      console.log('🔄 Изменение размера уже активно, игнорируем');
+
       return;
     }
 
     this._isResizing = true;
-    console.log('🔄 Начало изменения размера видео-области:', corner);
 
     const startWidth = parseFloat(hotspot.videoWidth) || 4;
     const startHeight = parseFloat(hotspot.videoHeight) || 3;
@@ -6074,7 +6601,7 @@ export default class ViewerManager {
 
         // ИСПРАВЛЯЕМ: если есть видео материал, пере-применяем его
         if (currentMaterial && currentMaterial.src) {
-          console.log('🔄 Переприменяем видео материал после изменения размера');
+
           videoPlane.setAttribute('material', currentMaterial);
         }
 
@@ -6087,7 +6614,6 @@ export default class ViewerManager {
     };
 
     const stopResizeHandler = () => {
-      console.log('🔄 Завершение изменения размера видео-области');
 
       this._isResizing = false;
       this._currentResizeHandle = null;
@@ -6102,7 +6628,7 @@ export default class ViewerManager {
 
       // ИСПРАВЛЯЕМ: если размеры все еще некорректны, возвращаем к исходным
       if (isNaN(newWidth) || isNaN(newHeight) || newWidth <= 0 || newHeight <= 0) {
-        console.warn('⚠️ Некорректные размеры при сохранении! Возвращаем к исходным.', { newWidth, newHeight, startWidth, startHeight });
+
         newWidth = startWidth || 4;
         newHeight = startHeight || 3;
 
@@ -6125,7 +6651,7 @@ export default class ViewerManager {
             videoHeight: newHeight
           });
         }
-        console.log('✅ Размеры видео-области обновлены:', newWidth, 'x', newHeight);
+
       }, 300); // Ждем 300ms после завершения изменения размера
     };
 
@@ -6142,7 +6668,7 @@ export default class ViewerManager {
       // Позиционируем текст выше видео-области с большим отступом
       const titleY = (parseFloat(videoHeight) || 3) / 2 + 0.8; // Увеличен отступ
       textElement.setAttribute('position', `0 ${titleY} 0.3`); // Увеличен Z-отступ
-      console.log(`📝 Позиция названия обновлена: Y = ${titleY}`);
+
     }
   }
 
@@ -6155,7 +6681,7 @@ export default class ViewerManager {
       const titleText = newTitle && newTitle.trim() !== '' ? this.removeFileExtension(newTitle.trim()) : '';
       textElement.setAttribute('value', titleText);
       textElement.setAttribute('visible', titleText !== '' ? 'true' : 'false');
-      console.log(`📝 Название видео-области обновлено: "${titleText}"`);
+
     } else if (newTitle && newTitle.trim() !== '') {
       // Создаем новый элемент для названия, если его не было
       const cleanTitle = this.removeFileExtension(newTitle.trim());
@@ -6175,7 +6701,7 @@ export default class ViewerManager {
       newTextElement.setAttribute('position', `0 ${titleY} 0.3`); // Увеличен Z-отступ
 
       markerEl.appendChild(newTextElement);
-      console.log(`📝 Создано новое название видео-области: "${cleanTitle}"`);
+
     }
   }
 
@@ -6188,7 +6714,7 @@ export default class ViewerManager {
     height = parseFloat(height);
 
     if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
-      console.warn('⚠️ Некорректные размеры для updateResizeHandles:', { width, height });
+
       width = 4;
       height = 3;
     }
@@ -6213,13 +6739,13 @@ export default class ViewerManager {
           x = width / 2; y = -height / 2;
           break;
         default:
-          console.warn('⚠️ Неизвестный угол:', corner);
+
           x = 0; y = 0;
       }
 
       // Дополнительная проверка на NaN
       if (isNaN(x) || isNaN(y)) {
-        console.warn('⚠️ NaN координаты для угла:', corner, { x, y, width, height });
+
         x = 0; y = 0;
       }
 
@@ -6250,7 +6776,7 @@ export default class ViewerManager {
       }
 
       handle.setAttribute('position', `${x} ${y} 0.01`);
-      console.log('🔧 Обновлена позиция кнопки поворота:', action, 'новая позиция:', `${x} ${y} 0.01`);
+
     });
   }
 
@@ -6258,12 +6784,9 @@ export default class ViewerManager {
    * Вращает видео-область вокруг вертикальной оси
    */
   rotateVideoArea(markerEl, videoPlane, hotspot, action) {
-    console.log('🔄 Вращение видео-области:', action);
-    console.log('🔄 Элементы:', { markerEl: !!markerEl, videoPlane: !!videoPlane, hotspot: !!hotspot });
 
     // Получаем текущий поворот маркера (или устанавливаем по умолчанию)
     let currentRotation = markerEl.getAttribute('rotation');
-    console.log('🔄 Текущий rotation атрибут:', currentRotation);
 
     // ИСПРАВЛЯЕМ: правильно обрабатываем rotation атрибут
     let rotX = 0, rotY = 0, rotZ = 0;
@@ -6280,8 +6803,6 @@ export default class ViewerManager {
       }
     }
 
-    console.log('🔄 Исходные углы:', { rotX, rotY, rotZ });
-
     // Определяем шаг поворота (в градусах)
     const rotationStep = 15; // 15 градусов за один клик
 
@@ -6289,31 +6810,28 @@ export default class ViewerManager {
     if (action === 'rotate-left') {
       // Поворот против часовой стрелки вокруг Y-оси
       rotY = (rotY - rotationStep) % 360;
-      console.log('🔄 Поворот против часовой стрелки (Y-ось)');
+
     } else if (action === 'rotate-right') {
       // Поворот по часовой стрелке вокруг Y-оси
       rotY = (rotY + rotationStep) % 360;
-      console.log('🔄 Поворот по часовой стрелке (Y-ось)');
+
     } else if (action === 'rotate-up') {
       // Поворот вверх вокруг X-оси
       rotX = (rotX - rotationStep) % 360;
-      console.log('🔄 Поворот вверх (X-ось)');
+
     } else if (action === 'rotate-down') {
       // Поворот вниз вокруг X-оси
       rotX = (rotX + rotationStep) % 360;
-      console.log('🔄 Поворот вниз (X-ось)');
-    }
 
-    console.log('🔄 Новые углы:', { rotX, rotY, rotZ });
+    }
 
     // Обновляем поворот маркера
     const newRotationStr = `${rotX} ${rotY} ${rotZ}`;
-    console.log('🔄 Устанавливаем rotation:', newRotationStr);
+
     markerEl.setAttribute('rotation', newRotationStr);
 
     // Проверяем, что изменение применилось
     const appliedRotation = markerEl.getAttribute('rotation');
-    console.log('🔄 Применённый rotation:', appliedRotation);
 
     // Сохраняем изменения поворота в hotspot
     if (!hotspot.rotation) {
@@ -6340,18 +6858,17 @@ export default class ViewerManager {
    * Добавляет кнопки управления звуком для видео-области
    */
   addAudioControls(markerEl, videoEl, hotspot) {
-    console.log('🔊 Добавляем кнопки управления звуком для видео:', hotspot.title);
 
     // Проверяем, не добавлены ли уже кнопки
     const existingControls = markerEl.querySelector('.audio-controls');
     if (existingControls) {
-      console.log('🔊 Кнопки управления звуком уже существуют');
+
       return;
     }
 
     const videoPlane = markerEl.querySelector('[data-video-plane]');
     if (!videoPlane) {
-      console.warn('⚠️ Не найдена видео-плоскость для добавления аудио контролов');
+
       return;
     }
 
@@ -6395,8 +6912,6 @@ export default class ViewerManager {
       muteText.setAttribute('value', videoEl.muted ? '🔇' : '🔊');
       muteButton.setAttribute('color', videoEl.muted ? '#ff4444' : '#222222'); // Темный цвет вместо зеленого
 
-      console.log(`🔊 Звук ${videoEl.muted ? 'выключен' : 'включен'} для видео:`, hotspot.title);
-
       // Обновляем слайдер громкости
       const existingSlider = audioControls.querySelector('.volume-slider');
       if (existingSlider) {
@@ -6411,7 +6926,7 @@ export default class ViewerManager {
     });
 
     videoPlane.appendChild(audioControls);
-    console.log('✅ Кнопки управления звуком добавлены');
+
   }
 
   /**
@@ -6453,7 +6968,6 @@ export default class ViewerManager {
       volumeIndicator.setAttribute('width', 0.8 * videoEl.volume);
       volumeIndicator.setAttribute('position', `${-0.4 + (0.8 * videoEl.volume / 2)} 0 0.01`);
 
-      console.log(`🔊 Громкость изменена на ${Math.round(videoEl.volume * 100)}% для видео:`, hotspot.title);
     });
 
     return sliderContainer;
@@ -6475,20 +6989,20 @@ export default class ViewerManager {
   updateHotspotDisplay(hotspotId) {
     const markerEl = document.getElementById(`marker-${hotspotId}`);
     if (!markerEl) {
-      console.warn(`⚠️ Маркер с ID ${hotspotId} не найден для обновления отображения`);
+
       return;
     }
 
     const hotspot = this.getHotspotData(hotspotId);
     if (!hotspot) {
-      console.warn(`⚠️ Данные хотспота с ID ${hotspotId} не найдены`);
+
       return;
     }
 
     // Если это видео-область, обновляем название
     if (hotspot.type === 'video-area' || markerEl._isVideoArea) {
       this.updateVideoAreaTitleText(markerEl, hotspot.title);
-      console.log(`✅ Отображение видео-области "${hotspot.title || ''}" обновлено`);
+
     }
   }
 
@@ -6503,7 +7017,7 @@ export default class ViewerManager {
       document.querySelector('[camera]');
 
     if (!camera) {
-      console.warn('⚠️ Камера не найдена, пробуем через THREE.js');
+
       // Пробуем получить камеру через THREE.js
       try {
         const scene3D = this.aframeScene?.object3D;
@@ -6520,7 +7034,7 @@ export default class ViewerManager {
     }
 
     if (!camera) {
-      console.warn('⚠️ Камера не найдена');
+
       return null;
     }
 
@@ -6528,7 +7042,6 @@ export default class ViewerManager {
       const position = camera.getAttribute('position');
       const rotation = camera.getAttribute('rotation');
 
-      console.log('📹 Текущая позиция камеры:', { position, rotation });
       // Нормализуем до числовых значений
       const toNum = (v) => ({ x: parseFloat(v.x) || 0, y: parseFloat(v.y) || 0, z: parseFloat(v.z) || 0 });
       return { position: toNum(position || { x: 0, y: 0, z: 0 }), rotation: toNum(rotation || { x: 0, y: 0, z: 0 }) };
@@ -6541,28 +7054,61 @@ export default class ViewerManager {
    */
   setCameraPosition(cameraData) {
     // Пробуем найти камеру разными способами
-    let camera = this.aframeScene?.querySelector('a-camera') ||
+    let camera = this.aframeCamera ||
+      this.aframeScene?.querySelector('a-camera') ||
       this.aframeScene?.querySelector('[camera]') ||
       document.querySelector('a-camera') ||
       document.querySelector('[camera]');
 
     if (!camera || !cameraData) {
-      console.warn('⚠️ Камера не найдена или данные камеры не переданы');
+
       return false;
     }
 
     try {
+      // Временно отключаем look-controls чтобы он не мешал
+      const lookControls = camera.components && camera.components['look-controls'];
+      if (lookControls && lookControls.pause) {
+        lookControls.pause();
+      }
+
+      // Сначала FOV, если задан
+      if (cameraData.fov != null) {
+        const fov = Math.max(10, Math.min(130, parseFloat(cameraData.fov)));
+        camera.setAttribute('fov', fov);
+
+      }
+
       if (cameraData.position) {
         const p = cameraData.position;
         camera.setAttribute('position', `${p.x || 0} ${p.y || 0} ${p.z || 0}`);
-        console.log('📹 Позиция камеры установлена:', cameraData.position);
+
       }
 
       if (cameraData.rotation) {
         const r = cameraData.rotation;
-        camera.setAttribute('rotation', `${r.x || 0} ${r.y || 0} ${r.z || 0}`);
-        console.log('📹 Поворот камеры установлен:', cameraData.rotation);
+        const rotationString = `${r.x || 0} ${r.y || 0} ${r.z || 0}`;
+        camera.setAttribute('rotation', rotationString);
+        
+        // Также обновляем object3D напрямую для более точного позиционирования
+        if (camera.object3D) {
+          const deg2rad = Math.PI / 180;
+          camera.object3D.rotation.set(
+            (r.x || 0) * deg2rad,
+            (r.y || 0) * deg2rad,
+            (r.z || 0) * deg2rad,
+            'XYZ'
+          );
+        }
+
       }
+
+      // Возобновляем look-controls после небольшой задержки
+      setTimeout(() => {
+        if (lookControls && lookControls.play) {
+          lookControls.play();
+        }
+      }, 100);
 
       return true;
     } catch (error) {
@@ -6576,24 +7122,31 @@ export default class ViewerManager {
    */
   saveCameraPositionForScene(sceneId) {
     if (!window.sceneManager) {
-      console.warn('⚠️ SceneManager не найден');
+
       return false;
     }
 
     const cameraPosition = this.getCameraPosition();
     if (!cameraPosition) {
-      console.warn('⚠️ Не удалось получить позицию камеры');
+
       return false;
     }
+
+    // Добавим текущий FOV
+    try {
+      const camComp = this.aframeCamera?.getAttribute('camera') || {};
+      const fov = parseFloat(camComp.fov);
+      if (!isNaN(fov)) cameraPosition.fov = fov;
+    } catch {}
 
     const scene = window.sceneManager.getSceneById(sceneId);
     if (!scene) {
-      console.warn('⚠️ Сцена не найдена:', sceneId);
+
       return false;
     }
 
-    scene.cameraPosition = cameraPosition;
-    console.log('📹 Позиция камеры сохранена для сцены:', sceneId, cameraPosition);
+  scene.cameraPosition = cameraPosition;
+
     return true;
   }
 }

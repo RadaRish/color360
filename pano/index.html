@@ -27,52 +27,6 @@
     <style>
       :root {
         font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-        line-height: 1.5;
-        font-weight: 400;
-        color-scheme: dark;
-        color: rgba(255, 255, 255, 0.87);
-        background-color: #242424;
-        font-synthesis: none;
-        text-rendering: optimizeLegibility;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        padding: 0;
-        height: 100vh;
-        overflow: hidden;
-        background: #1a1a1a;
-      }
-
-      .app-container {
-        display: block;
-        height: 100vh;
-        position: relative;
-      }
-
-      #sidebar {
-        width: 300px;
-        background: rgba(26, 26, 26, 0.85);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
-        display: flex;
-        flex-direction: column;
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        transition: transform 0.3s ease;
-        z-index: 1000;
-        backdrop-filter: blur(15px);
-      }
-
-      #sidebar.hide {
-        transform: translateX(-100%);
       }
 
       #sidebar-toggle {
@@ -199,13 +153,28 @@
         color: #646cff;
       }
 
+      /* Сброс отступов и точное заполнение экрана для корректного отображения канваса */
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #000;
+      }
+
+      .app-container {
+        height: 100%;
+        width: 100%;
+      }
+
+      /* Viewer занимает всю видимую область справа от фиксированной боковой панели */
       #viewer-container {
         position: fixed;
         top: 0;
-        left: 0;
-        width: 100vw;
+        left: 300px; /* ширина сайдбара */
+        width: calc(100vw - 300px);
         height: 100vh;
         background: #000;
+        overflow: hidden;
         z-index: 1;
       }
 
@@ -345,6 +314,22 @@
         transition: margin-left 0.3s ease;
       }
 
+      /* Исправление позиции боковой панели: фиксируем её слева */
+      #sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 300px;
+        background: rgba(18,18,18,0.85);
+        z-index: 1002;
+        display: flex;
+        flex-direction: column;
+        transform: translateX(0);
+      }
+
+  /* debug overlay removed */
+
       /* Когда панель скрыта, viewer занимает всю ширину */
       #sidebar.hide + #viewer-container {
         margin-left: 0;
@@ -376,91 +361,128 @@
         gap: 8px;
         perspective: 1000px;
         position: relative;
+        padding: 20px;
+        border-radius: 0;
+        background: transparent;
+        backdrop-filter: none;
+        box-shadow: none;
+        animation: none;
       }
 
       .logo-letter {
         font-size: 72px;
-        font-weight: 600;
+        font-weight: 700;
         font-family: "Arial", "Helvetica", sans-serif;
         text-shadow:
-          0 0 30px currentColor,
-          0 0 60px currentColor,
-          2px 2px 0px rgba(0, 0, 0, 0.5),
-          4px 4px 0px rgba(0, 0, 0, 0.3),
-          6px 6px 0px rgba(0, 0, 0, 0.2),
-          8px 8px 0px rgba(0, 0, 0, 0.1),
-          10px 10px 20px rgba(0, 0, 0, 0.4);
+          0 0 20px currentColor,
+          0 0 40px currentColor,
+          2px 2px 0px rgba(0, 0, 0, 0.8),
+          4px 4px 0px rgba(0, 0, 0, 0.6),
+          6px 6px 0px rgba(0, 0, 0, 0.4),
+          8px 8px 0px rgba(0, 0, 0, 0.2),
+          10px 10px 15px rgba(0, 0, 0, 0.6);
         transform-style: preserve-3d;
         animation: letterFloat 3s ease-in-out infinite;
         transition: all 0.3s ease;
-        filter: drop-shadow(0 0 15px currentColor);
+        filter: drop-shadow(0 0 20px currentColor) contrast(1.2) saturate(1.3);
+        position: relative;
+      }
+
+      .logo-letter::before {
+        content: attr(data-letter);
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: -1;
+        filter: blur(8px);
+        opacity: 0.7;
+        transform: scale(1.05);
       }
 
       .letter-c {
         color: #ff6b6b;
         animation-delay: 0s;
-        background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+        background: linear-gradient(45deg, #ff4757, #ff3838, #ff6b6b);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+        background-size: 200% 200%;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite;
       }
 
       .letter-o {
         color: #4ecdc4;
         animation-delay: 0.2s;
-        background: linear-gradient(45deg, #4ecdc4, #44a08d);
+        background: linear-gradient(45deg, #00d2d3, #01a3a4, #4ecdc4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+        background-size: 200% 200%;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 0.8s;
       }
 
       .letter-l {
         color: #45b7d1;
         animation-delay: 0.4s;
-        background: linear-gradient(45deg, #45b7d1, #667eea);
+        background: linear-gradient(45deg, #3742fa, #2f3542, #45b7d1);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+        background-size: 200% 200%;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 1.6s;
       }
 
       .letter-o2 {
         color: #f093fb;
         animation-delay: 0.6s;
-        background: linear-gradient(45deg, #f093fb, #f5576c);
+        background: linear-gradient(45deg, #f093fb, #f5576c, #ff9ff3);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+        background-size: 200% 200%;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 2.4s;
       }
 
       .letter-r {
         color: #feca57;
         animation-delay: 0.8s;
-        background: linear-gradient(45deg, #feca57, #ff9ff3);
+        background: linear-gradient(45deg, #feca57, #ff9ff3, #48cae4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+        background-size: 200% 200%;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 3.2s;
+      }
+
+      @keyframes colorShift {
+        0%, 100% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
       }
 
       @keyframes letterFloat {
         0%,
         100% {
           transform: translateY(0px) rotateX(0deg) rotateY(0deg) translateZ(0px);
-          filter: brightness(1) blur(0px) drop-shadow(0 0 15px currentColor);
+          filter: brightness(1) contrast(1.2) saturate(1.3) drop-shadow(0 0 20px currentColor);
         }
         25% {
           transform: translateY(-15px) rotateX(15deg) rotateY(8deg)
             translateZ(20px);
-          filter: brightness(1.4) blur(0px) drop-shadow(0 0 25px currentColor);
+          filter: brightness(1.5) contrast(1.3) saturate(1.4) drop-shadow(0 0 30px currentColor);
         }
         50% {
           transform: translateY(-30px) rotateX(0deg) rotateY(-8deg)
             translateZ(40px);
-          filter: brightness(1.6) blur(1px) drop-shadow(0 0 35px currentColor);
+          filter: brightness(1.8) contrast(1.4) saturate(1.5) drop-shadow(0 0 40px currentColor);
         }
         75% {
           transform: translateY(-15px) rotateX(-15deg) rotateY(8deg)
             translateZ(20px);
-          filter: brightness(1.3) blur(0px) drop-shadow(0 0 25px currentColor);
+          filter: brightness(1.4) contrast(1.3) saturate(1.4) drop-shadow(0 0 30px currentColor);
         }
       }
 
@@ -695,6 +717,7 @@
         box-shadow: 0 8px 20px rgba(255, 152, 0, 0.3) !important;
       }
 
+      #retouch-btn.modern-icon-btn,
       #cleanup-btn.modern-icon-btn,
       #clear-camera-view-btn.modern-icon-btn {
         background: linear-gradient(
@@ -705,6 +728,7 @@
         border-color: rgba(244, 67, 54, 0.2) !important;
       }
 
+      #retouch-btn.modern-icon-btn:hover,
       #cleanup-btn.modern-icon-btn:hover,
       #clear-camera-view-btn.modern-icon-btn:hover {
         background: linear-gradient(
@@ -1659,10 +1683,6 @@
         stroke-width: 2;
       }
 
-      .upload-btn {
-        /* Наследует стили от .btn-primary */
-      }
-
       .btn-secondary {
         display: flex;
         align-items: center;
@@ -1694,9 +1714,108 @@
         stroke-width: 2;
       }
     </style>
+
+    <!-- Плавающая иконка пользователя -->
+    <style>
+      #floating-user-button {
+        position: fixed;
+        right: 20px;
+        top: 18px;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: linear-gradient(135deg,#646cff,#8b5cf6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+        z-index: 2000;
+        cursor: pointer;
+        border: 2px solid rgba(255,255,255,0.06);
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+      }
+      #floating-user-button:focus, #floating-user-button:hover {
+        transform: scale(1.06);
+        box-shadow: 0 10px 28px rgba(0,0,0,0.6), 0 0 18px rgba(100,108,255,0.12);
+      }
+      #floating-user-button svg { width:22px; height:22px; color:#fff; }
+      #floating-user-dropdown {
+        position: fixed;
+        right: 20px;
+        top: 72px;
+        background: rgba(20,20,20,0.75);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.15);
+        color: #fff;
+        min-width: 120px; /* уменьшенная ширина в 2 раза */
+        padding: 8px;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        z-index: 2000;
+        display: none;
+        transform-origin: top right;
+        transform: scale(0.96);
+        opacity: 0;
+        transition: transform 150ms cubic-bezier(.2,.9,.2,1), opacity 150ms ease;
+        font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      }
+      #floating-user-dropdown.open {
+        display: block;
+        transform: scale(1);
+        opacity: 1;
+      }
+
+      /* Avatar in the floating button */
+      #floating-user-button img.user-avatar {
+        width:22px;
+        height:22px;
+        border-radius:50%;
+        object-fit:cover;
+        display:block;
+      }
+      /* Стили для элементов меню */
+      #floating-user-dropdown button,
+      #floating-user-dropdown a {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 8px 10px;
+        margin: 4px 0;
+        background: transparent;
+        border: none;
+        color: #e6e6e6;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease, transform 0.08s ease;
+      }
+      #floating-user-dropdown button:hover,
+      #floating-user-dropdown a:hover {
+        background: rgba(255,255,255,0.06);
+        color: #ffffff;
+        transform: translateX(2px);
+      }
+      #floating-user-dropdown .divider { height:1px; background:rgba(255,255,255,0.04); margin:8px 0; }
+      #floating-user-dropdown .divider { height:1px; background:rgba(255,255,255,0.04); margin:8px 0; }
+      #floating-user-dropdown button { width:100%; margin:6px 0; padding:8px 10px; border-radius:6px; background:transparent; border:1px solid rgba(255,255,255,0.04); color:#fff; cursor:pointer; }
+      #floating-user-dropdown a { color:#9fb1ff; text-decoration:none; display:block; margin:6px 0; }
+    </style>
   </head>
   <body>
     <div class="app-container">
+
+      <div id="floating-user-button" title="Пользователь">
+        <!-- портретная фигура человечка -->
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="12" cy="7" r="4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+  <div id="floating-user-dropdown" role="menu"></div>
+  <!-- скрытый input для загрузки аватара -->
+  <!-- ВРЕМЕННО ОТКЛЮЧЕНО: возможность загрузки пользовательской иконки на аватар -->
+  <!-- <input type="file" id="avatar-input" accept="image/*" class="hidden" /> -->
       <!-- Кнопка переключения панели (независимая) -->
       <button id="sidebar-toggle" type="button">⮜</button>
 
@@ -1746,7 +1865,7 @@
             </button>
           </div>
 
-          <h3>Сцены</h3>
+          <h3 id="scenes-title" style="color: #ffffff; text-align: left; margin-top: 0;">Сцены</h3>
           <ul id="scene-list"></ul>
         </div>
 
@@ -1868,36 +1987,36 @@
               title="Очистить вид камеры для сцены"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <polyline
-                  points="3,6 5,6 21,6"
+                <!-- Основа видеокамеры -->
+                <polygon
+                  points="23,7 16,12 23,17"
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
+                  fill="none"
                 />
-                <path
-                  d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                <rect
+                  x="1"
+                  y="5"
+                  width="15"
+                  height="14"
+                  rx="2"
+                  ry="2"
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
+                  fill="none"
                 />
+                <!-- Перечеркивающая линия -->
                 <line
-                  x1="10"
-                  y1="11"
-                  x2="10"
-                  y2="17"
+                  x1="2"
+                  y1="3"
+                  x2="22"
+                  y2="21"
                   stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                />
-                <line
-                  x1="14"
-                  y1="11"
-                  x2="14"
-                  y2="17"
-                  stroke="currentColor"
-                  stroke-width="2"
+                  stroke-width="2.5"
                   stroke-linecap="round"
                 />
               </svg>
@@ -1933,44 +2052,26 @@
               </svg>
             </button>
             <button
-              id="cleanup-btn"
+              id="retouch-btn"
               type="button"
               class="icon-btn modern-icon-btn"
-              title="Очистить хотспоты-сироты"
+              title="Удалить объект (ретушь)"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M3 6h18l-2 13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L3 6Z"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <line
-                  x1="10"
-                  y1="11"
-                  x2="10"
-                  y2="17"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                />
-                <line
-                  x1="14"
-                  y1="11"
-                  x2="14"
-                  y2="17"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                />
+                <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                <path d="M16.5 3.5l4 4L9 19H5v-4L16.5 3.5z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <button
+              id="retouch-undo-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Отменить последнюю ретушь"
+              disabled
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M9 14H5l4-4l4 4H9z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>
+                <path d="M20 20a8 8 0 1 0-6-13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
           </div>
@@ -2264,11 +2365,11 @@
                 <div class="form-group">
                   <label for="hotspot-marker-size">Размер маркера</label>
                   <select id="hotspot-marker-size" name="markerSize">
-                    <option value="0.2">Маленький</option>
-                    <option value="0.3" selected>Обычный</option>
-                    <option value="0.4">Крупный</option>
-                    <option value="0.5">Очень крупный</option>
-                    <option value="0.7">Гигант</option>
+                    <option value="0.4">Маленький</option>
+                    <option value="0.6" selected>Обычный</option>
+                    <option value="0.8">Крупный</option>
+                    <option value="1.0">Очень крупный</option>
+                    <option value="1.4">Гигант</option>
                   </select>
                 </div>
               </div>
@@ -2276,8 +2377,8 @@
               <div class="form-group">
                 <label for="hotspot-marker-icon">Иконка маркера</label>
                 <select id="hotspot-marker-icon" name="markerIcon">
-                  <option value="arrow">🔺 Стрелка</option>
-                  <option value="sphere">🔵 Круг</option>
+                  <option value="arrow">🔺 Переход между сценами</option>
+                  <option value="sphere">ℹ️ Инфоточка</option>
                   <option value="custom">🖼️ Собственная иконка</option>
                 </select>
               </div>
@@ -2290,7 +2391,7 @@
                     name="markerNoFill"
                   />
                   <label for="hotspot-marker-no-fill"
-                    >🕳️ Без заливки (только иконка)</label
+                    >🕳️ Без контура</label
                   >
                 </div>
               </div>
@@ -2521,6 +2622,7 @@
     </div>
 
     <!-- Подключение модулей -->
+  <!-- debug overlay removed -->
     <script type="module" src="main.js"></script>
     <!-- Стилизованный выпадающий список -->
     <script src="scripts/styled-select.js"></script>
@@ -2529,6 +2631,7 @@
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         // Обновление значения слайдера размера текста
+      
         const textSizeSlider = document.getElementById("hotspot-text-size");
         const textSizeValue = document.getElementById("text-size-value");
 

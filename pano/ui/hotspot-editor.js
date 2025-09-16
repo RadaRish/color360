@@ -47,9 +47,64 @@ export default class HotspotEditor {
       });
     }
 
+    // Обработчик изменения значения в селекте иконки
+    const markerIconSelect = this.form.querySelector('#hotspot-marker-icon');
+    const customIconGroup = this.form.querySelector('#custom-icon-group');
+    if (markerIconSelect && customIconGroup) {
+      markerIconSelect.addEventListener('change', (e) => {
+        // Показываем группу пользовательской иконки если выбрана custom
+        customIconGroup.style.display = e.target.value === 'custom' ? 'block' : 'none';
+        
+        // Если выбрана иконка профиля, показываем предпросмотр
+        if (e.target.value === 'profile') {
+          this.showProfileIconPreview();
+        }
+      });
+    }
+
+    // Обработчик удаления пользовательской иконки
+    const removeCustomIconBtn = this.form.querySelector('#remove-custom-icon');
+    const customIconPreview = this.form.querySelector('#custom-icon-preview');
+    const customIconImg = this.form.querySelector('#custom-icon-img');
+    if (removeCustomIconBtn && customIconPreview && customIconImg) {
+      removeCustomIconBtn.addEventListener('click', () => {
+        customIconPreview.style.display = 'none';
+        customIconImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+        
+        // Если выбрана иконка профиля, показываем предпросмотр
+        const markerIconSelect = this.form.querySelector('#hotspot-marker-icon');
+        if (markerIconSelect && markerIconSelect.value === 'profile') {
+          this.showProfileIconPreview();
+        }
+      });
+    }
+
     // Удален слайдер для размера текста — используется select
 
     // Удален слайдер для размера маркера — используется select
+  }
+
+  /**
+   * Показывает предпросмотр иконки профиля
+   */
+  showProfileIconPreview() {
+    const customIconPreview = this.form.querySelector('#custom-icon-preview');
+    const customIconImg = this.form.querySelector('#custom-icon-img');
+    
+    if (customIconPreview && customIconImg) {
+      // Создаем SVG иконку по умолчанию (портретная фигура человечка)
+      const defaultUserIcon = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      `;
+      // Преобразуем SVG в Data URL
+      const svgBlob = new Blob([defaultUserIcon], {type: 'image/svg+xml'});
+      const url = URL.createObjectURL(svgBlob);
+      customIconImg.src = url;
+      customIconPreview.style.display = 'flex';
+    }
   }
 
   show(options = {}) {
@@ -192,10 +247,23 @@ export default class HotspotEditor {
     if (markerColorInput) {
       markerColorInput.value = values.color || defaults.markerColor;
     }
-    if (markerSizeInput) markerSizeInput.value = values.size || defaults.markerSize;
+    if (markerSizeInput) {
+      const sizeValue = values.size || defaults.markerSize;
+      markerSizeInput.value = sizeValue;
+      
+      // ИСПРАВЛЕНИЕ БАГА: устанавливаем правильный selected для option
+      const options = markerSizeInput.querySelectorAll('option');
+      options.forEach(option => {
+        option.selected = false; // сначала убираем все selected
+        if (option.value === String(sizeValue)) {
+          option.selected = true; // затем помечаем нужную
+        }
+      });
+    }
     if (markerNoFillInput) markerNoFillInput.checked = !!(values.noFill ?? defaults.markerNoFill);
     if (markerIconSelect) {
-      markerIconSelect.value = values.icon || defaults.markerIcon;
+      // Гарантируем, что по умолчанию выбран современный маркер 'arrow' для хотспотов
+      markerIconSelect.value = values.icon || defaults.markerIcon || (type === 'hotspot' ? 'arrow' : 'sphere');
 
       // Показываем группу пользовательской иконки если выбрана custom
       if (customIconGroup) {
@@ -208,7 +276,15 @@ export default class HotspotEditor {
       customIconImg.src = values.customIconData;
       customIconPreview.style.display = 'flex';
     } else if (customIconPreview) {
-      customIconPreview.style.display = 'none';
+      // Если пользовательская иконка не выбрана, но выбрана иконка профиля,
+      // показываем иконку по умолчанию (портретная фигура человечка)
+      const markerIconSelect = this.form.querySelector('#hotspot-marker-icon');
+      if (markerIconSelect && markerIconSelect.value === 'profile') {
+        this.showProfileIconPreview();
+      } else if (markerIconSelect && markerIconSelect.value !== 'custom') {
+        // Если не выбрана пользовательская иконка и не выбрана иконка профиля, скрываем предпросмотр
+        customIconPreview.style.display = 'none';
+      }
     }
 
     // Заполняем поля видео-области и анимированного объекта
@@ -297,6 +373,8 @@ export default class HotspotEditor {
 
   async handleSubmit() {
     const formData = new FormData(this.form);
+    const rawMarkerSize = formData.get('markerSize');
+    const parsedMarkerSize = rawMarkerSize != null ? parseFloat(String(rawMarkerSize).replace(',', '.')) : undefined;
     const data = {
       title: formData.get('title'),
       description: formData.get('description'),
@@ -307,10 +385,19 @@ export default class HotspotEditor {
       textBold: !!formData.get('textBold'),
       textUnderline: !!formData.get('textUnderline'),
       color: formData.get('markerColor'),
-      size: formData.get('markerSize'),
+      size: isNaN(parsedMarkerSize) ? undefined : parsedMarkerSize,
       icon: formData.get('markerIcon') || (this.currentType === 'hotspot' ? 'arrow' : 'sphere'),
       noFill: !!formData.get('markerNoFill')
     };
+
+    console.log('📝 Payload формы хотспота:', {
+      type: this.currentType,
+      title: data.title,
+      color: data.color,
+      size: data.size,
+      icon: data.icon,
+      noFill: data.noFill
+    });
 
     // Обработка видео-области
     const videoSource = formData.get('videoSource');
@@ -319,7 +406,7 @@ export default class HotspotEditor {
 
     // ПРОВЕРКА: для video-area/animated-object источник видео ОБЯЗАТЕЛЕН
     if ((this.currentType === 'video-area' || this.currentType === 'animated-object') && !videoSource) {
-      console.warn('❌ Для видео-области необходимо выбрать источник видео!');
+
       return;
     }
 
@@ -343,7 +430,7 @@ export default class HotspotEditor {
           data.videoData = videoData;
           data.videoUrl = videoData; // Используем Data URL
         } else {
-          console.warn('Пожалуйста, выберите видеофайл');
+
           return;
         }
       } else if (videoSource === 'url') {
@@ -354,11 +441,11 @@ export default class HotspotEditor {
 
           // Валидация URL
           if (!this.isValidVideoUrl(videoUrl, videoSource)) {
-            console.warn('Пожалуйста, введите корректную ссылку на видео');
+
             return;
           }
         } else {
-          console.warn('Пожалуйста, введите ссылку на видео');
+
           return;
         }
       }
@@ -395,12 +482,22 @@ export default class HotspotEditor {
         data.customIconData = imageData;
       } else if (customIconImg && customIconImg.src && customIconImg.src.startsWith('data:')) {
         // Используем существующую загруженную иконку
-        data.customIconData = customIconImg.src;
+        // Проверяем, является ли это иконкой по умолчанию (SVG)
+        if (customIconImg.src.includes('blob:')) {
+          // Это иконка по умолчанию, не сохраняем её как пользовательскую
+          // Удаляем customIconData, чтобы использовать иконку по умолчанию
+          delete data.customIconData;
+        } else {
+          data.customIconData = customIconImg.src;
+        }
       } else {
         // Нет пользовательской иконки
-        console.warn('Пожалуйста, выберите изображение для пользовательской иконки');
+
         return;
       }
+    } else if (data.icon === 'profile') {
+      // Для иконки профиля удаляем пользовательские данные, чтобы использовать иконку по умолчанию
+      delete data.customIconData;
     }
 
     // Хромакей параметры для animated-object
@@ -414,7 +511,7 @@ export default class HotspotEditor {
 
     // Валидация
     if (!data.title.trim()) {
-      console.warn('Пожалуйста, введите название');
+
       return;
     }
 
@@ -471,7 +568,7 @@ export default class HotspotEditor {
     if (source === 'url') {
       // Поддержка Data URL (base64 видео)
       if (url.startsWith('data:video/')) {
-        console.log('✅ Data URL видео распознан как валидный');
+
         return true;
       }
 
@@ -534,8 +631,8 @@ export default class HotspotEditor {
       textBold: !!formData.get('textBold'),
       textUnderline: !!formData.get('textUnderline'),
       markerColor: formData.get('markerColor') || '#00ff00',
-      markerSize: formData.get('markerSize') || '0.3',
-      markerIcon: formData.get('markerIcon') || 'arrow',
+  markerSize: formData.get('markerSize') || '0.6',
+  markerIcon: (formData.get('markerIcon') === 'scene-transition' ? 'arrow' : (formData.get('markerIcon') || 'arrow')),
       markerNoFill: !!formData.get('markerNoFill')
     };
 
@@ -558,7 +655,7 @@ export default class HotspotEditor {
       try {
         return JSON.parse(savedDefaults);
       } catch (error) {
-        console.warn('Ошибка загрузки настроек по умолчанию:', error);
+
       }
     }
 
@@ -579,7 +676,7 @@ export default class HotspotEditor {
           textBold: false,
           textUnderline: false,
           markerColor: '#00ff00',
-          markerSize: '0.3',
+          markerSize: '0.6',
           markerIcon: 'arrow',
           markerNoFill: false
         };
@@ -591,7 +688,7 @@ export default class HotspotEditor {
           textBold: false,
           textUnderline: false,
           markerColor: '#ffcc00',
-          markerSize: '0.3',
+          markerSize: '0.6',
           markerIcon: 'sphere',
           markerNoFill: false
         };
@@ -603,7 +700,7 @@ export default class HotspotEditor {
           textBold: false,
           textUnderline: false,
           markerColor: '#ff6600',
-          markerSize: '0.3',
+          markerSize: '0.6',
           markerIcon: 'cube',
           markerNoFill: false
         };
@@ -615,7 +712,7 @@ export default class HotspotEditor {
           textBold: false,
           textUnderline: false,
           markerColor: '#00ff00',
-          markerSize: '0.3',
+          markerSize: '0.6',
           markerIcon: 'arrow',
           markerNoFill: false
         };
@@ -633,7 +730,7 @@ export default class HotspotEditor {
     notification.style.cssText = `
       position: fixed;
       top: 20px;
-      right: 20px;
+      right: 80px; /* смещаем левее, чтобы не перекрывать аватар */
       background: #4CAF50;
       color: white;
       padding: 12px 20px;

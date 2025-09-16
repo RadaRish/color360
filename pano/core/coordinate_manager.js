@@ -23,22 +23,21 @@ export default class CoordinateManager {
     this.camera = scene.querySelector('a-camera') || scene.querySelector('[camera]');
 
     if (!this.camera) {
-      console.warn('⚠️ Камера не найдена в сцене');
+
       return;
     }
 
     // Инициализируем THREE.js raycaster при наличии THREE
     if (typeof THREE !== 'undefined') {
       this.raycaster = new THREE.Raycaster();
-      console.log('📐 CoordinateManager инициализирован с THREE.js raycaster');
+
     } else {
-      console.warn('⚠️ THREE.js не доступен, точность перетаскивания может быть снижена');
+
     }
 
     // Добавляем глобальные обработчики событий
     this.setupGlobalEventHandlers();
 
-    console.log('✅ CoordinateManager успешно инициализирован');
   }
 
   /**
@@ -63,7 +62,6 @@ export default class CoordinateManager {
       this.endDrag(e);
     });
 
-    console.log('🎮 Глобальные обработчики событий для перетаскивания настроены');
   }
 
   /**
@@ -107,7 +105,6 @@ export default class CoordinateManager {
     // Нормализуем точку на сферу нужного радиуса
     const normalized = this.normalizeToSphere(point.x, point.y, point.z);
 
-    console.log('🎯 Позиция клика на сфере:', normalized);
     return normalized;
   }
 
@@ -133,7 +130,6 @@ export default class CoordinateManager {
    * Настраивает перетаскивание для маркера с callback для обновления позиции
    */
   setupMarkerDragging(markerElement, hotspotId, onPositionUpdate = null) {
-    console.log('🔧 Настраиваем перетаскивание для маркера:', hotspotId);
 
     // Сохраняем callback для обновления позиции
     if (onPositionUpdate) {
@@ -144,7 +140,7 @@ export default class CoordinateManager {
     markerElement.addEventListener('mousedown', (event) => {
       // Защита от дублирования событий
       if (markerElement._mousedownInProgress) {
-        console.log('🚫 Дублирование mousedown предотвращено для:', hotspotId);
+
         return;
       }
       markerElement._mousedownInProgress = true;
@@ -156,19 +152,19 @@ export default class CoordinateManager {
       const isVideoArea = markerData?.type === 'video-area';
 
       if (window._dragSystemBlocked && !isVideoArea) {
-        console.log('🛑 ГЛОБАЛЬНАЯ БЛОКИРОВКА системы перетаскивания активна - НЕМЕДЛЕННЫЙ ВЫХОД');
+
         event.preventDefault();
         event.stopPropagation();
         return;
       }
 
       if (window._dragSystemBlocked && isVideoArea) {
-        console.log('🎬 ВИДЕО-ОБЛАСТЬ: игнорируем глобальную блокировку для перетаскивания');
+
       }
 
       // Проверяем флаги блокировки на маркере - теперь A-Frame компонент сам управляет ими
       if (markerElement._rightClickHandled || markerElement._doubleClickHandled) {
-        console.log('🚫 Координатный менеджер: mousedown заблокирован приоритетными обработчиками на маркере');
+
         return;
       }
 
@@ -178,7 +174,7 @@ export default class CoordinateManager {
       const timeSinceRightClick = currentTime - (lastRightClickTime || 0);
 
       if (timeSinceRightClick < 200) { // Расширяем окно до 200ms
-        console.log('🚫 ЖЕСТКАЯ БЛОКИРОВКА: недавний правый клик (', timeSinceRightClick, 'ms назад) - НЕ запускаем перетаскивание');
+
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -191,7 +187,7 @@ export default class CoordinateManager {
         this.viewerManager._rightClickDetected ||
         this._rightClickDetected
       )) {
-        console.log('🚫 Перетаскивание заблокировано - правый клик обнаружен системой');
+
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -201,7 +197,7 @@ export default class CoordinateManager {
       const isRightClick = (event.button === 2) || (event.which === 3) || (event.buttons === 2);
 
       if (isRightClick) {
-        console.log('🚫 CoordinateManager: Определена правая кнопка мыши через A-Frame - НЕ запускаем перетаскивание');
+
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -228,47 +224,45 @@ export default class CoordinateManager {
       }
     });
 
-    console.log('✅ Перетаскивание настроено для маркера:', hotspotId);
   }
 
   /**
    * Начинает перетаскивание маркера
    */
   startDrag(event, markerElement, hotspotId) {
-    console.log('🖱️ Начало перетаскивания маркера:', hotspotId);
 
     // Проверяем границы для видео-областей ПЕРЕД началом перетаскивания
     if (markerElement._isVideoArea && this.viewerManager) {
-      console.log('🎯 Проверяем границы для видео-области:', hotspotId);
+
       const hotspot = this.viewerManager.hotspotManager?.findHotspotById(hotspotId);
       if (hotspot) {
         const width = hotspot.videoWidth || 4;
         const height = hotspot.videoHeight || 3;
-        console.log('🎯 Размеры видео-области для проверки:', { width, height });
+
         const isWithinBounds = this.viewerManager.isMouseOverVideoArea(event, markerElement, width, height);
 
         if (!isWithinBounds) {
-          console.log('🚫 Перетаскивание отменено - курсор вне границ видео-области:', hotspotId);
+
           return;
         }
-        console.log('✅ Курсор в границах видео-области - разрешаем перетаскивание:', hotspotId);
+
       } else {
-        console.warn('⚠️ Не найден hotspot для видео-области:', hotspotId);
+
       }
     } else if (markerElement._isVideoArea) {
-      console.warn('⚠️ ViewerManager недоступен для проверки границ видео-области');
+
     } else {
       // Для обычных хотспотов проверяем попадание в область маркера
       const hotspot = this.viewerManager?.hotspotManager?.findHotspotById(hotspotId);
       if (hotspot && this.viewerManager) {
-        console.log('🎯 Проверяем границы для обычного хотспота:', hotspotId);
+
         const isWithinBounds = this.viewerManager.isMouseOverMarker(event, markerElement);
 
         if (!isWithinBounds) {
-          console.log('🚫 Перетаскивание отменено - курсор вне области маркера:', hotspotId);
+
           return;
         }
-        console.log('✅ Курсор в области маркера - разрешаем перетаскивание:', hotspotId);
+
       }
     }
 
@@ -279,12 +273,12 @@ export default class CoordinateManager {
 
     // ГЛОБАЛЬНАЯ проверка блокировки системы перетаскивания
     if (window._dragSystemBlocked) {
-      console.log('🛑 АВАРИЙНАЯ ОСТАНОВКА startDrag: ГЛОБАЛЬНАЯ блокировка системы перетаскивания');
+
       return;
     }
 
     if (timeSinceRightClick < 300) { // Еще больше времени
-      console.log('🛑 АВАРИЙНАЯ ОСТАНОВКА startDrag: недавний правый клик (', timeSinceRightClick, 'ms назад)');
+
       return;
     }
 
@@ -295,7 +289,7 @@ export default class CoordinateManager {
       this.viewerManager._rightClickDetected ||
       this._rightClickDetected
     )) {
-      console.log('🚫 startDrag отменен - правый клик обнаружен системой');
+
       return;
     }
 
@@ -332,20 +326,19 @@ export default class CoordinateManager {
    * Начинает перетаскивание видео-области (специальная версия)
    */
   startVideoAreaDragging(markerElement, videoPlane, hotspot, event) {
-    console.log('🎬 Начало перетаскивания видео-области:', hotspot?.id);
 
     // Проверяем границы видео-области
     if (this.viewerManager) {
       const width = hotspot?.videoWidth || 4;
       const height = hotspot?.videoHeight || 3;
-      console.log('🎯 Размеры видео-области для проверки:', { width, height });
+
       const isWithinBounds = this.viewerManager.isMouseOverVideoArea(event, markerElement, width, height);
 
       if (!isWithinBounds) {
-        console.log('🚫 Перетаскивание видео-области отменено - курсор вне границ');
+
         return;
       }
-      console.log('✅ Курсор в границах видео-области - разрешаем перетаскивание');
+
     }
 
     // Используем существующую логику startDrag
@@ -455,8 +448,6 @@ export default class CoordinateManager {
       return;
     }
 
-    console.log('🏁 Завершение перетаскивания маркера:', this.draggedMarker.hotspotId);
-
     const markerElement = this.draggedMarker.element;
     const hotspotId = this.draggedMarker.hotspotId;
 
@@ -494,7 +485,7 @@ export default class CoordinateManager {
     if (window.hotspotManager) {
       try {
         window.hotspotManager.updateHotspotPosition(hotspotId, position);
-        console.log('💾 Позиция маркера сохранена:', hotspotId, position);
+
       } catch (error) {
         console.error('❌ Ошибка сохранения позиции маркера:', error);
       }
@@ -524,8 +515,6 @@ export default class CoordinateManager {
     markerElement.setAttribute('data-hotspot-id', hotspot.id);
     markerElement.setAttribute('data-draggable', 'true');
 
-    console.log('✅ Создан перетаскиваемый маркер:', hotspot.id, spherePosition);
-
     return markerElement;
   }
 
@@ -551,18 +540,16 @@ export default class CoordinateManager {
       }
     });
 
-    console.log(`🔄 Режим перетаскивания ${enabled ? 'включен' : 'выключен'} для ${markers.length} маркеров`);
   }
 
   /**
    * Очищает все связи и обработчики для конкретного маркера
    */
   cleanupMarker(hotspotId) {
-    console.log('🧹 Очищаем CoordinateManager связи для маркера:', hotspotId);
 
     // Если это тот маркер, который сейчас перетаскивается, останавливаем перетаскивание
     if (this.draggedMarker && this.draggedMarker.id === `marker-${hotspotId}`) {
-      console.log('🛑 Останавливаем перетаскивание удаляемого маркера');
+
       this.stopDrag();
     }
 
@@ -571,6 +558,5 @@ export default class CoordinateManager {
       this.draggedMarker = null;
     }
 
-    console.log('✅ CoordinateManager связи очищены для:', hotspotId);
   }
 }

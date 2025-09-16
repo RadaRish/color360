@@ -138,7 +138,9 @@ class ModernMarkerGenerator {
       'transport': { name: 'Транспорт', icon: 'transport', description: 'Транспортные услуги', shape: 'rounded-rect' },
       'warning': { name: 'Предупреждение', icon: 'warning', description: 'Важное уведомление', shape: 'triangle' },
       'star': { name: 'Избранное', icon: 'star', description: 'Особо важные точки', shape: 'star' },
-      'settings': { name: 'Настройки', icon: 'settings', description: 'Параметры и настройки', shape: 'hexagon' }
+      'settings': { name: 'Настройки', icon: 'settings', description: 'Параметры и настройки', shape: 'hexagon' },
+  // Удалено: отдельная иконка для перехода между сценами — используем стрелку
+  'scene-transition': { name: 'Переход между сценами', icon: 'compass', description: 'Переход между сценами (стрелка)', shape: 'arrow' }
     };
   }
 
@@ -302,7 +304,7 @@ class ModernMarkerGenerator {
     const center = this.center;
     const radius = center * 0.7;
 
-    // Если включен режим "без заливки", возвращаем null
+  // Если включен режим "без контура" (ранее: без заливки), возвращаем null
     if (noFill) {
       return null;
     }
@@ -392,6 +394,9 @@ class ModernMarkerGenerator {
         return this.createWebIcon(center, center, iconSize);
       case 'animation':
         return this.createAnimationIcon(center, center, iconSize);
+      case 'scene-transition':
+        // Маршрутизируем на стрелку
+        return this.createCompassIcon(center, center, iconSize, scheme, noFill);
       default:
         return this.createInfoIcon(center, center, iconSize, scheme, noFill);
     }
@@ -453,61 +458,62 @@ class ModernMarkerGenerator {
     defs.appendChild(gradient);
     defs.appendChild(shadowFilter);
 
-    // Создаём единую объёмную стрелку без дублирования (укороченная и более широкая)
-    const arrowBody = document.createElementNS(svgNS, 'path');
-
-    // Определяем патх для единой стрелки (укороченная и более широкая)
-    const arrowPath = `
-      M ${cx} ${cy - size * 1.0}
-      L ${cx - size * 0.5} ${cy - size * 0.3}
-      L ${cx - size * 0.25} ${cy - size * 0.3}
-      L ${cx - size * 0.25} ${cy + size * 0.8}
-      L ${cx + size * 0.25} ${cy + size * 0.8}
-      L ${cx + size * 0.25} ${cy - size * 0.3}
-      L ${cx + size * 0.5} ${cy - size * 0.3}
-      Z
-    `;
-
-    arrowBody.setAttribute('d', arrowPath);
-
-    // В режиме без заливки стрелка тоже должна реагировать
-    if (noFill) {
-      arrowBody.setAttribute('fill', 'none');
-      arrowBody.setAttribute('stroke', 'rgba(255, 255, 255, 0.9)');
-      arrowBody.setAttribute('stroke-width', '16'); // Увеличена толщина контура ещё в 2 раза
-    } else {
-      arrowBody.setAttribute('fill', `url(#${gradientId})`);
-      arrowBody.setAttribute('stroke', 'rgba(255, 255, 255, 0.9)');
-      arrowBody.setAttribute('stroke-width', '3');
-      arrowBody.setAttribute('filter', `url(#${shadowFilterId})`);
-    }
-
-    arrowBody.setAttribute('stroke-linejoin', 'round');
-    arrowBody.setAttribute('stroke-linecap', 'round');
-
-    // Добавляем блик для объёма (только если не в режиме без заливки)
-    const highlight = document.createElementNS(svgNS, 'path');
+  // Создаем круглый контур (только обводка, без заливки фона)
+  // В режиме "без контура" показываем ТОЛЬКО шеврон, без круга
+    let backgroundCircle = null;
     if (!noFill) {
-      const highlightPath = `
-        M ${cx - size * 0.08} ${cy - size * 0.9}
-        L ${cx - size * 0.35} ${cy - size * 0.4}
-        L ${cx - size * 0.18} ${cy - size * 0.4}
-        L ${cx - size * 0.18} ${cy + size * 0.6}
-        L ${cx - size * 0.08} ${cy + size * 0.6}
-        L ${cx - size * 0.08} ${cy - size * 0.8}
-        Z
-      `;
-
-      highlight.setAttribute('d', highlightPath);
-      highlight.setAttribute('fill', 'rgba(255, 255, 255, 0.5)');
-      highlight.setAttribute('opacity', '0.8');
+      backgroundCircle = document.createElementNS(svgNS, 'circle');
+      backgroundCircle.setAttribute('cx', cx);
+      backgroundCircle.setAttribute('cy', cy);
+      backgroundCircle.setAttribute('r', size * 0.9);
+      backgroundCircle.setAttribute('fill', 'none');
+      backgroundCircle.setAttribute('stroke', `url(#${gradientId})`);
+      backgroundCircle.setAttribute('stroke-width', '12');
+      backgroundCircle.setAttribute('filter', `url(#${shadowFilterId})`);
     }
+
+    // Создаём шеврон - две линии образующие стрелку вверх (как в PNG файле)
+    const chevronGroup = document.createElementNS(svgNS, 'g');
+    
+    // Левая линия шеврона
+    const leftLine = document.createElementNS(svgNS, 'path');
+    leftLine.setAttribute('d', `M ${cx - size * 0.3} ${cy + size * 0.15} L ${cx} ${cy - size * 0.3}`);
+    leftLine.setAttribute('fill', 'none');
+    if (!noFill) {
+      leftLine.setAttribute('stroke', `url(#${gradientId})`);
+      leftLine.setAttribute('stroke-width', '18');
+      leftLine.setAttribute('filter', `url(#${shadowFilterId})`);
+    } else {
+      leftLine.setAttribute('stroke', scheme && scheme.primary ? scheme.primary : '#ffffff');
+      leftLine.setAttribute('stroke-width', '17');
+    }
+    leftLine.setAttribute('stroke-linecap', 'round');
+    leftLine.setAttribute('stroke-linejoin', 'round');
+
+    // Правая линия шеврона
+    const rightLine = document.createElementNS(svgNS, 'path');
+    rightLine.setAttribute('d', `M ${cx} ${cy - size * 0.3} L ${cx + size * 0.3} ${cy + size * 0.15}`);
+    rightLine.setAttribute('fill', 'none');
+    if (!noFill) {
+      rightLine.setAttribute('stroke', `url(#${gradientId})`);
+      rightLine.setAttribute('stroke-width', '18');
+      rightLine.setAttribute('filter', `url(#${shadowFilterId})`);
+    } else {
+      rightLine.setAttribute('stroke', scheme && scheme.primary ? scheme.primary : '#ffffff');
+      rightLine.setAttribute('stroke-width', '17');
+    }
+    rightLine.setAttribute('stroke-linecap', 'round');
+    rightLine.setAttribute('stroke-linejoin', 'round');
+
+    chevronGroup.appendChild(leftLine);
+    chevronGroup.appendChild(rightLine);
 
     group.appendChild(defs);
-    group.appendChild(arrowBody);
-    if (!noFill) {
-      group.appendChild(highlight);
+    if (backgroundCircle) {
+      group.appendChild(backgroundCircle);
     }
+    group.appendChild(chevronGroup);
+    
     return group;
   }
 
@@ -548,9 +554,9 @@ class ModernMarkerGenerator {
     circleGradient.appendChild(stop3);
     defs.appendChild(circleGradient);
 
-    // ИСПРАВЛЕНО: Убираем фон для инфоточки в режиме без заливки, но оставляем контур
+  // ИСПРАВЛЕНО: Убираем фон для инфоточки в режиме "без контура", но оставляем контур
     if (noFill) {
-      // В режиме без заливки создаем только контур круга
+  // В режиме "без контура" создаем только контур круга
       const circleOutline = document.createElementNS(svgNS, 'circle');
       circleOutline.setAttribute('cx', cx);
       circleOutline.setAttribute('cy', cy);
@@ -600,14 +606,20 @@ class ModernMarkerGenerator {
       group.appendChild(dotShadow);
     }
 
-    // Создаем букву "i" - точка сверху (всегда белая для контраста)
+    // Создаем букву "i" - точка сверху
     const dot = document.createElementNS(svgNS, 'circle');
     dot.setAttribute('cx', cx);
     dot.setAttribute('cy', cy - size * 0.3);
     dot.setAttribute('r', size * 0.12);
-    dot.setAttribute('fill', '#ffffff');
-    dot.setAttribute('stroke', 'rgba(0, 0, 0, 0.3)');
-    dot.setAttribute('stroke-width', '1');
+    if (noFill) {
+      dot.setAttribute('fill', 'none');
+      dot.setAttribute('stroke', scheme && scheme.primary ? scheme.primary : '#ffffff');
+      dot.setAttribute('stroke-width', '6');
+    } else {
+      dot.setAttribute('fill', '#ffffff');
+      dot.setAttribute('stroke', 'rgba(0, 0, 0, 0.3)');
+      dot.setAttribute('stroke-width', '1');
+    }
     group.appendChild(dot);
 
     // Тень для линии (только если нужна заливка)
@@ -622,15 +634,21 @@ class ModernMarkerGenerator {
       group.appendChild(lineShadow);
     }
 
-    // Создаем букву "i" - вертикальная линия (всегда белая для контраста)
+    // Создаем букву "i" - вертикальная линия
     const line = document.createElementNS(svgNS, 'rect');
     line.setAttribute('x', cx - size * 0.08);
     line.setAttribute('y', cy - size * 0.05);
     line.setAttribute('width', size * 0.16);
     line.setAttribute('height', size * 0.6);
-    line.setAttribute('fill', '#ffffff');
-    line.setAttribute('stroke', 'rgba(0, 0, 0, 0.3)');
-    line.setAttribute('stroke-width', '1');
+    if (noFill) {
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', scheme && scheme.primary ? scheme.primary : '#ffffff');
+      line.setAttribute('stroke-width', '8');
+    } else {
+      line.setAttribute('fill', '#ffffff');
+      line.setAttribute('stroke', 'rgba(0, 0, 0, 0.3)');
+      line.setAttribute('stroke-width', '1');
+    }
     line.setAttribute('rx', size * 0.04);
     group.appendChild(line);
 
@@ -707,6 +725,123 @@ class ModernMarkerGenerator {
     return group;
   }
 
+  createSceneTransitionIcon(cx, cy, size, scheme, noFill = false) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const group = document.createElementNS(svgNS, 'g');
+    group.setAttribute('transform', 'rotate(-45 ' + cx + ' ' + cy + ')'); // Rotate 45 degrees counter-clockwise
+
+    // Создаём уникальный ID для градиента
+    const gradientId = `scene-transition-gradient-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const shadowFilterId = `scene-transition-shadow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Создаём градиент для 3D эффекта
+    const defs = document.createElementNS(svgNS, 'defs');
+
+    // Основной градиент для объёма (белый градиент)
+    const gradient = document.createElementNS(svgNS, 'linearGradient');
+    gradient.setAttribute('id', gradientId);
+    gradient.setAttribute('x1', '0%');
+    gradient.setAttribute('y1', '0%');
+    gradient.setAttribute('x2', '100%');
+    gradient.setAttribute('y2', '100%');
+
+    const stop1 = document.createElementNS(svgNS, 'stop');
+    stop1.setAttribute('offset', '0%');
+    stop1.setAttribute('stop-color', '#ffffff');
+    stop1.setAttribute('stop-opacity', '1');
+
+    const stop2 = document.createElementNS(svgNS, 'stop');
+    stop2.setAttribute('offset', '50%');
+    stop2.setAttribute('stop-color', '#f0f0f0');
+    stop2.setAttribute('stop-opacity', '0.95');
+
+    const stop3 = document.createElementNS(svgNS, 'stop');
+    stop3.setAttribute('offset', '100%');
+    stop3.setAttribute('stop-color', '#e0e0e0');
+    stop3.setAttribute('stop-opacity', '0.9');
+
+    gradient.appendChild(stop1);
+    gradient.appendChild(stop2);
+    gradient.appendChild(stop3);
+
+    // Фильтр для тени
+    const shadowFilter = document.createElementNS(svgNS, 'filter');
+    shadowFilter.setAttribute('id', shadowFilterId);
+    shadowFilter.setAttribute('x', '-50%');
+    shadowFilter.setAttribute('y', '-50%');
+    shadowFilter.setAttribute('width', '200%');
+    shadowFilter.setAttribute('height', '200%');
+
+    const dropShadow = document.createElementNS(svgNS, 'feDropShadow');
+    dropShadow.setAttribute('dx', '2');
+    dropShadow.setAttribute('dy', '3');
+    dropShadow.setAttribute('stdDeviation', '4');
+    dropShadow.setAttribute('flood-color', 'rgba(0, 0, 0, 0.3)');
+
+    shadowFilter.appendChild(dropShadow);
+    defs.appendChild(gradient);
+    defs.appendChild(shadowFilter);
+
+    // Создаём двустороннюю стрелку
+    const arrowBody = document.createElementNS(svgNS, 'path');
+
+    // Определяем путь для двусторонней стрелки
+    const arrowPath = `
+      M ${cx} ${cy - size * 0.8}
+      L ${cx - size * 0.4} ${cy - size * 0.2}
+      L ${cx - size * 0.2} ${cy - size * 0.2}
+      L ${cx - size * 0.2} ${cy + size * 0.6}
+      L ${cx - size * 0.4} ${cy + size * 0.6}
+      L ${cx} ${cy + size * 1.2}
+      L ${cx + size * 0.4} ${cy + size * 0.6}
+      L ${cx + size * 0.2} ${cy + size * 0.6}
+      L ${cx + size * 0.2} ${cy - size * 0.2}
+      L ${cx + size * 0.4} ${cy - size * 0.2}
+      Z
+    `;
+
+    arrowBody.setAttribute('d', arrowPath);
+
+  // В режиме "без контура" стрелка тоже должна реагировать
+    if (noFill) {
+      arrowBody.setAttribute('fill', 'none');
+      arrowBody.setAttribute('stroke', 'rgba(255, 255, 255, 0.9)');
+      arrowBody.setAttribute('stroke-width', '16'); // Увеличена толщина контура ещё в 2 раза
+    } else {
+      arrowBody.setAttribute('fill', `url(#${gradientId})`);
+      arrowBody.setAttribute('stroke', 'rgba(255, 255, 255, 0.9)');
+      arrowBody.setAttribute('stroke-width', '3');
+      arrowBody.setAttribute('filter', `url(#${shadowFilterId})`);
+    }
+
+    arrowBody.setAttribute('stroke-linejoin', 'round');
+    arrowBody.setAttribute('stroke-linecap', 'round');
+
+  // Добавляем блик для объёма (только если не в режиме "без контура")
+    const highlight = document.createElementNS(svgNS, 'path');
+    if (!noFill) {
+      const highlightPath = `
+        M ${cx - size * 0.05} ${cy - size * 0.7}
+        L ${cx - size * 0.3} ${cy - size * 0.1}
+        L ${cx - size * 0.15} ${cy - size * 0.1}
+        L ${cx - size * 0.15} ${cy + size * 0.5}
+        L ${cx - size * 0.05} ${cy + size * 0.5}
+        Z
+      `;
+
+      highlight.setAttribute('d', highlightPath);
+      highlight.setAttribute('fill', 'rgba(255, 255, 255, 0.6)');
+      highlight.setAttribute('opacity', '0.8');
+    }
+
+    group.appendChild(defs);
+    group.appendChild(arrowBody);
+    if (!noFill) {
+      group.appendChild(highlight);
+    }
+    return group;
+  }
+
   addMarkerAnimations(svg, scheme) {
     svg.style.transition = 'all 0.3s ease';
     svg.style.cursor = 'pointer';
@@ -720,6 +855,166 @@ class ModernMarkerGenerator {
       svg.style.transform = 'scale(1)';
       svg.style.filter = 'none';
     });
+  }
+
+  /**
+   * Инфоточка в стиле карт: каплевидная форма с иконкой "i" внутри
+   * - Классический дизайн GPS-метки с округлой верхней частью и заострённым низом
+   * - В режиме noFill рисуется только контур
+   */
+  createCircleOnlyMarker(size = this.highResolution, options = {}) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const scheme = options.color ? this.createCustomColorScheme(options.color) : (this.colorSchemes['info-point']);
+    const noFill = !!options.noFill;
+
+    // SVG контейнер
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('viewBox', `0 0 ${this.highResolution} ${this.highResolution}`);
+    svg.setAttribute('class', 'modern-marker modern-marker-infopoint');
+
+    const defs = document.createElementNS(svgNS, 'defs');
+
+    // Градиент для заливки основной каплевидной формы
+    const gradientId = `infopoint-gradient-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const mainGradient = document.createElementNS(svgNS, 'radialGradient');
+    mainGradient.setAttribute('id', gradientId);
+    mainGradient.setAttribute('cx', '35%');
+    mainGradient.setAttribute('cy', '30%');
+    mainGradient.setAttribute('r', '65%');
+    
+    const stop1 = document.createElementNS(svgNS, 'stop'); 
+    stop1.setAttribute('offset', '0%'); 
+    stop1.setAttribute('stop-color', scheme.accent || '#ffffff'); 
+    stop1.setAttribute('stop-opacity', '1');
+    
+    const stop2 = document.createElementNS(svgNS, 'stop'); 
+    stop2.setAttribute('offset', '70%'); 
+    stop2.setAttribute('stop-color', scheme.primary || '#2196F3'); 
+    stop2.setAttribute('stop-opacity', '0.95');
+    
+    const stop3 = document.createElementNS(svgNS, 'stop'); 
+    stop3.setAttribute('offset', '100%'); 
+    stop3.setAttribute('stop-color', scheme.secondary || '#1976D2'); 
+    stop3.setAttribute('stop-opacity', '0.9');
+    
+    mainGradient.appendChild(stop1); mainGradient.appendChild(stop2); mainGradient.appendChild(stop3);
+
+    // Фильтр для тени
+    const shadowFilterId = `infopoint-shadow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const shadowFilter = document.createElementNS(svgNS, 'filter');
+    shadowFilter.setAttribute('id', shadowFilterId);
+    shadowFilter.setAttribute('x', '-50%');
+    shadowFilter.setAttribute('y', '-50%');
+    shadowFilter.setAttribute('width', '200%');
+    shadowFilter.setAttribute('height', '200%');
+
+    const dropShadow = document.createElementNS(svgNS, 'feDropShadow');
+    dropShadow.setAttribute('dx', '3');
+    dropShadow.setAttribute('dy', '5');
+    dropShadow.setAttribute('stdDeviation', '6');
+    dropShadow.setAttribute('flood-color', 'rgba(0, 0, 0, 0.3)');
+    shadowFilter.appendChild(dropShadow);
+
+    defs.appendChild(mainGradient);
+    defs.appendChild(shadowFilter);
+    svg.appendChild(defs);
+
+    const cx = this.center, cy = this.center * 0.85; // Смещаем центр чуть выше для каплевидной формы
+    const radius = this.center * 0.45; // Радиус верхней округлой части
+    const dropHeight = this.center * 0.3; // Высота заострённого "хвостика"
+
+    // Создаём каплевидную форму (path для точного контроля)
+    const dropPath = document.createElementNS(svgNS, 'path');
+    
+    // Путь каплевидной формы: круглая верхняя часть + заострённый низ
+    const pathData = `
+      M ${cx} ${cy + radius + dropHeight}
+      Q ${cx - radius * 0.3} ${cy + radius * 0.8} ${cx - radius * 0.7} ${cy + radius * 0.3}
+      A ${radius} ${radius} 0 1 1 ${cx + radius * 0.7} ${cy + radius * 0.3}
+      Q ${cx + radius * 0.3} ${cy + radius * 0.8} ${cx} ${cy + radius + dropHeight}
+      Z
+    `;
+    
+    dropPath.setAttribute('d', pathData);
+    
+    if (noFill) {
+      dropPath.setAttribute('fill', 'none');
+      dropPath.setAttribute('stroke', scheme.primary || '#2196F3');
+      // Было 12 → стало 18 (x1.5)
+      dropPath.setAttribute('stroke-width', '18');
+      dropPath.setAttribute('stroke-linejoin', 'round');
+    } else {
+      dropPath.setAttribute('fill', `url(#${gradientId})`);
+      dropPath.setAttribute('stroke', 'rgba(255, 255, 255, 0.6)');
+      // Было 3 → стало 4.5 (x1.5)
+      dropPath.setAttribute('stroke-width', '4.5');
+      dropPath.setAttribute('filter', `url(#${shadowFilterId})`);
+    }
+    
+    svg.appendChild(dropPath);
+
+    // Добавляем букву "i" в центр верхней округлой части
+    if (!noFill) {
+      // Точка над "i"
+      const iDot = document.createElementNS(svgNS, 'circle');
+      iDot.setAttribute('cx', cx);
+      iDot.setAttribute('cy', cy - radius * 0.25);
+      iDot.setAttribute('r', radius * 0.15);
+      iDot.setAttribute('fill', '#ffffff');
+      iDot.setAttribute('opacity', '0.95');
+      svg.appendChild(iDot);
+
+      // Вертикальная линия "i"
+      const iLine = document.createElementNS(svgNS, 'rect');
+      iLine.setAttribute('x', cx - radius * 0.08);
+      iLine.setAttribute('y', cy - radius * 0.05);
+      iLine.setAttribute('width', radius * 0.16);
+      iLine.setAttribute('height', radius * 0.5);
+      iLine.setAttribute('rx', radius * 0.08);
+      iLine.setAttribute('fill', '#ffffff');
+      iLine.setAttribute('opacity', '0.95');
+      svg.appendChild(iLine);
+    } else {
+      // В режиме noFill делаем "i" в цвете контура
+      const iDot = document.createElementNS(svgNS, 'circle');
+      iDot.setAttribute('cx', cx);
+      iDot.setAttribute('cy', cy - radius * 0.25);
+      iDot.setAttribute('r', radius * 0.15);
+      iDot.setAttribute('fill', 'none');
+      iDot.setAttribute('stroke', scheme.primary || '#2196F3');
+  // Было 4 → стало 6 (x1.5)
+  iDot.setAttribute('stroke-width', '6');
+      svg.appendChild(iDot);
+
+      const iLine = document.createElementNS(svgNS, 'rect');
+      iLine.setAttribute('x', cx - radius * 0.08);
+      iLine.setAttribute('y', cy - radius * 0.05);
+      iLine.setAttribute('width', radius * 0.16);
+      iLine.setAttribute('height', radius * 0.5);
+      iLine.setAttribute('rx', radius * 0.08);
+      iLine.setAttribute('fill', 'none');
+      iLine.setAttribute('stroke', scheme.primary || '#2196F3');
+  // Было 4 → стало 6 (x1.5)
+  iLine.setAttribute('stroke-width', '6');
+      svg.appendChild(iLine);
+    }
+
+    // Блик для объёмности (только в режиме с заливкой)
+    if (!noFill) {
+      const highlight = document.createElementNS(svgNS, 'ellipse');
+      highlight.setAttribute('cx', cx - radius * 0.25);
+      highlight.setAttribute('cy', cy - radius * 0.3);
+      highlight.setAttribute('rx', radius * 0.3);
+      highlight.setAttribute('ry', radius * 0.2);
+      highlight.setAttribute('fill', 'rgba(255, 255, 255, 0.4)');
+      highlight.setAttribute('opacity', '0.8');
+      svg.appendChild(highlight);
+    }
+
+    this.addMarkerAnimations(svg, scheme);
+    return svg;
   }
 }
 

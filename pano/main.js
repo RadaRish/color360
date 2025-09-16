@@ -5,6 +5,7 @@ import SceneManager from './core/scene_manager.js';
 import ViewerManager from './core/viewer_manager.js';
 import HotspotEditor from './ui/hotspot-editor.js';
 import SceneList from './ui/scene_list.js';
+import RetouchManager from './ui/retouch_manager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const viewerContainer = document.getElementById('viewer-container');
@@ -12,6 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('viewer-container не найден в DOM!');
     return;
   }
+
+  // Initialize floating user menu
+  initializeFloatingUserMenu();
 
   setTimeout(() => {
     try {
@@ -21,6 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const projectManager = new ProjectManager(sceneManager, hotspotManager);
       const exportManager = new ExportManager(sceneManager, hotspotManager, projectManager);
       const hotspotEditor = new HotspotEditor('hotspot-editor-modal');
+
+  // Экспорт-менеджеру нужен доступ к viewerManager, чтобы корректно сохранять yaw/pitch/FOV
+  exportManager.viewerManager = viewerManager;
 
       // Загружаем и применяем сохраненные настройки
       const settings = viewerManager.getDefaultSettings();
@@ -45,15 +52,17 @@ document.addEventListener('DOMContentLoaded', () => {
         hotspotEditor,
         exportManager,
         projectManager,
+        // будет установлен позже
+        retouchManager: null,
         // Функция для показа уведомлений
         showNotification: (message, type = 'info') => {
           const notification = document.createElement('div');
           notification.style.cssText = `
                         position: fixed;
                         top: 20px;
-                        right: 20px;
+                        right: 80px; /* смещаем левее, чтобы не перекрывать аватар */
                         padding: 12px 20px;
-                        background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+                        background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : type === 'warning' ? '#ff9800' : '#2196F3'};
                         color: white;
                         border-radius: 4px;
                         z-index: 10000;
@@ -71,8 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
 
-      const sceneList = new SceneList(sceneManager, document.getElementById('scene-list'));
+  const sceneList = new SceneList(sceneManager, document.getElementById('scene-list'));
       sceneList.render();
+
+  // Инициализация ретуши (маска на канвасе + undo)
+  const retouchManager = new RetouchManager(viewerManager, sceneManager);
+  window.app.retouchManager = retouchManager;
 
       // Глобальные функции для редактирования и удаления, вызываемые из A-Frame компонентов
       window.editMarker = async (hotspotId) => {
@@ -83,6 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentScene = sceneManager.getSceneById(hotspot.sceneId);
 
         try {
+          // Скрываем маркер чтобы он не следовал за курсором
+          try { window.viewerManager && window.viewerManager.hideMarker(hotspotId); } catch (_) {}
+
           const data = await hotspotEditor.showEditMode(hotspot);
 
           if (data) {
@@ -90,6 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (error) {
           console.error('Ошибка при редактировании маркера:', error);
+        } finally {
+          // Восстанавливаем видимость маркера
+          try { window.viewerManager && window.viewerManager.showMarker(hotspotId); } catch (_) {}
         }
       };
 
@@ -139,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Десктопное меню
             sidebar.classList.toggle('hide');
             const isHidden = sidebar.classList.contains('hide');
-            toggle.textContent = isHidden ? '⮞' : '⮜';
+            toggle.textContent = isHidden ? '⮜' : '⮜';
 
             // Прямое управление позицией кнопки
             if (isHidden) {
@@ -180,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('resize', () => {
           if (window.innerWidth > 768) {
             sidebar.classList.remove('show');
-            toggle.textContent = sidebar.classList.contains('hide') ? '⮞' : '⮜';
+            toggle.textContent = sidebar.classList.contains('hide') ? '⮜' : '⮜';
           } else {
             sidebar.classList.remove('hide');
             toggle.textContent = sidebar.classList.contains('show') ? '✕' : '☰';
@@ -222,41 +241,45 @@ document.addEventListener('DOMContentLoaded', () => {
         };
       }
 
-      // Кнопка экспорта
-      const exportBtn = document.getElementById('export-btn');
-      if (exportBtn) {
-        exportBtn.onclick = async () => {
+  // Кнопка экспорта удалена из основной панели - экспорт доступен через плавающее меню пользователя
+
+      // Кнопка ретуши (Удалить объект)
+      const retouchBtn = document.getElementById('retouch-btn');
+      const retouchUndoBtn = document.getElementById('retouch-undo-btn');
+      if (retouchBtn) {
+        retouchBtn.onclick = async () => {
+          const currentScene = sceneManager.getCurrentScene();
+          if (!currentScene) {
+            alert('Нет активной сцены для ретуши');
+            return;
+          }
           try {
-            await exportManager.exportProject();
-          } catch (error) {
-            console.error('Ошибка экспорта:', error);
-            alert('Ошибка при экспорте: ' + error.message);
+            await retouchManager.startMaskDraw(currentScene);
+            // После завершения маски отправляем на /api/retouch
+            const result = await retouchManager.applyRetouch(currentScene);
+            if (result?.applied) {
+              window.app?.showNotification?.('Ретушь применена', 'success');
+              if (retouchUndoBtn) retouchUndoBtn.disabled = !retouchManager.canUndo(currentScene.id);
+            } else {
+              window.app?.showNotification?.('Ретушь отменена', 'info');
+            }
+          } catch (e) {
+            console.error('Ошибка ретуши:', e);
+            window.app?.showNotification?.('Ошибка ретуши: ' + (e?.message || e), 'error');
           }
         };
       }
-
-      // Кнопка очистки хотспотов-сирот
-      const cleanupBtn = document.getElementById('cleanup-btn');
-      if (cleanupBtn) {
-        cleanupBtn.onclick = () => {
+      if (retouchUndoBtn) {
+        retouchUndoBtn.onclick = async () => {
+          const currentScene = sceneManager.getCurrentScene();
+          if (!currentScene) return;
           try {
-            const scenes = sceneManager.getAllScenes();
-            const validSceneIds = scenes.map(scene => scene.id);
-            const orphanedCount = hotspotManager.cleanupOrphanedHotspots(validSceneIds);
-
-            if (orphanedCount > 0) {
-              alert(`Очистка завершена! Удалено ${orphanedCount} хотспотов-сирот.`);
-              // Обновляем отображение текущей сцены
-              const currentScene = sceneManager.getCurrentScene();
-              if (currentScene) {
-                viewerManager.restoreMarkersForScene(currentScene.id);
-              }
-            } else {
-              alert('Хотспоты-сироты не найдены. Данные уже чистые!');
+            const ok = await retouchManager.undo(currentScene);
+            if (ok) {
+              window.app?.showNotification?.('Отменено', 'info');
             }
-          } catch (error) {
-            console.error('Ошибка очистки:', error);
-            alert('Ошибка при очистке: ' + error.message);
+          } finally {
+            retouchUndoBtn.disabled = !retouchManager.canUndo(currentScene?.id);
           }
         };
       }
@@ -329,6 +352,22 @@ document.addEventListener('DOMContentLoaded', () => {
       if (zoomResetBtn) {
         zoomResetBtn.onclick = () => {
           if (viewerManager && viewerManager.resetZoom) viewerManager.resetZoom();
+        };
+      }
+
+      // Кнопка сохранения проекта в основной панели
+      const saveProjectBtn = document.getElementById('save-project');
+      if (saveProjectBtn) {
+        saveProjectBtn.onclick = () => {
+          saveLocalProject();
+        };
+      }
+
+      // Кнопка экспорта в основной панели
+      const exportBtn = document.getElementById('export-btn');
+      if (exportBtn) {
+        exportBtn.onclick = () => {
+          exportTour();
         };
       }
 
@@ -457,23 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
 
-      // Сохранение проекта
-      const saveProjectBtn = document.getElementById('save-project');
-      if (saveProjectBtn) {
-        saveProjectBtn.onclick = () => {
-          try {
-            const json = projectManager.saveProject();
-            const blob = new Blob([json], { type: 'application/json' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'panorama-project.json';
-            a.click();
-            URL.revokeObjectURL(a.href);
-          } catch (error) {
-            alert('Ошибка при сохранении проекта');
-          }
-        };
-      }
+  // Сохранение проекта: кнопка сохранения удалена из левой панели. Используйте плавающее меню пользователя.
 
       // Загрузка проекта
       const loadProjectBtn = document.getElementById('load-project-btn');
@@ -614,8 +637,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     Цвет хотспотов
                                 </label>
                                 <label>
-                                    <input type="range" id="default-hotspot-size" min="0.1" max="1" step="0.1" value="0.3">
-                                    Размер хотспотов: <span id="hotspot-size-value">0.3</span>
+                                    <input type="range" id="default-hotspot-size" min="0.1" max="1" step="0.1" value="0.6">
+                                    Размер хотспотов: <span id="hotspot-size-value">0.6</span>
                                 </label>
                             </div>
                             
@@ -628,8 +651,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     Цвет инфоточек
                                 </label>
                                 <label>
-                                    <input type="range" id="default-infopoint-size" min="0.1" max="1" step="0.1" value="0.3">
-                                    Размер инфоточек: <span id="infopoint-size-value">0.3</span>
+                                    <input type="range" id="default-infopoint-size" min="0.1" max="1" step="0.1" value="0.5">
+                                    Размер инфоточек: <span id="infopoint-size-value">0.5</span>
                                 </label>
                             </div>
                         </div>
@@ -794,3 +817,566 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 100);
 });
+
+// Initialize floating user menu
+function initializeFloatingUserMenu() {
+  const floatingUserButton = document.getElementById('floating-user-button');
+  const floatingUserDropdown = document.getElementById('floating-user-dropdown');
+  const avatarInput = document.getElementById('avatar-input');
+  
+  if (!floatingUserButton || !floatingUserDropdown) return;
+
+  // If avatar exists in localStorage, show it in the button
+  const existingAvatar = localStorage.getItem('color360_avatar');
+  if (existingAvatar) {
+    const img = document.createElement('img');
+    img.className = 'user-avatar';
+    img.src = existingAvatar;
+    // replace button content (SVG) with avatar image
+    floatingUserButton.innerHTML = '';
+    floatingUserButton.appendChild(img);
+  }
+  
+  // make button focusable for keyboard users
+  floatingUserButton.setAttribute('tabindex', '0');
+
+  // Toggle dropdown on button click
+  floatingUserButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    floatingUserDropdown.classList.toggle('open');
+  });
+
+  // Close on Escape (works when dropdown is open)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      if (floatingUserDropdown.classList.contains('open')) {
+        floatingUserDropdown.classList.remove('open');
+      }
+    }
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (floatingUserDropdown.classList.contains('open') &&
+        !floatingUserButton.contains(e.target) &&
+        !floatingUserDropdown.contains(e.target)) {
+      floatingUserDropdown.classList.remove('open');
+    }
+  });
+  
+  // Update menu based on user authentication status
+  updateFloatingUserMenu();
+
+  // If token exists, fetch profile to update avatar from server
+  const token = localStorage.getItem('color360_token');
+  if (token) {
+    fetch('/api/user/profile', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(profile => {
+        if (profile && profile.avatar) {
+          localStorage.setItem('color360_avatar', profile.avatar);
+          // update button image
+          const btn = document.getElementById('floating-user-button');
+          if (btn) {
+            const existing = btn.querySelector('img.user-avatar');
+            if (existing) existing.src = profile.avatar; else {
+              const img = document.createElement('img'); img.className = 'user-avatar'; img.src = profile.avatar; btn.innerHTML = ''; btn.appendChild(img);
+            }
+          }
+          updateFloatingUserMenu();
+        }
+      }).catch(()=>{});
+  }
+
+  // Listen for avatar updates from profile page
+  window.addEventListener('message', (ev) => {
+    try {
+      const data = ev.data || {};
+      if (data && data.type === 'avatar-updated' && data.url) {
+        localStorage.setItem('color360_avatar', data.url);
+        updateFloatingUserMenu();
+      }
+    } catch(e){}
+  });
+}
+
+// Listen for avatar updates from profile popup via postMessage
+window.addEventListener('message', (e) => {
+  try {
+    const data = e.data || {};
+    if (data && data.type === 'avatar-updated' && data.url) {
+      localStorage.setItem('color360_avatar', data.url);
+      const btnImg = document.querySelector('#floating-user-button img.user-avatar');
+      if (btnImg) btnImg.src = data.url;
+      const menuImg = document.querySelector('#floating-user-dropdown .user-avatar');
+      if (menuImg) menuImg.src = data.url;
+    }
+  } catch (err) { }
+});
+
+// Also listen to storage events in case another tab updated avatar
+window.addEventListener('storage', (e) => {
+  if (e.key === 'color360_avatar' && e.newValue) {
+    const url = e.newValue;
+    const btnImg = document.querySelector('#floating-user-button img.user-avatar');
+    if (btnImg) btnImg.src = url;
+    const menuImg = document.querySelector('#floating-user-dropdown .user-avatar');
+    if (menuImg) menuImg.src = url;
+  }
+});
+
+// Update floating user menu based on authentication status
+function updateFloatingUserMenu() {
+  const floatingUserDropdown = document.getElementById('floating-user-dropdown');
+  if (!floatingUserDropdown) return;
+  
+  const userToken = localStorage.getItem('color360_token');
+  
+  if (userToken) {
+    // User is logged in
+    const userJson = localStorage.getItem('color360_user');
+    let user = null;
+    try {
+      user = userJson ? JSON.parse(userJson) : null;
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+    }
+    
+    const isAdmin = user && user.isAdmin;
+    const userName = user ? user.name : 'Пользователь';
+    
+    floatingUserDropdown.innerHTML = `
+      <div class="user-info">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div style="width:28px;height:28px;overflow:hidden;border-radius:50%;background:#222;display:flex;align-items:center;justify-content:center;">
+            <img class="user-avatar" src="${localStorage.getItem('color360_avatar') || ''}" alt="avatar" onerror="this.style.display='none'" />
+          </div>
+          <div>Здравствуйте, ${userName}</div>
+        </div>
+  <button id="new-project-btn">Создать новый проект</button>
+        <button id="save-server-project-btn">Сохранить проект</button>
+        <button id="save-local-project-logged-btn">Сохранить проект локально</button>
+        <button id="load-local-project-logged-btn">Загрузить проект локально</button>
+  <button id="load-server-project-btn">Загрузить проект</button>
+        <div class="divider"></div>
+  <a href="${isAdmin ? '/admin' : '/profile.html'}" target="_blank">${isAdmin ? 'Админ панель' : 'Личный кабинет'}</a>
+        <button id="logout-btn">Выйти</button>
+      </div>
+    `;
+    
+    // Add event listeners for menu items
+  document.getElementById('new-project-btn')?.addEventListener('click', createNewProject);
+  document.getElementById('save-server-project-btn')?.addEventListener('click', async () => { await createNewServerProject(); floatingUserDropdown.classList.remove('open'); });
+  document.getElementById('save-local-project-logged-btn')?.addEventListener('click', () => { saveLocalProject(); floatingUserDropdown.classList.remove('open'); });
+  document.getElementById('load-local-project-logged-btn')?.addEventListener('click', () => { loadLocalProject(); floatingUserDropdown.classList.remove('open'); });
+  document.getElementById('load-server-project-btn')?.addEventListener('click', loadServerProjects);
+  document.getElementById('logout-btn')?.addEventListener('click', logoutUser);
+  } else {
+    // User is not logged in
+    floatingUserDropdown.innerHTML = `
+      <button id="login-btn">Вход</button>
+      <button id="register-btn">Регистрация</button>
+      <div class="divider"></div>
+      <button id="save-local-project-btn">Сохранить проект локально</button>
+      <button id="load-local-project-btn">Загрузить проект из локального хранилища</button>
+      <button id="export-tour-btn">Экспортировать панорамный тур</button>
+    `;
+    
+    // Add event listeners for menu items
+    document.getElementById('login-btn')?.addEventListener('click', showLoginModal);
+    document.getElementById('register-btn')?.addEventListener('click', showRegisterModal);
+    document.getElementById('save-local-project-btn')?.addEventListener('click', () => { saveLocalProject(); floatingUserDropdown.classList.remove('open'); });
+    document.getElementById('load-local-project-btn')?.addEventListener('click', () => { loadLocalProject(); floatingUserDropdown.classList.remove('open'); });
+    document.getElementById('export-tour-btn')?.addEventListener('click', () => { exportTour(); floatingUserDropdown.classList.remove('open'); });
+  }
+
+  // Avatar input handler (attach only if input exists)
+  // ВРЕМЕННО ОТКЛЮЧЕНО: возможность загрузки пользовательской иконки на аватар
+  /*
+  const avatarInputEl = document.getElementById('avatar-input');
+  if (avatarInputEl) {
+    avatarInputEl.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const dataUrl = await new Promise((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.readAsDataURL(file);
+        });
+        localStorage.setItem('color360_avatar', dataUrl);
+        // Update current avatar image in menu and button
+        const img = document.querySelector('#floating-user-dropdown .user-avatar');
+        if (img) img.src = dataUrl;
+        const btnImg = document.querySelector('#floating-user-button img.user-avatar');
+        if (btnImg) btnImg.src = dataUrl; else {
+          const newImg = document.createElement('img');
+          newImg.className = 'user-avatar';
+          newImg.src = dataUrl;
+          // clear existing svg
+          const btn = document.getElementById('floating-user-button');
+          btn.innerHTML = '';
+          btn.appendChild(newImg);
+        }
+        floatingUserDropdown.classList.remove('open');
+        window.app?.showNotification?.('Аватар обновлен', 'success');
+      } catch (err) {
+        console.error('Ошибка при загрузке аватара', err);
+        window.app?.showNotification?.('Ошибка при загрузке аватара', 'error');
+      }
+    });
+  }
+  */
+}
+
+// Function to create a new project
+function createNewProject() {
+  if (confirm('Вы уверены, что хотите создать новый проект? Все несохраненные изменения будут потеряны.')) {
+    // Clear current project
+    if (window.app && window.app.sceneManager && window.app.hotspotManager) {
+      window.app.sceneManager.clearScenes();
+      window.app.hotspotManager.loadHotspots([]);
+      window.app.sceneManager.renderSceneList();
+      window.app.showNotification('Новый проект создан', 'success');
+    }
+  document.getElementById('floating-user-dropdown').style.display = 'none';
+  }
+}
+
+// Function to save project locally
+function saveLocalProject() {
+  try {
+    if (window.app && window.app.projectManager) {
+      const json = window.app.projectManager.saveProject();
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'panorama-project.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      window.app.showNotification('Проект сохранен локально', 'success');
+    }
+  } catch (error) {
+    console.error('Ошибка при сохранении проекта:', error);
+    window.app?.showNotification?.('Ошибка при сохранении проекта', 'error');
+  }
+}
+
+// Function to load project from local storage
+function loadLocalProject() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const content = await file.text();
+        if (window.app && window.app.projectManager) {
+          const success = await window.app.projectManager.loadProject(content);
+          if (success) {
+            window.app.sceneManager.renderSceneList();
+            window.app.showNotification('Проект загружен', 'success');
+          } else {
+            window.app.showNotification('Ошибка при загрузке проекта', 'error');
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке проекта:', error);
+        window.app?.showNotification?.('Ошибка при загрузке проекта', 'error');
+      }
+    }
+  };
+  
+  input.click();
+}
+
+// Function to export tour
+function exportTour() {
+  try {
+    if (window.app && window.app.exportManager) {
+      window.app.exportManager.exportProject();
+    }
+  } catch (error) {
+    console.error('Ошибка при экспорте:', error);
+    window.app?.showNotification?.('Ошибка при экспорте проекта', 'error');
+  }
+}
+
+// Function to load projects from server
+async function loadServerProjects() {
+  try {
+    const userToken = localStorage.getItem('color360_token');
+    if (!userToken) {
+      window.app?.showNotification?.('Пользователь не авторизован', 'error');
+      return;
+    }
+    
+  const response = await fetch('/api/projects', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${userToken}`
+      }
+    });
+    
+    if (response.ok) {
+      const sessions = await response.json();
+      showServerProjectsModal(sessions);
+    } else {
+      window.app?.showNotification?.('Ошибка при загрузке проектов', 'error');
+    }
+  } catch (error) {
+    console.error('Ошибка при загрузке проектов:', error);
+    window.app?.showNotification?.('Ошибка при загрузке проектов', 'error');
+  }
+}
+
+// Function to show server projects modal
+function showServerProjectsModal(sessions) {
+  // Create modal for selecting server projects
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+    backdrop-filter: blur(8px);
+  `;
+  
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: rgba(26, 26, 26, 0.95);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 400px;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+  `;
+  
+  modalContent.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h3 style="margin: 0; color: white;">Сохраненные проекты</h3>
+      <button id="close-modal-btn" style="background: none; border: none; color: white; font-size: 24px; cursor: pointer;">&times;</button>
+    </div>
+    <div id="sessions-list" style="margin-bottom: 20px;">
+      ${sessions.length > 0 ? 
+        sessions.map(session => `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(255, 255, 255, 0.05); border-radius: 8px; margin-bottom: 8px;">
+            <div>
+              <div style="color: white; font-weight: 500;">${session.name}</div>
+              <div style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Создан: ${new Date(session.created).toLocaleDateString('ru-RU')}</div>
+            </div>
+            <div>
+              <button class="load-session-btn" data-id="${session.id}" style="background: #646cff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px;">Загрузить</button>
+              <button class="delete-session-btn" data-id="${session.id}" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Удалить</button>
+            </div>
+          </div>
+        `).join('') : 
+        '<div style="color: rgba(255, 255, 255, 0.7); text-align: center; padding: 20px;">Нет сохраненных проектов</div>'
+      }
+    </div>
+    <button id="create-new-session-btn" style="background: #28a745; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; width: 100%;">Создать новый проект</button>
+  `;
+  
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+  
+  // Add event listeners
+  document.getElementById('close-modal-btn').addEventListener('click', () => {
+    document.body.removeChild(modal);
+  });
+  
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      document.body.removeChild(modal);
+    }
+  });
+  
+  document.querySelectorAll('.load-session-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const sessionId = e.target.getAttribute('data-id');
+      await loadServerProject(sessionId);
+      document.body.removeChild(modal);
+    });
+  });
+  
+  document.querySelectorAll('.delete-session-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const sessionId = e.target.getAttribute('data-id');
+      await deleteServerProject(sessionId);
+      // Refresh the modal
+      document.body.removeChild(modal);
+      loadServerProjects();
+    });
+  });
+  
+  document.getElementById('create-new-session-btn').addEventListener('click', async () => {
+    await createNewServerProject();
+    document.body.removeChild(modal);
+  });
+}
+
+// Function to load a project from server
+async function loadServerProject(sessionId) {
+  try {
+    const userToken = localStorage.getItem('color360_token');
+    if (!userToken) {
+      window.app?.showNotification?.('Пользователь не авторизован', 'error');
+      return;
+    }
+    
+  const response = await fetch(`/api/projects/${sessionId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${userToken}`
+      }
+    });
+    
+    if (response.ok) {
+      const session = await response.json();
+      if (window.app && window.app.projectManager) {
+        const success = await window.app.projectManager.loadProject(JSON.stringify(session.data));
+        if (success) {
+          window.app.sceneManager.renderSceneList();
+          window.app.showNotification('Проект загружен с сервера', 'success');
+        } else {
+          window.app.showNotification('Ошибка при загрузке проекта', 'error');
+        }
+      }
+    } else {
+      window.app?.showNotification?.('Ошибка при загрузке проекта', 'error');
+    }
+  } catch (error) {
+    console.error('Ошибка при загрузке проекта:', error);
+    window.app?.showNotification?.('Ошибка при загрузке проекта', 'error');
+  }
+}
+
+// Function to delete a project from server
+async function deleteServerProject(sessionId) {
+  try {
+    const userToken = localStorage.getItem('color360_token');
+    if (!userToken) {
+      window.app?.showNotification?.('Пользователь не авторизован', 'error');
+      return;
+    }
+    
+  const response = await fetch(`/api/projects/${sessionId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${userToken}`
+      }
+    });
+    
+    if (response.ok) {
+      window.app?.showNotification?.('Проект удален', 'success');
+    } else {
+      window.app?.showNotification?.('Ошибка при удалении проекта', 'error');
+    }
+  } catch (error) {
+    console.error('Ошибка при удалении проекта:', error);
+    window.app?.showNotification?.('Ошибка при удалении проекта', 'error');
+  }
+}
+
+// Function to create a new project on server
+async function createNewServerProject() {
+  try {
+    const userToken = localStorage.getItem('color360_token');
+    if (!userToken) {
+      window.app?.showNotification?.('Пользователь не авторизован', 'error');
+      return;
+    }
+    
+    const projectName = prompt('Введите название нового проекта:');
+    if (!projectName) return;
+    
+    // Get current project data
+    let projectData = {};
+    if (window.app && window.app.projectManager) {
+      try {
+        projectData = JSON.parse(window.app.projectManager.saveProject());
+      } catch (e) {
+        console.error('Error getting project data:', e);
+      }
+    }
+    
+    // Проверим количество уже сохранённых проектов на сервере и применим лимит 3
+    try {
+  const listResp = await fetch('/api/projects', {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (listResp.ok) {
+        const sessions = await listResp.json();
+        if (Array.isArray(sessions) && sessions.length >= 3) {
+          window.app?.showNotification?.('Достигнуто максимальное количество сохранённых проектов (3). Удалите ненужный проект на сервере или обновите тариф.', 'error');
+          return;
+        }
+      }
+    } catch (e) {
+
+      // Продолжим попытку создания — сервер может сам отклонить запрос
+    }
+
+  const response = await fetch('/api/projects', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userToken}`
+      },
+      body: JSON.stringify({
+        name: projectName,
+        data: projectData
+      })
+    });
+    
+    if (response.ok) {
+      window.app?.showNotification?.('Проект создан на сервере', 'success');
+    } else {
+      const result = await response.json();
+      window.app?.showNotification?.(result.message || 'Ошибка при создании проекта', 'error');
+    }
+  } catch (error) {
+    console.error('Ошибка при создании проекта:', error);
+    window.app?.showNotification?.('Ошибка при создании проекта', 'error');
+  }
+}
+
+// Function to show login modal
+function showLoginModal() {
+  // This would typically redirect to the main site login page
+  if (confirm('Перейти на страницу входа?')) {
+    window.open('/', '_blank');
+  }
+  document.getElementById('floating-user-dropdown').style.display = 'none';
+}
+
+// Function to show register modal
+function showRegisterModal() {
+  // This would typically redirect to the main site registration page
+  if (confirm('Перейти на страницу регистрации?')) {
+    window.open('/', '_blank');
+  }
+  document.getElementById('floating-user-dropdown').style.display = 'none';
+}
+
+// Function to logout user
+function logoutUser() {
+  localStorage.removeItem('color360_token');
+  localStorage.removeItem('color360_user');
+  updateFloatingUserMenu();
+  window.app?.showNotification?.('Вы вышли из аккаунта', 'info');
+  document.getElementById('floating-user-dropdown').style.display = 'none';
+}

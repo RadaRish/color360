@@ -15,7 +15,7 @@ export default class SceneManager {
     try {
       // ЗАЩИТА: блокируем только автоматически созданные проблематичные сцены без src
       if (scene.name && scene.name.match(/^\d+\.(JPG|jpg)$/) && !scene.src) {
-        console.warn('🚫 Блокируем добавление проблематичной автоматической сцены:', scene.name);
+
         return false;
       }
 
@@ -34,7 +34,6 @@ export default class SceneManager {
         await this.switchToScene(scene.id);
       }
 
-      console.log('Сцена добавлена:', scene.name);
       return true;
     } catch (error) {
       console.error('Ошибка при добавлении сцены:', error);
@@ -48,7 +47,6 @@ export default class SceneManager {
   }
 
   removeScene(sceneId) {
-    console.log('🗑️ Попытка удалить сцену:', sceneId);
 
     const index = this.scenes.findIndex(s => s.id === sceneId);
     if (index === -1) {
@@ -57,7 +55,6 @@ export default class SceneManager {
     }
 
     const scene = this.scenes[index];
-    console.log('🗑️ Найдена сцена для удаления:', scene.name);
 
     // Проверяем, можно ли удалить сцену (должна остаться хотя бы одна)
     if (this.scenes.length <= 1) {
@@ -69,7 +66,7 @@ export default class SceneManager {
     // Удаляем все хотспоты связанные с этой сценой
     if (window.hotspotManager) {
       const hotspotsToDelete = window.hotspotManager.getHotspotsForScene(sceneId);
-      console.log('🗑️ Удаляем', hotspotsToDelete.length, 'хотспотов для сцены:', scene.name);
+
       hotspotsToDelete.forEach(hotspot => {
         window.hotspotManager.deleteHotspot(hotspot.id);
       });
@@ -79,7 +76,7 @@ export default class SceneManager {
     if (this.currentScene && this.currentScene.id === sceneId) {
       const remainingScenes = this.scenes.filter(s => s.id !== sceneId);
       if (remainingScenes.length > 0) {
-        console.log('🔄 Переключаемся на другую сцену перед удалением');
+
         this.switchToScene(remainingScenes[0].id);
       } else {
         this.currentScene = null;
@@ -89,8 +86,6 @@ export default class SceneManager {
 
     // Удаляем сцену из массива
     this.scenes.splice(index, 1);
-    console.log('✅ Сцена успешно удалена:', scene.name);
-    console.log('📊 Осталось сцен:', this.scenes.length);
 
     return Promise.resolve(true);
   }
@@ -110,7 +105,7 @@ export default class SceneManager {
     const scene = this.getSceneById(sceneId);
     if (scene) {
       scene.name = newName;
-      console.log(`📝 Сцена переименована: ${sceneId} -> "${newName}"`);
+
       return true;
     }
     console.error(`❌ Сцена с ID ${sceneId} не найдена для переименования`);
@@ -128,13 +123,18 @@ export default class SceneManager {
   }
 
   async switchToScene(sceneId) {
-    console.log('🔄 switchToScene вызван для сцены:', sceneId);
+
     console.trace('📍 Стек вызовов switchToScene');
 
     // ЗАЩИТА от повторных вызовов в течение короткого времени
     const now = Date.now();
     if (this._lastSwitchTime && this._lastSwitchTarget === sceneId && (now - this._lastSwitchTime) < 200) { // Уменьшаем время защиты до 200ms
-      console.log('🛡️ Дублированный вызов switchToScene заблокирован - последний вызов', (now - this._lastSwitchTime), 'ms назад');
+
+      // ИСПРАВЛЕНИЕ: Убедимся, что фон черный даже при блокировке
+      if (this.viewerManager && this.viewerManager.aframeSky) {
+        this.viewerManager.aframeSky.setAttribute('color', '#000000');
+        this.viewerManager.aframeSky.setAttribute('opacity', '1');
+      }
       return true;
     }
     this._lastSwitchTime = now;
@@ -143,11 +143,16 @@ export default class SceneManager {
     const scene = this.getSceneById(sceneId);
     if (!scene) {
       console.error('Сцена не найдена:', sceneId);
+      // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке
+      if (this.viewerManager && this.viewerManager.aframeSky) {
+        this.viewerManager.aframeSky.setAttribute('color', '#000000');
+        this.viewerManager.aframeSky.setAttribute('opacity', '1');
+      }
       return false;
     }
 
     if (scene === this.currentScene) {
-      console.log('ℹ️ Уже на этой сцене:', sceneId);
+
       return true; // Уже на этой сцене
     }
 
@@ -156,9 +161,15 @@ export default class SceneManager {
       this.viewerManager.clearMarkers();
 
       // Загружаем новую панораму
+
       const success = await this.viewerManager.setPanorama(scene.src);
       if (!success) {
         console.error('Не удалось загрузить панораму для сцены:', scene.name);
+        // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке загрузки
+        if (this.viewerManager.aframeSky) {
+          this.viewerManager.aframeSky.setAttribute('color', '#000000');
+          this.viewerManager.aframeSky.setAttribute('opacity', '1');
+        }
         return false;
       }
 
@@ -168,17 +179,14 @@ export default class SceneManager {
       setTimeout(() => {
         this._lastSwitchTime = null;
         this._lastSwitchTarget = null;
-        console.log('🔓 Защита от повторных переходов сброшена');
+
       }, 1000); // Сбрасываем через 1 секунду
 
       // Восстанавливаем маркеры новой сцены
       if (this.hotspotManager) {
         const sceneHotspots = this.hotspotManager.getHotspotsForScene(sceneId);
-        console.log('🔄 Восстанавливаем маркеры для сцены:', sceneId, 'найдено маркеров:', sceneHotspots.length);
-        console.log('🔍 Маркеры для восстановления:', sceneHotspots.map(h => ({ id: h.id, title: h.title, sceneId: h.sceneId, color: h.color, type: h.type, icon: h.icon })));
 
         sceneHotspots.forEach(hotspot => {
-          console.log('🎯 Восстанавливаем маркер:', hotspot.id, 'для сцены:', hotspot.sceneId, 'с цветом:', hotspot.color, 'тип:', hotspot.type, 'иконка:', hotspot.icon);
 
           // ВАЖНО: перед созданием маркера восстанавливаем все его данные
           this.hotspotManager.restoreHotspotData(hotspot);
@@ -191,75 +199,113 @@ export default class SceneManager {
 
           // ИСПРАВЛЕНИЕ: Для видео-областей проверяем и пересоздаем видео-элементы
           if (hotspot.type === 'video-area' && hotspot.videoUrl) {
-            console.log('🎬 Обнаружена видео-область, проверяем видео-элемент:', hotspot.id);
 
             const videoId = `video-${hotspot.id}`;
             let videoEl = document.getElementById(videoId);
 
             if (!videoEl) {
-              console.log('🔧 Видео-элемент отсутствует, создаем заново для:', hotspot.id);
+
               this.viewerManager.createMissingVideoElement(hotspot);
             } else if (videoEl.src !== hotspot.videoUrl) {
-              console.log('🔄 Обновляем src видео-элемента для:', hotspot.id, 'новый URL:', hotspot.videoUrl);
+
               videoEl.src = hotspot.videoUrl;
               videoEl.load();
             } else {
-              console.log('✅ Видео-элемент корректен для:', hotspot.id);
+
             }
           }
 
           this.viewerManager.createVisualMarker(hotspot);
         });
 
-        console.log('✅ Восстановлено', sceneHotspots.length, 'маркеров для сцены:', sceneId);
         // После восстановления маркеров пробуем еще раз подтянуть большие видео из IndexedDB
         try {
           if (window.hotspotManager && typeof window.hotspotManager._restoreVideosFromIndexedDB === 'function') {
             const needRestore = sceneHotspots.some(h => h.type === 'video-area' && h.hasVideo && !h.videoUrl);
             if (needRestore) {
-              console.log('🔄 post-switchToScene: обнаружены видео без URL — запускаем восстановление из IndexedDB');
+
               setTimeout(() => {
                 try { window.hotspotManager._restoreVideosFromIndexedDB(); } catch (e) { console.warn('⚠️ Ошибка post-switch восстановления видео:', e); }
               }, 120);
             }
           }
         } catch (e) {
-          console.warn('⚠️ post-switch восстановление видео не удалось инициировать:', e);
+
         }
       } else {
-        console.warn('⚠️ hotspotManager не инициализирован - маркеры не восстановлены');
+
       }
 
       // Устанавливаем вид камеры для сцены, если он сохранен
       if (scene.cameraPosition) {
-        console.log('📹 Восстанавливаем позицию камеры для сцены:', sceneId, scene.cameraPosition);
-        const applyCam = () => this.viewerManager.setCameraPosition(scene.cameraPosition);
-        // Первичная попытка
-        applyCam();
-        // Повторяем после кадра рендера
-        requestAnimationFrame(() => {
-          applyCam();
-          // И ещё одна попытка после короткой задержки для полной инициализации
-          setTimeout(() => {
-            applyCam();
-            const got = this.viewerManager.getCameraPosition();
-            if (got) {
-              const near = (a, b) => Math.abs((a || 0) - (b || 0)) < 0.01;
-              if (!near(got.position.x, scene.cameraPosition.position.x) || !near(got.position.y, scene.cameraPosition.position.y) || !near(got.position.z, scene.cameraPosition.position.z)) {
-                console.warn('⚠️ Позиция камеры после применения отличается от сохраненной', { want: scene.cameraPosition, got });
-              }
+
+        // Функция для применения камеры с повторными попытками
+        const applyCameraWithRetries = (attempt = 0) => {
+          if (attempt > 8) {
+
+            return;
+          }
+          
+          try {
+            // Отключаем look-controls перед применением позиции
+            const camera = this.viewerManager.aframeCamera;
+            const lookControls = camera?.components?.['look-controls'];
+            
+            if (lookControls && lookControls.pause) {
+              lookControls.pause();
             }
-          }, 50);
-        });
+            
+            const applied = this.viewerManager.setCameraPosition(scene.cameraPosition);
+            
+            if (applied) {
+              // Ждём немного больше для корректного применения
+              setTimeout(() => {
+                const got = this.viewerManager.getCameraPosition();
+                if (got) {
+                  const near = (a, b) => Math.abs((a || 0) - (b || 0)) < 0.1;
+                  if (!near(got.rotation.x, scene.cameraPosition.rotation.x) || 
+                      !near(got.rotation.y, scene.cameraPosition.rotation.y)) {
+
+                    setTimeout(() => applyCameraWithRetries(attempt + 1), 300);
+                  } else {
+
+                    // Включаем look-controls обратно
+                    if (lookControls && lookControls.play) {
+                      setTimeout(() => lookControls.play(), 100);
+                    }
+                  }
+                } else {
+
+                  setTimeout(() => applyCameraWithRetries(attempt + 1), 300);
+                }
+              }, 200);
+            } else {
+
+              setTimeout(() => applyCameraWithRetries(attempt + 1), 300);
+            }
+          } catch (e) {
+
+            setTimeout(() => applyCameraWithRetries(attempt + 1), 200);
+          }
+        };
+
+        // Применяем камеру после завершения загрузки панорамы
+        setTimeout(() => applyCameraWithRetries(), 300);
       }
 
-      console.log('Переключились на сцену:', scene.name);
       return true;
     } catch (error) {
       console.error('Ошибка при переключении сцены:', error);
       // Сбрасываем защиту и при ошибке
       this._lastSwitchTime = null;
       this._lastSwitchTarget = null;
+      
+      // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке
+      if (this.viewerManager && this.viewerManager.aframeSky) {
+        this.viewerManager.aframeSky.setAttribute('color', '#000000');
+        this.viewerManager.aframeSky.setAttribute('opacity', '1');
+      }
+      
       return false;
     }
   }
@@ -299,10 +345,10 @@ export default class SceneManager {
   reorderScenes(fromIndex, toIndex) {
     const ok = this.moveScene(fromIndex, toIndex);
     if (ok) {
-      console.log(`🔀 Порядок сцен изменен: ${fromIndex} -> ${toIndex}`);
+
       return true;
     }
-    console.warn('⚠️ Не удалось изменить порядок сцен', { fromIndex, toIndex });
+
     return false;
   }
 
@@ -310,7 +356,6 @@ export default class SceneManager {
    * Очищает сохраненную позицию камеры для указанной сцены
    */
   clearCameraForScene(sceneId) {
-    console.log('🗑️ clearCameraForScene вызван для сцены:', sceneId);
 
     const scene = this.getSceneById(sceneId);
     if (!scene) {
@@ -320,10 +365,10 @@ export default class SceneManager {
 
     if (scene.cameraPosition) {
       delete scene.cameraPosition;
-      console.log('✅ Позиция камеры очищена для сцены:', sceneId, scene.name);
+
       return true;
     } else {
-      console.log('ℹ️ У сцены', sceneId, 'не было сохраненной позиции камеры');
+
       return false;
     }
   }

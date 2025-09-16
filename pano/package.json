@@ -22,12 +22,14 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "eslint": "^8.50.0",
-    "prettier": "^3.0.3",
-    "html-validate": "^8.5.0",
-    "live-server": "^1.2.2",
     "@photo-sphere-viewer/core": "^5.0.0",
     "@photo-sphere-viewer/markers-plugin": "^5.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.50.0",
+    "html-validate": "^8.5.0",
+    "live-server": "^1.2.0",
+    "prettier": "^3.0.3"
   },
   "browserslist": [
     "> 1%",

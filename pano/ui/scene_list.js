@@ -5,7 +5,7 @@ export default class SceneList {
     this.listElement = listElement;
 
     if (!this.listElement) {
-      console.warn('Элемент списка сцен не найден');
+
       return;
     }
 
@@ -315,9 +315,17 @@ export default class SceneList {
         }
       }
 
-      // Возвращаем исходный вид
-      input.remove();
-      nameSpan.style.display = '';
+      // Возвращаем исходный вид - проверяем, что элементы еще существуют
+      try {
+        if (input && input.parentNode) {
+          input.remove();
+        }
+        if (nameSpan) {
+          nameSpan.style.display = '';
+        }
+      } catch (e) {
+
+      }
     };
 
     // Обработчики событий
