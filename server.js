@@ -67,11 +67,11 @@ function startLamaService() {
       lamaProcess = null;
       lamaServiceReady = false;
       
-      // Автоматический перезапуск в продакшене
-      if (isProduction && code !== 0) {
-        console.error('🔄 Перезапуск LaMa сервиса через 5 секунд...');
-        setTimeout(startLamaService, 5000);
-      }
+      // Автоматический перезапуск в продакшене (отключено - LaMa отдельный сервис)
+      // if (isProduction && code !== 0) {
+      //   console.error('🔄 Перезапуск LaMa сервиса через 5 секунд...');
+      //   setTimeout(startLamaService, 5000);
+      // }
     });
 
     lamaProcess.on('error', (err) => {
@@ -96,7 +96,7 @@ function stopLamaService() {
 }
 
 // Start LaMa service on server startup
-startLamaService();
+// startLamaService(); // Отключено - LaMa запускается отдельным systemd сервисом
 
 // Graceful shutdown
 process.on('SIGINT', () => {
