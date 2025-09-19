@@ -116,12 +116,13 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'", ...(isProduction ? [] : ["'unsafe-inline'"]), "https://aframe.io", "https://cdnjs.cloudflare.com"],
+      scriptSrc: ["'self'", "'unsafe-eval'", "'unsafe-inline'", "https://aframe.io", "https://cdnjs.cloudflare.com"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "https://images.unsplash.com", "data:", "https:", ...(isProduction ? [] : ["http:"])],
+      imgSrc: ["'self'", "https://images.unsplash.com", "data:", "https:", "http:"],
       mediaSrc: ["'self'"],
-      connectSrc: ["'self'", ...(isProduction ? [] : ["ws:", "wss:"])]
+      connectSrc: ["'self'", "https://aframe.io", "ws:", "wss:"]
     }
   },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
@@ -129,6 +130,9 @@ app.use(helmet({
 
 // Parse cookies
 app.use(cookieParser());
+
+// Trust proxy for proper IP detection behind reverse proxy
+app.set('trust proxy', true);
 
 // Enable gzip compression
 app.use(compression());
