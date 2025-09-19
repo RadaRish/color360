@@ -514,16 +514,16 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
 
     console.error(`🎨 Запрос на удаление объектов: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
     
-    // Check if LaMa service is ready
-    if (!lamaServiceReady) {
-      console.error('⚠️ LaMa сервис еще не готов, используем fallback');
-      
-      // Fallback: return original image
-      res.setHeader('Content-Type', imageFile.mimetype);
-      res.setHeader('Content-Length', imageFile.buffer.length);
-      res.setHeader('X-Retouch-Status', 'fallback-service-not-ready');
-      return res.send(imageFile.buffer);
-    }
+    // LaMa service runs as separate systemd service - always ready
+    // if (!lamaServiceReady) {
+    //   console.error('⚠️ LaMa сервис еще не готов, используем fallback');
+    //   
+    //   // Fallback: return original image
+    //   res.setHeader('Content-Type', imageFile.mimetype);
+    //   res.setHeader('Content-Length', imageFile.buffer.length);
+    //   res.setHeader('X-Retouch-Status', 'fallback-service-not-ready');
+    //   return res.send(imageFile.buffer);
+    // }
     
     try {
       // Create FormData for local LaMa service
