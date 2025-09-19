@@ -1,9 +1,9 @@
 // Simple Node.js + Express backend for demo site
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 const bodyParser = require('body-parser');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
