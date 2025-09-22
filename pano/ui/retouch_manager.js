@@ -373,7 +373,7 @@ export default class RetouchManager {
   }
 
   // Пересчёт экранных координат полигона в эквирект-UV и отрисовка маски указанного размера
-  async _exportMaskEquirect(targetWidth, targetHeight) {
+  async _exportMaskEquirect(targetWidth, targetHeight, options) {
     try {
       if (!this._savedPolygons || !this._savedPolygons.length) return null;
       const aScene = document.querySelector('a-scene');
@@ -445,34 +445,52 @@ export default class RetouchManager {
       }
       if (drewAny) scrCtx.fill();
 
-      // 2) Отобразим каждый белый пиксель экранной маски в эквирект с небольшим сплэтом
-      const scrData = scrCtx.getImageData(0,0,scrW,scrH).data;
+      // 2) Отобразим каждый белый пиксель экранной маски в эквирект с адаптивным сплэтом
+      const scrImg = scrCtx.getImageData(0,0,scrW,scrH);
+      const scrData = scrImg.data;
+      // Подсчитаем площадь белой маски на экране
+      let screenWhite = 0;
+      for (let i = 0; i < scrData.length; i += 4) {
+        if (scrData[i] >= 200 && scrData[i+1] >= 200 && scrData[i+2] >= 200) screenWhite++;
+      }
+      // Соответствие масштабов: сколько пикселей эквиректа приходится на 1 пиксель экрана
+      const scaleUF = targetWidth / Math.max(1, sceneRect.width);
+      const scaleVF = targetHeight / Math.max(1, sceneRect.height);
+      const baseSplat = Math.ceil(Math.min(48, Math.max(2, Math.max(scaleUF, scaleVF) * 0.75)));
       // Адаптивная дискретизация по бюджету пикселей (не более ~600k рейкастов)
       const pixelBudget = 600000;
       const step = Math.max(1, Math.floor(Math.sqrt((scrW * scrH) / pixelBudget)));
-      const splat = Math.max(2, step); // растим сплэт пропорционально шагу
-      let mapped = 0;
-      for (let y=0; y<scrH; y+=step) {
-        for (let x=0; x<scrW; x+=step) {
-          const off = (y*scrW + x) * 4;
-          // Белый пиксель? (после fill белое = 255)
-          if (scrData[off] < 200 && scrData[off+1] < 200 && scrData[off+2] < 200) continue;
-          const localX = x; // уже в системе renderer canvas
-          const localY = y;
-          const uv = screenToUV(localX, localY);
-          if (!uv) continue;
-          const px = Math.floor(uv.u * targetWidth);
-          const py = Math.floor(uv.v * targetHeight);
-          // Сплэт-квадратик (покрываем «дыры» между сэмплами)
-          const x0 = Math.max(0, px - splat);
-          const y0 = Math.max(0, py - splat);
-          const x1 = Math.min(targetWidth, px + splat + 1);
-          const y1 = Math.min(targetHeight, py + splat + 1);
-          mctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
-          mapped++;
+
+      const optInvertU = !!(options && options.invertU);
+      const mapWithSplat = (splat, invertU=false) => {
+        mctx.clearRect(0, 0, targetWidth, targetHeight);
+        mctx.fillStyle = '#000'; mctx.fillRect(0, 0, targetWidth, targetHeight);
+        mctx.fillStyle = '#fff';
+        let mappedCount = 0;
+        for (let y=0; y<scrH; y+=step) {
+          for (let x=0; x<scrW; x+=step) {
+            const off = (y*scrW + x) * 4;
+            if (scrData[off] < 200 || scrData[off+1] < 200 || scrData[off+2] < 200) continue;
+            const uv = screenToUV(x, y);
+            if (!uv) continue;
+            const uu = (invertU || optInvertU) ? (1 - uv.u) : uv.u;
+            const px = Math.floor(uu * targetWidth);
+            const py = Math.floor(uv.v * targetHeight);
+            const x0 = Math.max(0, px - splat);
+            const y0 = Math.max(0, py - splat);
+            const x1 = Math.min(targetWidth, px + splat + 1);
+            const y1 = Math.min(targetHeight, py + splat + 1);
+            mctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+            mappedCount++;
+          }
         }
-      }
-      console.log('🧭 Debug RetouchManager: screen->equirect mapped pixels:', mapped, 'of', scrW*scrH);
+        return mappedCount;
+      };
+
+      // Первая попытка с базовым сплэтом
+      let splat = Math.max(baseSplat, step);
+      let mapped = mapWithSplat(splat, false);
+      console.log('🧭 Debug RetouchManager: screen->equirect mapped pixels:', mapped, 'of', scrW*scrH, 'splat=', splat, 'scaleUF/VF=', scaleUF.toFixed(2), scaleVF.toFixed(2), 'screenWhite=', screenWhite);
 
       // Оценим площадь белой маски; если она слишком мала — попробуем инвертировать U (внутренние сферы могут зеркалить текстуру)
       try {
@@ -482,32 +500,32 @@ export default class RetouchManager {
         for (let i = 0; i < data.length; i += 4) {
           if (data[i] > 0 || data[i+1] > 0 || data[i+2] > 0) whiteCount++;
         }
-  const minPixels = Math.max(500, Math.floor((targetWidth * targetHeight) * 0.00005)); // порог ~0.005% от площади, но не меньше 500 пикселей
+        // Ожидаемая площадь ~ экранная площадь, умноженная на масштаб по U и V
+        const expected = Math.max(1, Math.floor(screenWhite * scaleUF * scaleVF));
+        const minPixels = Math.max(2000, Math.floor(expected * 0.3)); // не менее 2000px и ~30% от ожидаемой
   console.log('📐 Debug RetouchManager: mask whiteCount=', whiteCount, 'minPixels=', minPixels, 'size=', targetWidth+'x'+targetHeight);
         if (whiteCount < minPixels) {
-          console.warn('🎨 Warning RetouchManager: площадь маски слишком мала ('+whiteCount+'), пробуем u->1-u');
-          mctx.clearRect(0, 0, targetWidth, targetHeight);
-          mctx.fillStyle = '#000'; mctx.fillRect(0, 0, targetWidth, targetHeight);
-          mctx.fillStyle = '#fff';
-          // Повторяем маппинг, но с инверсией U
-          let mapped2 = 0;
-          for (let y=0; y<scrH; y+=step) {
-            for (let x=0; x<scrW; x+=step) {
-              const off = (y*scrW + x) * 4;
-              if (scrData[off] < 200 && scrData[off+1] < 200 && scrData[off+2] < 200) continue;
-              const uv = screenToUV(x, y);
-              if (!uv) continue;
-              const px = Math.floor((1 - uv.u) * targetWidth);
-              const py = Math.floor(uv.v * targetHeight);
-              const x0 = Math.max(0, px - splat);
-              const y0 = Math.max(0, py - splat);
-              const x1 = Math.min(targetWidth, px + splat + 1);
-              const y1 = Math.min(targetHeight, py + splat + 1);
-              mctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
-              mapped2++;
-            }
+          // Увеличиваем сплэт и пробуем ещё раз (до двух попыток)
+          let improved = false;
+          for (let factor of [1.6, 2.2]) {
+            const newSplat = Math.min(96, Math.max(splat, Math.ceil(baseSplat * factor)));
+            if (newSplat === splat) continue;
+            splat = newSplat;
+            mapped = mapWithSplat(splat, false);
+            const imgData2 = mctx.getImageData(0, 0, targetWidth, targetHeight);
+            const data2 = imgData2.data;
+            whiteCount = 0; for (let i = 0; i < data2.length; i += 4) { if (data2[i] | data2[i+1] | data2[i+2]) whiteCount++; }
+            console.log('📐 Debug RetouchManager: recheck whiteCount=', whiteCount, 'splat=', splat);
+            if (whiteCount >= minPixels) { improved = true; break; }
           }
-          console.log('🧭 Debug RetouchManager: mirrored screen->equirect mapped pixels:', mapped2);
+          if (!improved && screenWhite > 0) {
+            // Попытка с инверсией U
+            const mapped2 = mapWithSplat(splat, true);
+            const imgData3 = mctx.getImageData(0, 0, targetWidth, targetHeight);
+            const data3 = imgData3.data;
+            let wc3 = 0; for (let i = 0; i < data3.length; i += 4) { if (data3[i] | data3[i+1] | data3[i+2]) wc3++; }
+            console.warn('🎨 Warning RetouchManager: площадь мала, пробуем u->1-u; mapped2=', mapped2, 'wc3=', wc3);
+          }
         }
       } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось оценить/исправить площадь маски:', e?.message); }
 
@@ -535,7 +553,7 @@ export default class RetouchManager {
     this._undoStacks.set(sceneId, stack);
 
     try {
-      // Готовим multipart - обходим CSP проблему с blob URLs
+  // Готовим multipart - обходим CSP проблему с blob URLs
       const imageBlob = await this._getCurrentPanoramaBlob(); // Получаем blob напрямую
       console.log('🎨 Debug RetouchManager: получили imageBlob:', !!imageBlob);
 
@@ -543,9 +561,10 @@ export default class RetouchManager {
       const imgSize = await this._getImageSizeFromBlob(imageBlob);
       // Если есть сохранённые полигоны и доступен THREE+камера — строим маску в эквирект-проекции
       let maskBlob;
+      let maskDataUrlEq = null;
       if (imgSize && imgSize.width > 0 && imgSize.height > 0) {
         try {
-          const maskDataUrlEq = await this._exportMaskEquirect(imgSize.width, imgSize.height);
+          maskDataUrlEq = await this._exportMaskEquirect(imgSize.width, imgSize.height);
           if (maskDataUrlEq) {
             maskBlob = this._dataURLtoBlob(maskDataUrlEq);
             console.log('🎨 Debug RetouchManager: использована эквирект-маска', imgSize.width + 'x' + imgSize.height);
@@ -603,6 +622,64 @@ export default class RetouchManager {
       console.log('🎨 Debug RetouchManager: resultDataUrl готов:', !!resultDataUrl, resultDataUrl ? 'длина: ' + resultDataUrl.length : 'пустой');
       if (!resultDataUrl) throw new Error('Неподдерживаемый ответ сервера ретуши');
 
+      // Проверка эффекта ретуши по разнице в пределах маски; при отсутствии эффекта — автоповтор с инверсией U
+      const calcMaskedDiff = async (origBlob, resDataUrl, maskDataUrl, size) => {
+        try {
+          const [origImg, resImg, maskImg] = [new Image(), new Image(), new Image()];
+          const [origUrl, maskUrl] = [URL.createObjectURL(origBlob), maskDataUrl];
+          const load = (img, src) => new Promise((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = src; });
+          await Promise.all([load(origImg, origUrl), load(resImg, resDataUrl), load(maskImg, maskUrl)]);
+          const w = size.width, h = size.height;
+          const cO = document.createElement('canvas'); cO.width = w; cO.height = h;
+          const cR = document.createElement('canvas'); cR.width = w; cR.height = h;
+          const cM = document.createElement('canvas'); cM.width = w; cM.height = h;
+          const octx = cO.getContext('2d'); const rctx = cR.getContext('2d'); const mctx = cM.getContext('2d');
+          octx.drawImage(origImg, 0, 0, w, h);
+          rctx.drawImage(resImg, 0, 0, w, h);
+          mctx.drawImage(maskImg, 0, 0, w, h);
+          const oData = octx.getImageData(0,0,w,h).data;
+          const rData = rctx.getImageData(0,0,w,h).data;
+          const mData = mctx.getImageData(0,0,w,h).data;
+          let sum = 0, cnt = 0;
+          const stride = Math.max(1, Math.floor(Math.sqrt((w*h)/300000)));
+          for (let y=0; y<h; y+=stride) {
+            for (let x=0; x<w; x+=stride) {
+              const i = (y*w + x) * 4;
+              if (mData[i] < 128 && mData[i+1] < 128 && mData[i+2] < 128) continue;
+              const dr = Math.abs(oData[i] - rData[i]);
+              const dg = Math.abs(oData[i+1] - rData[i+1]);
+              const db = Math.abs(oData[i+2] - rData[i+2]);
+              sum += (dr + dg + db) / 3; cnt++;
+            }
+          }
+          URL.revokeObjectURL(origUrl);
+          return cnt ? (sum / cnt) : 0;
+        } catch(e) { console.warn('🎨 Warning RetouchManager: diff calc failed', e?.message); return 999; }
+      };
+
+      let appliedSrc = resultDataUrl;
+      if (maskDataUrlEq) {
+        const diffMean = await calcMaskedDiff(imageBlob, resultDataUrl, maskDataUrlEq, imgSize);
+        console.log('🧪 Debug RetouchManager: masked mean diff =', diffMean.toFixed(2));
+        if (diffMean < 4) {
+          console.warn('🎨 Warning RetouchManager: низкая разница внутри маски, пробуем инверсию U');
+          const maskEqU = await this._exportMaskEquirect(imgSize.width, imgSize.height, { invertU: true });
+          if (maskEqU) {
+            const fd2 = new FormData();
+            fd2.append('image', imageBlob, 'image.png');
+            fd2.append('mask', this._dataURLtoBlob(maskEqU), 'mask.png');
+            const resp2 = await fetch('/api/retouch', { method: 'POST', body: fd2 });
+            if (resp2.ok && (resp2.headers.get('content-type')||'').startsWith('image/')) {
+              const out2 = await resp2.blob();
+              appliedSrc = await this._blobToDataURL(out2);
+              console.log('✅ Debug RetouchManager: повтор с U-инверсией выполнен');
+            } else {
+              console.warn('🎨 Warning RetouchManager: повтор с U-инверсией вернул не image/*');
+            }
+          }
+        }
+      }
+
       // На этом этапе xStatus не содержит fallback/lama-unavailable — можно применять результат
 
       // Сохраняем результат для отладки
@@ -610,7 +687,7 @@ export default class RetouchManager {
 
       // Применяем к текущей сцене и viewer
       console.log('🎨 Debug RetouchManager: применяем результат к сцене');
-      await this._applyPanoramaToScene(scene, resultDataUrl);
+  await this._applyPanoramaToScene(scene, appliedSrc);
       console.log('🎨 Debug RetouchManager: Ретушь успешно применена, очищаем _maskDataUrl');
       this._maskDataUrl = null; // Очищаем после успешного применения
       return { applied: true };
