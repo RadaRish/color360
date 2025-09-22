@@ -759,16 +759,7 @@ export default class ViewerManager {
       touchEnabled: true,
       mouseEnabled: true,
       pointerLockEnabled: false,
-      magicWindowTrackingEnabled: false,
-      // Ограничиваем наклон по вертикали для предотвращения нежелательных наклонов
-      verticalLook: true,
-      horizontalLook: true,
-      pitchObject: 'camera', // Используем сам объект камеры для pitch
-      yawObject: 'camera',   // Используем сам объект камеры для yaw
-      // Ограничиваем углы поворота
-      lookSpeed: 1,
-      maxPitch: 90,
-      minPitch: -90
+      magicWindowTrackingEnabled: false
     });
     this.aframeCamera.setAttribute('wasd-controls', 'enabled: false');
     this.aframeCamera.id = 'camera';
@@ -1612,16 +1603,38 @@ export default class ViewerManager {
       // Устанавливаем src (даже если уже установлен — переприсвоение безопасно)
       img.src = imageSrc;
 
-  // Убираем цвет перед установкой изображения и принудительно сбрасываем src у a-sky
-  this.aframeSky.removeAttribute('color');
-  try { this.aframeSky.setAttribute('src', ''); } catch(e) {}
-  await new Promise(r => setTimeout(r, 40));
-  this.aframeSky.setAttribute('src', `#${safeId}`);
+      // Дождёмся декодирования изображения до привязки к a-sky, чтобы избежать "image is incomplete"
+      let decoded = false;
+      try {
+        if (typeof img.decode === 'function') {
+          await Promise.race([
+            img.decode(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('decode timeout')), 15000))
+          ]);
+          decoded = true;
+        }
+      } catch (e) {
+        // Если decode() недоступен/упал — ждём хотя бы load
+        try {
+          await Promise.race([
+            loadPromise,
+            new Promise((_, rej) => setTimeout(() => rej(new Error('load timeout')), 15000))
+          ]);
+        } catch (e2) {
+          // Ничего — дадим шанс A-Frame загрузить самостоятельно ниже
+        }
+      }
+
+      // Убираем цвет перед установкой изображения и принудительно сбрасываем src у a-sky
+      this.aframeSky.removeAttribute('color');
+      try { this.aframeSky.setAttribute('src', ''); } catch(e) {}
+      await new Promise(r => setTimeout(r, 40));
+      this.aframeSky.setAttribute('src', `#${safeId}`);
       this.aframeSky.setAttribute('opacity', '1'); // Показываем небо после загрузки
       this.aframeSky.setAttribute('visible', 'true');
       this.currentPanorama = imageSrc;
 
-      // Ждем либо загрузки asset, либо texture события, либо таймаута
+      // Ждём либо загрузки asset (на всякий случай), либо texture события, либо тайм-аута
       await Promise.race([
         loadPromise,
         textureLoadPromise,
@@ -4098,8 +4111,6 @@ export default class ViewerManager {
 
   clearMarkers() {
     const markers = this.aframeScene.querySelectorAll('[data-hotspot-id]');
-
-    console.trace('📍 Стек вызовов clearMarkers'); // Показываем, кто вызвал удаление
 
     markers.forEach(marker => {
       const hotspotId = marker.getAttribute('data-hotspot-id');

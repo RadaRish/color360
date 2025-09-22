@@ -123,9 +123,6 @@ export default class SceneManager {
   }
 
   async switchToScene(sceneId) {
-
-    console.trace('📍 Стек вызовов switchToScene');
-
     // ЗАЩИТА от повторных вызовов в течение короткого времени
     const now = Date.now();
     if (this._lastSwitchTime && this._lastSwitchTarget === sceneId && (now - this._lastSwitchTime) < 200) { // Уменьшаем время защиты до 200ms

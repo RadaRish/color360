@@ -23,7 +23,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-k
 const isProduction = process.env.NODE_ENV === 'production';
 
 // LaMa Service Management
-const LAMA_PORT = process.env.LAMA_PORT || 5000;
+const LAMA_PORT = process.env.LAMA_PORT || 5002;
 const LAMA_HOST = process.env.LAMA_HOST || '127.0.0.1';
 const LAMA_URL = `http://${LAMA_HOST}:${LAMA_PORT}`;
 
@@ -95,8 +95,10 @@ function stopLamaService() {
   }
 }
 
-// Start LaMa service on server startup
-// startLamaService(); // Отключено - LaMa запускается отдельным systemd сервисом
+// Start LaMa service on server startup (в dev включаем автозапуск)
+if (!isProduction) {
+  startLamaService();
+}
 
 // Graceful shutdown
 process.on('SIGINT', () => {
@@ -113,18 +115,7 @@ process.on('SIGTERM', () => {
 
 // Security headers with production configuration
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'", "'unsafe-inline'", "https://aframe.io", "https://cdnjs.cloudflare.com"],
-      scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "https://images.unsplash.com", "data:", "https:", "http:"],
-      mediaSrc: ["'self'"],
-      connectSrc: ["'self'", "https://aframe.io", "ws:", "wss:"]
-    }
-  },
+  contentSecurityPolicy: false, // Временно отключаем CSP для отладки
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
 }));
 
@@ -132,7 +123,8 @@ app.use(helmet({
 app.use(cookieParser());
 
 // Trust proxy for proper IP detection behind reverse proxy
-app.set('trust proxy', true);
+// Use number instead of boolean for better security
+app.set('trust proxy', 1);
 
 // Enable gzip compression
 app.use(compression());
@@ -143,7 +135,11 @@ const apiLimiter = rateLimit({
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // Limit each IP to 100 requests per window
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: 'Слишком много запросов, пожалуйста, повторите попытку позже.' }
+  message: { message: 'Слишком много запросов, пожалуйста, повторите попытку позже.' },
+  // Skip validation for unexpected X-Forwarded-For headers
+  validate: {
+    xForwardedForHeader: false
+  }
 });
 
 // Apply rate limiting to all API routes
@@ -155,7 +151,11 @@ const authLimiter = rateLimit({
   max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_ATTEMPTS) || 10, // 10 attempts per hour
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: 'Слишком много попыток входа, пожалуйста, повторите позже.' }
+  message: { message: 'Слишком много попыток входа, пожалуйста, повторите позже.' },
+  // Skip validation for unexpected X-Forwarded-For headers
+  validate: {
+    xForwardedForHeader: false
+  }
 });
 
 // Apply stricter rate limiting to login/register endpoints
@@ -185,13 +185,24 @@ app.use('/pano', express.static(path.join(__dirname, 'pano'), {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     // More permissive CSP for pano app to allow required external resources
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self'; connect-src 'self' https://aframe.io https://releases.aframe.io ws: wss:;");
   }
 }));
 
 // For API routes under /pano subpath, we need to handle that as well
 // But for the main site, we serve from root
-app.use(bodyParser.json({ limit: '10kb' })); // Limit payload size
+// Conditional JSON parser: apply small limit by default, but skip for large upload endpoints
+app.use((req, res, next) => {
+  const p = req.path || '';
+  // Skip small JSON parser for large upload endpoints
+  if (p.startsWith('/api/temp-file')) {
+    return next();
+  }
+  return bodyParser.json({ limit: '10kb' })(req, res, next);
+});
+
+// Special body parser for temp file endpoints with larger limit (30MB)
+const tempFileBodyParser = bodyParser.json({ limit: '50mb' });
 
 // Serve uploaded avatars from /avatars
 const avatarsDir = path.join(__dirname, 'avatars');
@@ -506,6 +517,28 @@ const upload = multer({
   }
 });
 
+// LaMa health check endpoint
+app.get('/api/lama-health', async (req, res) => {
+  try {
+    console.error('🔍 Проверка здоровья LaMa сервиса...');
+    const response = await axios.get(`${LAMA_URL}/health`, { timeout: 5000 });
+    console.error('✅ LaMa сервис отвечает:', response.data);
+    res.json({
+      status: 'ok',
+      lama_service: response.data,
+      lama_url: LAMA_URL
+    });
+  } catch (error) {
+    console.error('❌ LaMa сервис недоступен:', error.message);
+    res.status(503).json({
+      status: 'error',
+      error: 'LaMa сервис недоступен',
+      lama_url: LAMA_URL,
+      details: error.message
+    });
+  }
+});
+
 // LaMa AI Inpainting API endpoint
 app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), async (req, res) => {
   try {
@@ -561,16 +594,21 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
       return res.send(response.data);
       
     } catch (lamaError) {
-      const errorMsg = lamaError?.response?.data?.toString() || lamaError?.message || 'Unknown error';
+      const errorMsg = lamaError?.message || lamaError?.code || 'Unknown error';
       console.error('❌ LaMa service error:', errorMsg);
-      
-      // Fallback: return original image if LaMa service fails
-      console.error('🔄 Fallback: возвращаем оригинальное изображение');
-      res.setHeader('Content-Type', imageFile.mimetype);
-      res.setHeader('Content-Length', imageFile.buffer.length);
-      res.setHeader('X-Retouch-Status', 'fallback-lama-error');
-      res.setHeader('X-Retouch-Error', errorMsg.substring(0, 200)); // Limit error message length
-      return res.send(imageFile.buffer);
+
+      // Попробуем автозапуск в dev при отсутствии процесса
+      if (!isProduction && !lamaProcess) {
+        console.error('🧰 Пытаемся запустить LaMa сервис и сообщаем об ошибке клиенту');
+        try { startLamaService(); } catch {}
+      }
+
+      // Отвечаем корректной ошибкой 503, чтобы клиент не применял исходник как "успешный" результат
+      res.status(503);
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('X-Retouch-Status', 'lama-unavailable');
+      res.setHeader('X-Retouch-Error', ('' + errorMsg).substring(0, 200));
+      return res.json({ error: 'LaMa service unavailable', details: errorMsg });
     }
     
   } catch (error) {
@@ -583,7 +621,9 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
 });
 
 // Upload or update user avatar (expects JSON { dataUrl: 'data:image/png;base64,...' })
-app.post('/api/user/avatar', authenticateToken, async (req, res) => {
+// Используем локальный bodyParser для этого маршрута с увеличенным лимитом (~1MB),
+// чтобы не конфликтовать с глобальным малым лимитом JSON (10kb)
+app.post('/api/user/avatar', bodyParser.json({ limit: '1mb' }), authenticateToken, async (req, res) => {
   try {
     const { dataUrl } = req.body || {};
     if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
@@ -1296,6 +1336,109 @@ app.get('/pano', (req, res) => {
 app.get('/pano/*', (req, res) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
   res.sendFile(path.join(__dirname, 'pano', 'index.html'));
+});
+
+// Temporary files management for CSP compliance
+const tempDir = path.join(__dirname, 'temp');
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
+
+// Store temporary file with unique ID
+app.post('/api/temp-file', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Файл не найден' });
+    }
+
+    const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const fileExt = path.extname(req.file.originalname) || '.png';
+    const fileName = fileId + fileExt;
+    const filePath = path.join(tempDir, fileName);
+
+    fs.writeFileSync(filePath, req.file.buffer);
+
+    // Clean up old temp files (older than 1 hour)
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error('❌ Ошибка удаления временного файла:', err);
+      }
+    }, 60 * 60 * 1000); // 1 hour
+
+    res.json({ fileId, url: `/api/temp-file/${fileId}${fileExt}` });
+  } catch (err) {
+    console.error('❌ Ошибка сохранения временного файла:', err);
+    res.status(500).json({ error: 'Ошибка сохранения файла' });
+  }
+});
+
+// Store temporary file from data URL
+app.post('/api/temp-file-from-data', tempFileBodyParser, (req, res) => {
+  try {
+    const { dataUrl, ext = '.png' } = req.body;
+    if (!dataUrl) {
+      return res.status(400).json({ error: 'dataUrl не найден' });
+    }
+
+    // Extract base64 data from data URL
+    const base64Data = dataUrl.split(',')[1];
+    if (!base64Data) {
+      return res.status(400).json({ error: 'Неверный формат dataUrl' });
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const fileName = fileId + ext;
+    const filePath = path.join(tempDir, fileName);
+
+    fs.writeFileSync(filePath, buffer);
+
+    // Clean up old temp files (older than 1 hour)
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error('❌ Ошибка удаления временного файла:', err);
+      }
+    }, 60 * 60 * 1000); // 1 hour
+
+    res.json({ fileId, url: `/api/temp-file/${fileId}${ext}` });
+  } catch (err) {
+    console.error('❌ Ошибка сохранения временного файла из dataUrl:', err);
+    res.status(500).json({ error: 'Ошибка сохранения файла' });
+  }
+});
+
+// Serve temporary files
+app.get('/api/temp-file/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(tempDir, filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Файл не найден' });
+    }
+
+    // Determine content type based on extension
+    const ext = path.extname(filename).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === '.png') contentType = 'image/png';
+    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+    else if (ext === '.webp') contentType = 'image/webp';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error('❌ Ошибка получения временного файла:', err);
+    res.status(500).json({ error: 'Ошибка получения файла' });
+  }
 });
 
 // Health check endpoint

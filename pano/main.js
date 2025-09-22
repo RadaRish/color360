@@ -246,25 +246,38 @@ document.addEventListener('DOMContentLoaded', () => {
       // Кнопка ретуши (Удалить объект)
       const retouchBtn = document.getElementById('retouch-btn');
       const retouchUndoBtn = document.getElementById('retouch-undo-btn');
+      console.log('🔧 Debug: retouchBtn найдена:', !!retouchBtn);
       if (retouchBtn) {
         retouchBtn.onclick = async () => {
+          console.log('🎯 Debug: Нажата кнопка ретуши');
           const currentScene = sceneManager.getCurrentScene();
+          console.log('🎬 Debug: Текущая сцена:', currentScene);
           if (!currentScene) {
             alert('Нет активной сцены для ретуши');
             return;
           }
           try {
-            await retouchManager.startMaskDraw(currentScene);
-            // После завершения маски отправляем на /api/retouch
-            const result = await retouchManager.applyRetouch(currentScene);
-            if (result?.applied) {
-              window.app?.showNotification?.('Ретушь применена', 'success');
-              if (retouchUndoBtn) retouchUndoBtn.disabled = !retouchManager.canUndo(currentScene.id);
+            console.log('🎨 Debug: Запуск startMaskDraw');
+            const maskApplied = await retouchManager.startMaskDraw(currentScene);
+            console.log('🎨 Debug: Результат startMaskDraw:', maskApplied);
+            if (maskApplied) {
+              // Пользователь нажал "Готово", применяем ретушь
+              console.log('✅ Debug: Применение ретуши');
+              const result = await retouchManager.applyRetouch(currentScene);
+              console.log('📊 Debug: Результат applyRetouch:', result);
+              if (result?.applied) {
+                window.app?.showNotification?.('Ретушь применена', 'success');
+                if (retouchUndoBtn) retouchUndoBtn.disabled = !retouchManager.canUndo(currentScene.id);
+              } else {
+                window.app?.showNotification?.('Ошибка при применении ретуши', 'error');
+              }
             } else {
+              // Пользователь нажал "Отмена"
+              console.log('❌ Debug: Ретушь отменена пользователем');
               window.app?.showNotification?.('Ретушь отменена', 'info');
             }
           } catch (e) {
-            console.error('Ошибка ретуши:', e);
+            console.error('🚨 Debug: Ошибка ретуши:', e);
             window.app?.showNotification?.('Ошибка ретуши: ' + (e?.message || e), 'error');
           }
         };
