@@ -1493,6 +1493,14 @@ export default class ViewerManager {
             }
           } catch (e) {}
           
+          // Принудительно очищаем системный кэш материалов A-Frame
+          try {
+            if (this.aframeScene && this.aframeScene.systems && this.aframeScene.systems.material) {
+              this.aframeScene.systems.material.uncacheTexture(imageSrc);
+              this.aframeScene.systems.material.uncacheTexture(blobUrl);
+            }
+          } catch (e) {}
+          
           // Небольшая пауза, чтобы A-Frame успел обработать очистку
           await new Promise(r => setTimeout(r, 40));
           this.aframeSky.setAttribute('src', blobUrl);
@@ -1550,11 +1558,29 @@ export default class ViewerManager {
           try {
             const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
             if (mesh && mesh.material) {
-              if (mesh.material.map) mesh.material.map.needsUpdate = true;
-              mesh.material.needsUpdate = true;
-            }
-            if (this.aframeScene && this.aframeScene.renderer && this.aframeScene.camera) {
-              try { this.aframeScene.renderer.render(this.aframeScene.object3D, this.aframeScene.camera); } catch (e) {}
+              // Радикальный подход: пересоздаём материал полностью
+              const oldMap = mesh.material.map;
+              if (oldMap) oldMap.dispose();
+              
+              // Создаём новый материал с новой текстурой
+              if (typeof THREE !== 'undefined') {
+                const loader = new THREE.TextureLoader();
+                loader.load(blobUrl, (newTexture) => {
+                  mesh.material = new THREE.MeshBasicMaterial({ map: newTexture });
+                  mesh.material.needsUpdate = true;
+                  // Принудительный рендер
+                  if (this.aframeScene && this.aframeScene.renderer && this.aframeScene.camera) {
+                    try { this.aframeScene.renderer.render(this.aframeScene.object3D, this.aframeScene.camera); } catch (e) {}
+                  }
+                });
+              } else {
+                // Fallback если THREE недоступен
+                if (mesh.material.map) mesh.material.map.needsUpdate = true;
+                mesh.material.needsUpdate = true;
+                if (this.aframeScene && this.aframeScene.renderer && this.aframeScene.camera) {
+                  try { this.aframeScene.renderer.render(this.aframeScene.object3D, this.aframeScene.camera); } catch (e) {}
+                }
+              }
             }
           } catch (e) { console.warn('⚠️ Принудительное обновление текстуры не удалось:', e); }
 
@@ -1651,6 +1677,15 @@ export default class ViewerManager {
           mesh.material.map.dispose(); // Освобождаем старую текстуру
           mesh.material.map = null;
           mesh.material.needsUpdate = true;
+        }
+      } catch (e) {}
+      
+      // Принудительно очищаем системный кэш материалов A-Frame
+      try {
+        if (this.aframeScene && this.aframeScene.systems && this.aframeScene.systems.material) {
+          const url = imageSrc.includes('/api/temp-file/') ? imageSrc.split('?')[0] : imageSrc;
+          this.aframeScene.systems.material.uncacheTexture(url);
+          this.aframeScene.systems.material.uncacheTexture(imageSrc);
         }
       } catch (e) {}
       
