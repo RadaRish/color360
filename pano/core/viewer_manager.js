@@ -1482,6 +1482,17 @@ export default class ViewerManager {
           // Убираем цвет перед установкой изображения и принудительно сбрасываем src
           this.aframeSky.removeAttribute('color');
           try { this.aframeSky.setAttribute('src', ''); } catch(e) {}
+          
+          // Принудительно очищаем кэш материала A-Frame для data: URL
+          try {
+            const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+            if (mesh && mesh.material && mesh.material.map) {
+              mesh.material.map.dispose(); // Освобождаем старую текстуру
+              mesh.material.map = null;
+              mesh.material.needsUpdate = true;
+            }
+          } catch (e) {}
+          
           // Небольшая пауза, чтобы A-Frame успел обработать очистку
           await new Promise(r => setTimeout(r, 40));
           this.aframeSky.setAttribute('src', blobUrl);
@@ -1600,8 +1611,12 @@ export default class ViewerManager {
         img.addEventListener('error', onError);
       });
 
-      // Устанавливаем src (даже если уже установлен — переприсвоение безопасно)
-      img.src = imageSrc;
+      // Устанавливаем src с принудительным обходом кэша для temp-file URLs
+      if (imageSrc.includes('/api/temp-file/')) {
+        img.src = imageSrc + '?t=' + Date.now() + '&nocache=' + Math.random();
+      } else {
+        img.src = imageSrc;
+      }
 
       // Дождёмся декодирования изображения до привязки к a-sky, чтобы избежать "image is incomplete"
       let decoded = false;
@@ -1628,6 +1643,17 @@ export default class ViewerManager {
       // Убираем цвет перед установкой изображения и принудительно сбрасываем src у a-sky
       this.aframeSky.removeAttribute('color');
       try { this.aframeSky.setAttribute('src', ''); } catch(e) {}
+      
+      // Принудительно очищаем кэш материала A-Frame
+      try {
+        const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+        if (mesh && mesh.material && mesh.material.map) {
+          mesh.material.map.dispose(); // Освобождаем старую текстуру
+          mesh.material.map = null;
+          mesh.material.needsUpdate = true;
+        }
+      } catch (e) {}
+      
       await new Promise(r => setTimeout(r, 40));
       this.aframeSky.setAttribute('src', `#${safeId}`);
       this.aframeSky.setAttribute('opacity', '1'); // Показываем небо после загрузки

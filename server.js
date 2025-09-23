@@ -96,7 +96,7 @@ function stopLamaService() {
 }
 
 // Start LaMa service on server startup (в dev включаем автозапуск)
-if (!isProduction) {
+if (!isProduction && !process.env.LAMA_DISABLED) {
   startLamaService();
 }
 
@@ -598,7 +598,7 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
       console.error('❌ LaMa service error:', errorMsg);
 
       // Попробуем автозапуск в dev при отсутствии процесса
-      if (!isProduction && !lamaProcess) {
+      if (!isProduction && !lamaProcess && !process.env.LAMA_DISABLED) {
         console.error('🧰 Пытаемся запустить LaMa сервис и сообщаем об ошибке клиенту');
         try { startLamaService(); } catch {}
       }
@@ -1433,7 +1433,9 @@ app.get('/api/temp-file/:filename', (req, res) => {
     else if (ext === '.webp') contentType = 'image/webp';
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Отключаем кэш для temp-файлов
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(filePath);
   } catch (err) {
     console.error('❌ Ошибка получения временного файла:', err);
