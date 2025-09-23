@@ -89,6 +89,9 @@ def load_lama_model():
 def opencv_inpaint(image_array, mask_array):
     """Fallback inpainting с использованием OpenCV"""
     try:
+        # Диагностика: логируем размеры
+        logger.info(f"🔍 OpenCV inpaint: image shape={image_array.shape}, mask shape={mask_array.shape}")
+        
         # Конвертируем в BGR для OpenCV
         if len(image_array.shape) == 3 and image_array.shape[2] == 3:
             image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
@@ -101,8 +104,32 @@ def opencv_inpaint(image_array, mask_array):
         else:
             mask_gray = mask_array
             
-        # Применяем inpainting
-        result = cv2.inpaint(image_bgr, mask_gray, 3, cv2.INPAINT_TELEA)
+        # Диагностика маски
+        white_pixels = np.sum(mask_gray > 128)
+        total_pixels = mask_gray.size
+        mask_coverage = (white_pixels / total_pixels) * 100
+        logger.info(f"📊 Mask analysis: {white_pixels} white pixels ({mask_coverage:.2f}% coverage)")
+        
+        # Сохраняем диагностические изображения для анализа
+        import time
+        timestamp = int(time.time())
+        try:
+            cv2.imwrite(f'/tmp/debug_mask_{timestamp}.png', mask_gray)
+            cv2.imwrite(f'/tmp/debug_original_{timestamp}.png', image_bgr)
+            logger.info(f"💾 Debug images saved: /tmp/debug_*_{timestamp}.png")
+        except Exception as save_error:
+            logger.warning(f"⚠️ Could not save debug images: {save_error}")
+        
+        # Применяем inpainting с увеличенным радиусом
+        # Увеличиваем радиус до 21 для лучшего заполнения крупных областей
+        result = cv2.inpaint(image_bgr, mask_gray, 21, cv2.INPAINT_TELEA)
+        
+        # Сохраняем результат для диагностики
+        try:
+            cv2.imwrite(f'/tmp/debug_result_{timestamp}.png', result)
+            logger.info(f"✅ OpenCV inpaint completed, result saved: /tmp/debug_result_{timestamp}.png")
+        except Exception as save_error:
+            logger.warning(f"⚠️ Could not save result image: {save_error}")
         
         # Конвертируем обратно в RGB
         if len(result.shape) == 3 and result.shape[2] == 3:
