@@ -22,94 +22,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-k
 // Environment check
 const isProduction = process.env.NODE_ENV === 'production';
 
-// LaMa Service Management
-const LAMA_PORT = process.env.LAMA_PORT || 5002;
-const LAMA_HOST = process.env.LAMA_HOST || '127.0.0.1';
-const LAMA_URL = `http://${LAMA_HOST}:${LAMA_PORT}`;
-
-let lamaProcess = null;
-let lamaServiceReady = false;
-
-// Function to start LaMa service
-function startLamaService() {
-  if (lamaProcess) {
-    console.error('❌ LaMa процесс уже запущен');
-    return;
-  }
-
-  try {
-    const lamaDir = path.join(__dirname, 'lama');
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    
-    console.error('🐍 Запуск LaMa сервиса...');
-    
-    lamaProcess = spawn(pythonCmd, ['app.py'], {
-      cwd: lamaDir,
-      env: { ...process.env, PORT: LAMA_PORT, HOST: LAMA_HOST },
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    lamaProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      if (output.includes('started server process') || output.includes('Application startup complete')) {
-        lamaServiceReady = true;
-        console.error('✅ LaMa сервис готов к работе');
-      }
-      console.error(`[LaMa] ${output.trim()}`);
-    });
-
-    lamaProcess.stderr.on('data', (data) => {
-      console.error(`[LaMa Error] ${data.toString().trim()}`);
-    });
-
-    lamaProcess.on('close', (code) => {
-      console.error(`🔄 LaMa процесс завершен с кодом ${code}`);
-      lamaProcess = null;
-      lamaServiceReady = false;
-      
-      // Автоматический перезапуск в продакшене (отключено - LaMa отдельный сервис)
-      // if (isProduction && code !== 0) {
-      //   console.error('🔄 Перезапуск LaMa сервиса через 5 секунд...');
-      //   setTimeout(startLamaService, 5000);
-      // }
-    });
-
-    lamaProcess.on('error', (err) => {
-      console.error('❌ Ошибка запуска LaMa сервиса:', err.message);
-      lamaProcess = null;
-      lamaServiceReady = false;
-    });
-
-  } catch (error) {
-    console.error('❌ Критическая ошибка запуска LaMa:', error.message);
-  }
-}
-
-// Function to stop LaMa service
-function stopLamaService() {
-  if (lamaProcess) {
-    console.error('⏹️ Остановка LaMa сервиса...');
-    lamaProcess.kill('SIGTERM');
-    lamaProcess = null;
-    lamaServiceReady = false;
-  }
-}
-
-// Start LaMa service on server startup (в dev включаем автозапуск)
-if (!isProduction && !process.env.LAMA_DISABLED) {
-  startLamaService();
-}
-
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.error('\n🛑 Получен сигнал SIGINT, завершение работы...');
-  stopLamaService();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.error('\n🛑 Получен сигнал SIGTERM, завершение работы...');
-  stopLamaService();
   process.exit(0);
 });
 
@@ -517,29 +437,29 @@ const upload = multer({
   }
 });
 
-// LaMa health check endpoint
-app.get('/api/lama-health', async (req, res) => {
-  try {
-    console.error('🔍 Проверка здоровья LaMa сервиса...');
-    const response = await axios.get(`${LAMA_URL}/health`, { timeout: 5000 });
-    console.error('✅ LaMa сервис отвечает:', response.data);
-    res.json({
-      status: 'ok',
-      lama_service: response.data,
-      lama_url: LAMA_URL
-    });
-  } catch (error) {
-    console.error('❌ LaMa сервис недоступен:', error.message);
-    res.status(503).json({
-      status: 'error',
-      error: 'LaMa сервис недоступен',
-      lama_url: LAMA_URL,
-      details: error.message
-    });
-  }
+// Legacy API endpoints (заглушки для совместимости)
+app.get('/api/lama-health', (req, res) => {
+  res.status(503).json({
+    status: 'disabled',
+    message: 'LaMa сервис отключён'
+  });
 });
 
-// LaMa AI Inpainting API endpoint
+app.get('/api/sd-health', (req, res) => {
+  res.status(503).json({
+    status: 'disabled', 
+    message: 'SD сервис пока не реализован'
+  });
+});
+
+app.get('/api/ai-health', (req, res) => {
+  res.status(503).json({
+    status: 'disabled',
+    message: 'AI сервисы временно отключены'
+  });
+});
+
+// Retouch API endpoint (заглушка)
 app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), async (req, res) => {
   try {
     const imageFile = req.files?.image?.[0];
@@ -549,67 +469,14 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
       return res.status(400).json({ error: 'Требуются файлы изображения и маски' });
     }
 
-    console.error(`🎨 Запрос на удаление объектов: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
-    
-    // LaMa service runs as separate systemd service - always ready
-    // if (!lamaServiceReady) {
-    //   console.error('⚠️ LaMa сервис еще не готов, используем fallback');
-    //   
-    //   // Fallback: return original image
-    //   res.setHeader('Content-Type', imageFile.mimetype);
-    //   res.setHeader('Content-Length', imageFile.buffer.length);
-    //   res.setHeader('X-Retouch-Status', 'fallback-service-not-ready');
-    //   return res.send(imageFile.buffer);
-    // }
-    
-    try {
-      // Create FormData for local LaMa service
-      const FormData = require('form-data');
-      const formData = new FormData();
-      formData.append('image', imageFile.buffer, { 
-        filename: 'image.png',
-        contentType: imageFile.mimetype 
-      });
-      formData.append('mask', maskFile.buffer, { 
-        filename: 'mask.png',
-        contentType: maskFile.mimetype 
-      });
+    console.log(`🎨 Запрос на ретушь: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
 
-      console.error(`🚀 Отправляем запрос в LaMa сервис: ${LAMA_URL}/inpaint`);
-
-      // Send request to local LaMa service
-      const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
-        headers: { ...formData.getHeaders() },
-        responseType: 'arraybuffer',
-        timeout: 60000 // 60 seconds timeout for AI processing
-      });
-
-      console.error('✅ LaMa обработка завершена успешно');
-
-      // Return the processed image
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Content-Length', response.data.length);
-      res.setHeader('X-Retouch-Status', 'success');
-      res.setHeader('X-Retouch-Method', 'lama-ai');
-      return res.send(response.data);
-      
-    } catch (lamaError) {
-      const errorMsg = lamaError?.message || lamaError?.code || 'Unknown error';
-      console.error('❌ LaMa service error:', errorMsg);
-
-      // Попробуем автозапуск в dev при отсутствии процесса
-      if (!isProduction && !lamaProcess && !process.env.LAMA_DISABLED) {
-        console.error('🧰 Пытаемся запустить LaMa сервис и сообщаем об ошибке клиенту');
-        try { startLamaService(); } catch {}
-      }
-
-      // Отвечаем корректной ошибкой 503, чтобы клиент не применял исходник как "успешный" результат
-      res.status(503);
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('X-Retouch-Status', 'lama-unavailable');
-      res.setHeader('X-Retouch-Error', ('' + errorMsg).substring(0, 200));
-      return res.json({ error: 'LaMa service unavailable', details: errorMsg });
-    }
+    // Возвращаем оригинальное изображение без изменений
+    res.setHeader('Content-Type', imageFile.mimetype || 'image/png');
+    res.setHeader('Content-Length', imageFile.size);
+    res.setHeader('X-Retouch-Status', 'disabled');
+    res.setHeader('X-Retouch-Message', 'AI обработка временно отключена');
+    return res.send(imageFile.buffer);
     
   } catch (error) {
     console.error('❌ Retouch API error:', error);

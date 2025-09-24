@@ -580,6 +580,29 @@ export default class RetouchManager {
       fd.append('image', imageBlob, 'image.png');
       fd.append('mask', maskBlob, 'mask.png');
 
+      // Add AI settings if available
+      try {
+        if (typeof window.getAISettings === 'function') {
+          const aiSettings = window.getAISettings();
+          console.log('🎨 Debug RetouchManager: добавляем AI настройки:', aiSettings);
+          
+          if (aiSettings.prompt) {
+            fd.append('prompt', aiSettings.prompt);
+          }
+          if (aiSettings.negative_prompt) {
+            fd.append('negative_prompt', aiSettings.negative_prompt);
+          }
+          if (aiSettings.guidance_scale) {
+            fd.append('guidance_scale', aiSettings.guidance_scale.toString());
+          }
+          if (aiSettings.num_inference_steps) {
+            fd.append('num_inference_steps', aiSettings.num_inference_steps.toString());
+          }
+        }
+      } catch (error) {
+        console.warn('🎨 Warning RetouchManager: ошибка при добавлении AI настроек:', error);
+      }
+
       // Отправка на backend, который проксирует в AI
       console.log('🎨 Debug RetouchManager: отправляем запрос на /api/retouch');
   const resp = await fetch('/api/retouch', { method: 'POST', body: fd });
@@ -668,6 +691,28 @@ export default class RetouchManager {
             const fd2 = new FormData();
             fd2.append('image', imageBlob, 'image.png');
             fd2.append('mask', this._dataURLtoBlob(maskEqU), 'mask.png');
+            
+            // Add AI settings for retry request as well
+            try {
+              if (typeof window.getAISettings === 'function') {
+                const aiSettings = window.getAISettings();
+                if (aiSettings.prompt) {
+                  fd2.append('prompt', aiSettings.prompt);
+                }
+                if (aiSettings.negative_prompt) {
+                  fd2.append('negative_prompt', aiSettings.negative_prompt);
+                }
+                if (aiSettings.guidance_scale) {
+                  fd2.append('guidance_scale', aiSettings.guidance_scale.toString());
+                }
+                if (aiSettings.num_inference_steps) {
+                  fd2.append('num_inference_steps', aiSettings.num_inference_steps.toString());
+                }
+              }
+            } catch (error) {
+              console.warn('🎨 Warning RetouchManager: ошибка при добавлении AI настроек в повтор:', error);
+            }
+            
             const resp2 = await fetch('/api/retouch', { method: 'POST', body: fd2 });
             if (resp2.ok && (resp2.headers.get('content-type')||'').startsWith('image/')) {
               const out2 = await resp2.blob();

@@ -607,6 +607,99 @@
         transform: scale(1.05) !important;
       }
 
+      /* AI Settings Panel */
+      .settings-panel {
+        background: rgba(26, 26, 26, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 12px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      }
+
+      .setting-group {
+        margin-bottom: 8px;
+      }
+
+      .settings-panel input[type="range"] {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        height: 6px;
+        outline: none;
+        -webkit-appearance: none;
+      }
+
+      .settings-panel input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 16px;
+        height: 16px;
+        background: linear-gradient(135deg, #646cff, #8b5cf6);
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .settings-panel input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        background: linear-gradient(135deg, #646cff, #8b5cf6);
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .settings-panel label {
+        color: #fff;
+        font-size: 11px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 3px;
+      }
+
+      .settings-panel input[type="text"] {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        color: #fff;
+        font-size: 11px;
+        padding: 4px 6px;
+        outline: none;
+        transition: all 0.2s ease;
+      }
+
+      .settings-panel input[type="text"]:focus {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(100, 108, 255, 0.6);
+        box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.2);
+      }
+
+      .service-status {
+        font-size: 10px;
+        font-weight: 600;
+        text-align: center;
+        padding: 3px 6px;
+        border-radius: 12px;
+        margin-top: 6px;
+      }
+
+      .service-status.stable-diffusion {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: #fff;
+      }
+
+
+
+      .service-status.error {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: #fff;
+      }
+
       /* Современные стили для SVG иконок */
       .modern-icon-btn {
         min-width: 44px !important;
@@ -2074,6 +2167,77 @@
                 <path d="M20 20a8 8 0 1 0-6-13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
+
+            <!-- AI Settings Toggle -->
+            <button
+              id="ai-settings-toggle"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Настройки ИИ"
+              style="margin-top: 8px;"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" stroke-width="2"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- AI Settings Panel -->
+          <div id="ai-settings-panel" class="settings-panel" style="display: none;">
+            <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 14px;">⚙️ Настройки ИИ</h4>
+            
+            <div class="setting-group">
+              <label for="ai-prompt" style="display: block; margin-bottom: 4px; color: #ccc; font-size: 12px;">Промпт для удаления:</label>
+              <input 
+                type="text" 
+                id="ai-prompt" 
+                value="remove object, inpaint, clean background" 
+                placeholder="Описание для ИИ"
+                style="width: 100%; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 12px;"
+              />
+            </div>
+
+            <div class="setting-group" style="margin-top: 12px;">
+              <label for="ai-negative-prompt" style="display: block; margin-bottom: 4px; color: #ccc; font-size: 12px;">Негативный промпт:</label>
+              <input 
+                type="text" 
+                id="ai-negative-prompt" 
+                value="blurry, distorted, artifacts" 
+                placeholder="Что исключить"
+                style="width: 100%; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 12px;"
+              />
+            </div>
+
+            <div class="setting-group" style="margin-top: 12px;">
+              <label for="ai-guidance" style="display: block; margin-bottom: 4px; color: #ccc; font-size: 12px;">Сила направления: <span id="guidance-value">7.5</span></label>
+              <input 
+                type="range" 
+                id="ai-guidance" 
+                min="1" 
+                max="20" 
+                step="0.5" 
+                value="7.5"
+                style="width: 100%;"
+              />
+            </div>
+
+            <div class="setting-group" style="margin-top: 12px;">
+              <label for="ai-steps" style="display: block; margin-bottom: 4px; color: #ccc; font-size: 12px;">Шаги обработки: <span id="steps-value">20</span></label>
+              <input 
+                type="range" 
+                id="ai-steps" 
+                min="10" 
+                max="50" 
+                step="1" 
+                value="20"
+                style="width: 100%;"
+              />
+            </div>
+
+            <div style="margin-top: 12px; font-size: 11px; color: #999;">
+              💡 Используется: <span id="ai-service-status">Определяется...</span>
+            </div>
           </div>
         </div>
       </aside>
@@ -2713,6 +2877,82 @@
         }
 
         // Удален обработчик тестового видео для продакшна
+
+        // AI Settings Panel functionality
+        const aiToggleBtn = document.getElementById("ai-settings-toggle");
+        const aiSettingsPanel = document.getElementById("ai-settings");
+        const guidanceSlider = document.getElementById("guidance-scale");
+        const guidanceValue = document.getElementById("guidance-value");
+        const stepsSlider = document.getElementById("inference-steps");
+        const stepsValue = document.getElementById("steps-value");
+        const serviceStatus = document.getElementById("service-status");
+
+        // Toggle AI settings panel
+        if (aiToggleBtn && aiSettingsPanel) {
+          aiToggleBtn.addEventListener("click", () => {
+            const isHidden = aiSettingsPanel.style.display === "none";
+            aiSettingsPanel.style.display = isHidden ? "block" : "none";
+          });
+        }
+
+        // Update slider values
+        if (guidanceSlider && guidanceValue) {
+          guidanceSlider.addEventListener("input", (e) => {
+            guidanceValue.textContent = e.target.value;
+          });
+        }
+
+        if (stepsSlider && stepsValue) {
+          stepsSlider.addEventListener("input", (e) => {
+            stepsValue.textContent = e.target.value;
+          });
+        }
+
+        // Check AI service status
+        async function checkAIServiceStatus() {
+          try {
+            const response = await fetch('/api/ai-health');
+            const data = await response.json();
+            
+            if (serviceStatus) {
+              if (data.stableDiffusion?.status === 'running') {
+                serviceStatus.textContent = 'Stable Diffusion';
+                serviceStatus.className = 'service-status stable-diffusion';
+
+              } else {
+                serviceStatus.textContent = 'Сервис недоступен';
+                serviceStatus.className = 'service-status error';
+              }
+            }
+          } catch (error) {
+            console.error('Error checking AI service status:', error);
+            if (serviceStatus) {
+              serviceStatus.textContent = 'Ошибка соединения';
+              serviceStatus.className = 'service-status error';
+            }
+          }
+        }
+
+        // Get current AI settings for retouch
+        window.getAISettings = function() {
+          const prompt = document.getElementById("ai-prompt")?.value || "remove object";
+          const negativePrompt = document.getElementById("ai-negative-prompt")?.value || "";
+          const guidanceScale = parseFloat(document.getElementById("guidance-scale")?.value) || 7.5;
+          const inferenceSteps = parseInt(document.getElementById("inference-steps")?.value) || 20;
+
+          return {
+            prompt,
+            negative_prompt: negativePrompt,
+            guidance_scale: guidanceScale,
+            num_inference_steps: inferenceSteps
+          };
+        };
+
+        // Initialize AI service status check
+        checkAIServiceStatus();
+        
+        // Check AI service status every 30 seconds
+        setInterval(checkAIServiceStatus, 30000);
       });
     </script>
   </body>

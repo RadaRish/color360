@@ -58,14 +58,14 @@
 </head>
 <body>
     <div class="test-container">
-        <h1>🎨 Тест API ретуши LaMa</h1>
+        <h1>🎨 Тест API ретуши</h1>
         <p>Эта страница тестирует работу API ретуши без сложной логики редактора.</p>
         
         <div id="status" class="status info">
             Готов к тестированию
         </div>
         
-        <button id="testLamaHealth" class="test-btn">🔍 Проверить LaMa сервис</button>
+        <button id="testServiceHealth" class="test-btn">🔍 Проверить AI сервис</button>
         <button id="testRetouchAPI" class="test-btn">🎯 Тест API ретуши</button>
         <button id="clearLog" class="test-btn">🧹 Очистить лог</button>
         
@@ -87,17 +87,21 @@
             status.className = `status ${type}`;
         }
         
-        // Тест здоровья LaMa сервиса
-        document.getElementById('testLamaHealth').onclick = async () => {
-            addLog('🔍 Проверка LaMa сервиса...');
+        // Тест здоровья AI сервиса
+        document.getElementById('testServiceHealth').onclick = async () => {
+            addLog('🔍 Проверка AI сервиса...');
             try {
-                const response = await fetch('/api/lama-health');
+                const response = await fetch('/api/ai-health');
                 const data = await response.json();
-                addLog(`✅ LaMa сервис: ${JSON.stringify(data)}`);
-                setStatus('LaMa сервис работает', 'success');
+                addLog(`📊 AI сервис: ${JSON.stringify(data)}`);
+                if (response.ok) {
+                    setStatus('AI сервис работает', 'success');
+                } else {
+                    setStatus('AI сервис временно отключён', 'warning');
+                }
             } catch (error) {
-                addLog(`❌ Ошибка LaMa: ${error.message}`);
-                setStatus('LaMa сервис недоступен', 'error');
+                addLog(`❌ Ошибка AI: ${error.message}`);
+                setStatus('AI сервис недоступен', 'error');
             }
         };
         
