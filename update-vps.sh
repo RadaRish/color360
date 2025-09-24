@@ -12,6 +12,19 @@ BACKUP_DIR="/var/www/color360-backups"
 
 echo "🔄 Обновление Color360 на VPS сервере..."
 
+# Проверяем место на диске
+DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+if [ "$DISK_USAGE" -gt 85 ]; then
+    echo "⚠️ Предупреждение: Диск заполнен на ${DISK_USAGE}%"
+    echo "💡 Рекомендуется очистить диск перед обновлением:"
+    echo "   wget https://raw.githubusercontent.com/RadaRish/color360/main/clean-vps-disk.sh && chmod +x clean-vps-disk.sh && ./clean-vps-disk.sh"
+    if [ "$DISK_USAGE" -gt 95 ]; then
+        echo "❌ Критически мало места (${DISK_USAGE}%). Обновление прервано."
+        echo "🔧 Сначала освободите место на диске."
+        exit 1
+    fi
+fi
+
 # Проверяем права и определяем режим работы
 IS_ROOT=false
 if [[ $EUID -eq 0 ]]; then
@@ -24,24 +37,50 @@ if [[ $EUID -eq 0 ]]; then
     fi
 fi
 
-# Создаем директорию для бэкапов
+echo "🧹 Очистка старых файлов и директорий..."
+
+# Очистка временных файлов и кэшей
 if [ "$IS_ROOT" = true ]; then
-    mkdir -p "$BACKUP_DIR"
+    rm -rf "$PROJECT_DIR/temp/*" 2>/dev/null || true
+    rm -rf "$PROJECT_DIR/.cache/*" 2>/dev/null || true
+    rm -rf "$PROJECT_DIR/node_modules/.cache" 2>/dev/null || true
+    rm -rf "$PROJECT_DIR"/*.log 2>/dev/null || true
 else
-    sudo mkdir -p "$BACKUP_DIR"
+    sudo rm -rf "$PROJECT_DIR/temp/*" 2>/dev/null || true
+    sudo rm -rf "$PROJECT_DIR/.cache/*" 2>/dev/null || true
+    sudo rm -rf "$PROJECT_DIR/node_modules/.cache" 2>/dev/null || true
+    sudo rm -rf "$PROJECT_DIR"/*.log 2>/dev/null || true
 fi
 
-BACKUP_NAME="backup-$(date +%Y%m%d-%H%M%S)"
-
-echo "📁 Создание бэкапа: $BACKUP_NAME"
-
-# Бэкап текущей версии
-if [ "$IS_ROOT" = true ]; then
-    cp -r "$PROJECT_DIR" "$BACKUP_DIR/$BACKUP_NAME"
-else
-    sudo cp -r "$PROJECT_DIR" "$BACKUP_DIR/$BACKUP_NAME"
+# Удаление старых бэкапов если они есть
+if [ -d "$BACKUP_DIR" ]; then
+    echo "🗑️ Удаление старых бэкапов..."
+    if [ "$IS_ROOT" = true ]; then
+        rm -rf "$BACKUP_DIR"/* 2>/dev/null || true
+    else
+        sudo rm -rf "$BACKUP_DIR"/* 2>/dev/null || true
+    fi
 fi
-echo "✅ Бэкап создан: $BACKUP_DIR/$BACKUP_NAME"
+
+# Очистка старых версий сайта и редактора
+echo "🗂️ Очистка старых версий..."
+CLEANUP_DIRS=(
+    "/var/www/html/color360*"
+    "/var/www/color360-*"
+    "/opt/color360*"
+    "/home/*/color360*"
+    "/tmp/color360*"
+)
+
+for dir_pattern in "${CLEANUP_DIRS[@]}"; do
+    if [ "$IS_ROOT" = true ]; then
+        rm -rf $dir_pattern 2>/dev/null || true
+    else
+        sudo rm -rf $dir_pattern 2>/dev/null || true
+    fi
+done
+
+echo "✅ Очистка завершена"
 
 # Остановка сервисов
 echo "🛑 Остановка сервисов..."
@@ -294,28 +333,31 @@ echo "🎉 Обновление завершено!"
 echo ""
 echo "📋 Информация об обновлении:"
 echo "   📅 Время: $(date)"
-echo "   📂 Бэкап: $BACKUP_DIR/$BACKUP_NAME"
 echo "   🌿 Ветка: $BRANCH"
 echo "   📝 Коммит: $(git rev-parse --short HEAD)"
 echo ""
-echo "📊 Полезные команды:"
-echo "   sudo systemctl status color360-app"
-echo "   sudo systemctl status color360-sd"
-echo "   sudo journalctl -u color360-app -f"
-echo "   sudo journalctl -u color360-sd -f"
+echo "📊 Полезные команды для мониторинга:"
+echo "   systemctl status color360-app color360-sd"
+echo "   journalctl -u color360-app -f"
+echo "   journalctl -u color360-sd -f"
 echo ""
-echo "🔄 Откат к предыдущей версии (если нужен):"
-echo "   sudo systemctl stop color360-app color360-sd"
-echo "   sudo rm -rf $PROJECT_DIR"
-echo "   sudo mv $BACKUP_DIR/$BACKUP_NAME $PROJECT_DIR"
-echo "   sudo systemctl start color360-sd color360-app"
+echo "🔄 Управление сервисами:"
+echo "   systemctl restart color360-app color360-sd"
+echo "   systemctl stop color360-app color360-sd"
+echo "   systemctl start color360-app color360-sd"
 
-# Очистка старых бэкапов (оставляем последние 5)
-echo "🧹 Очистка старых бэкапов..."
-cd "$BACKUP_DIR"
+# Финальная очистка системы
+echo "🧹 Финальная очистка системы..."
 if [ "$IS_ROOT" = true ]; then
-    ls -t | tail -n +6 | xargs -r rm -rf
+    # Очистка npm кэша
+    npm cache clean --force 2>/dev/null || true
+    # Очистка логов старше 7 дней
+    find /var/log -name "*.log" -mtime +7 -delete 2>/dev/null || true
+    # Очистка временных файлов
+    find /tmp -name "*color360*" -mtime +1 -delete 2>/dev/null || true
 else
-    ls -t | tail -n +6 | sudo xargs -r rm -rf
+    sudo npm cache clean --force 2>/dev/null || true
+    sudo find /var/log -name "*.log" -mtime +7 -delete 2>/dev/null || true
+    sudo find /tmp -name "*color360*" -mtime +1 -delete 2>/dev/null || true
 fi
-echo "✅ Оставлено последние 5 бэкапов"
+echo "✅ Система очищена"
