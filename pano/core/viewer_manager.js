@@ -1643,6 +1643,11 @@ export default class ViewerManager {
       } else {
         img.src = imageSrc;
       }
+      
+      // Отладка загрузки изображения
+      console.log('🖼️ Загружаем панораму:', imageSrc);
+      console.log('📝 Asset ID:', safeId);
+      console.log('🔗 Final img.src:', img.src);
 
       // Дождёмся декодирования изображения до привязки к a-sky, чтобы избежать "image is incomplete"
       let decoded = false;
@@ -1694,6 +1699,11 @@ export default class ViewerManager {
       this.aframeSky.setAttribute('opacity', '1'); // Показываем небо после загрузки
       this.aframeSky.setAttribute('visible', 'true');
       this.currentPanorama = imageSrc;
+      
+      // Отладка A-Frame sky
+      console.log('🌌 A-Sky src установлен:', `#${safeId}`);
+      console.log('👁️ A-Sky visible:', this.aframeSky.getAttribute('visible'));
+      console.log('🔍 A-Sky opacity:', this.aframeSky.getAttribute('opacity'));
 
       // Ждём либо загрузки asset (на всякий случай), либо texture события, либо тайм-аута
       await Promise.race([
@@ -1705,6 +1715,17 @@ export default class ViewerManager {
       // FALLBACK: если A-Frame не создал material.map — попробуем создать текстуру из <img> или через TextureLoader
       try {
         const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+        
+        // Отладка mesh и material
+        console.log('🔧 A-Frame mesh:', mesh ? 'найден' : 'не найден');
+        if (mesh && mesh.material) {
+          console.log('🎨 Material:', mesh.material);
+          console.log('🗺️ Material map:', mesh.material.map ? 'есть' : 'нет');
+          if (mesh.material.map && mesh.material.map.image) {
+            console.log('📸 Texture image размер:', mesh.material.map.image.width + 'x' + mesh.material.map.image.height);
+          }
+        }
+        
         // Если a-sky потерял src (null), выставим его заново — иногда атрибут удаляется A-Frame
         const currentSrc = this.aframeSky.getAttribute('src');
         if (!currentSrc) {
@@ -1724,6 +1745,28 @@ export default class ViewerManager {
         }
         // Дадим A-Frame короткую паузу после (возможной) повторной установки src
         await new Promise(r => setTimeout(r, 180));
+
+        // Принудительно обновляем материал если нет текстуры
+        if (mesh && mesh.material && !mesh.material.map) {
+          console.log('🛠️ Принудительно создаем текстуру из img element');
+          const imgElement = document.getElementById(safeId);
+          if (imgElement && imgElement.complete && imgElement.naturalWidth > 0) {
+            try {
+              // Используем глобальный THREE из A-Frame
+              const texture = new window.THREE.Texture(imgElement);
+              texture.needsUpdate = true;
+              texture.flipY = false; // Важно для правильной ориентации
+              texture.format = window.THREE.RGBFormat;
+              mesh.material.map = texture;
+              mesh.material.needsUpdate = true;
+              console.log('✅ Текстура принудительно создана');
+            } catch (e) {
+              console.error('❌ Ошибка создания текстуры:', e);
+            }
+          } else {
+            console.log('❌ Img element не готов или не найден');
+          }
+        }
 
         if (mesh && (!mesh.material || !mesh.material.map)) {
           // Попробуем взять изображение из a-assets
