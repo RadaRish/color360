@@ -42,7 +42,20 @@ process.on('SIGTERM', () => {
 
 // Security headers with production configuration
 app.use(helmet({
-  contentSecurityPolicy: false, // Временно отключаем CSP для отладки
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://aframe.io", "https://cdnjs.cloudflare.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+      fontSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      frameSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"]
+    }
+  },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
 }));
 
