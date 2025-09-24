@@ -2235,8 +2235,21 @@
               />
             </div>
 
+            <div class="setting-group" style="margin-top: 12px;">
+              <label for="ai-strength" style="display: block; margin-bottom: 4px; color: #ccc; font-size: 12px;">Сила эффекта: <span id="strength-value">1.0</span></label>
+              <input 
+                type="range" 
+                id="ai-strength" 
+                min="0.1" 
+                max="1.0" 
+                step="0.1" 
+                value="1.0"
+                style="width: 100%;"
+              />
+            </div>
+
             <div style="margin-top: 12px; font-size: 11px; color: #999;">
-              💡 Используется: <span id="ai-service-status">Определяется...</span>
+              🎨 Используется: <span id="ai-service-status">Stable Diffusion</span>
             </div>
           </div>
         </div>
@@ -2878,14 +2891,16 @@
 
         // Удален обработчик тестового видео для продакшна
 
-        // AI Settings Panel functionality
+        // AI Settings Panel functionality  
         const aiToggleBtn = document.getElementById("ai-settings-toggle");
         const aiSettingsPanel = document.getElementById("ai-settings");
-        const guidanceSlider = document.getElementById("guidance-scale");
+        const guidanceSlider = document.getElementById("ai-guidance");
         const guidanceValue = document.getElementById("guidance-value");
-        const stepsSlider = document.getElementById("inference-steps");
+        const stepsSlider = document.getElementById("ai-steps");
         const stepsValue = document.getElementById("steps-value");
-        const serviceStatus = document.getElementById("service-status");
+        const strengthSlider = document.getElementById("ai-strength");
+        const strengthValue = document.getElementById("strength-value");
+        const serviceStatus = document.getElementById("ai-service-status");
 
         // Toggle AI settings panel
         if (aiToggleBtn && aiSettingsPanel) {
@@ -2905,6 +2920,12 @@
         if (stepsSlider && stepsValue) {
           stepsSlider.addEventListener("input", (e) => {
             stepsValue.textContent = e.target.value;
+          });
+        }
+
+        if (strengthSlider && strengthValue) {
+          strengthSlider.addEventListener("input", (e) => {
+            strengthValue.textContent = e.target.value;
           });
         }
 
@@ -2935,16 +2956,18 @@
 
         // Get current AI settings for retouch
         window.getAISettings = function() {
-          const prompt = document.getElementById("ai-prompt")?.value || "remove object";
-          const negativePrompt = document.getElementById("ai-negative-prompt")?.value || "";
-          const guidanceScale = parseFloat(document.getElementById("guidance-scale")?.value) || 7.5;
-          const inferenceSteps = parseInt(document.getElementById("inference-steps")?.value) || 20;
+          const prompt = document.getElementById("ai-prompt")?.value || "high quality, detailed, professional inpainting";
+          const negativePrompt = document.getElementById("ai-negative-prompt")?.value || "low quality, blurry, distorted, artifacts";
+          const guidanceScale = parseFloat(document.getElementById("ai-guidance")?.value) || 7.5;
+          const inferenceSteps = parseInt(document.getElementById("ai-steps")?.value) || 20;
+          const strength = parseFloat(document.getElementById("ai-strength")?.value) || 1.0;
 
           return {
             prompt,
             negative_prompt: negativePrompt,
             guidance_scale: guidanceScale,
-            num_inference_steps: inferenceSteps
+            num_inference_steps: inferenceSteps,
+            strength: strength
           };
         };
 

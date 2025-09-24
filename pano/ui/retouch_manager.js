@@ -598,6 +598,9 @@ export default class RetouchManager {
           if (aiSettings.num_inference_steps) {
             fd.append('num_inference_steps', aiSettings.num_inference_steps.toString());
           }
+          if (aiSettings.strength) {
+            fd.append('strength', aiSettings.strength.toString());
+          }
         }
       } catch (error) {
         console.warn('🎨 Warning RetouchManager: ошибка при добавлении AI настроек:', error);
@@ -707,6 +710,9 @@ export default class RetouchManager {
                 }
                 if (aiSettings.num_inference_steps) {
                   fd2.append('num_inference_steps', aiSettings.num_inference_steps.toString());
+                }
+                if (aiSettings.strength) {
+                  fd2.append('strength', aiSettings.strength.toString());
                 }
               }
             } catch (error) {

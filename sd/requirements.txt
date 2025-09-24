@@ -1,0 +1,40 @@
+# Stable Diffusion Inpainting Service Dependencies
+# Основные зависимости для работы с Stable Diffusion
+
+# FastAPI и веб-сервер
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Машинное обучение и Stable Diffusion
+torch>=2.0.0
+torchvision>=0.15.0
+diffusers==0.24.0
+transformers==4.35.2
+accelerate==0.24.1
+safetensors==0.4.0
+
+# Обработка изображений
+Pillow==10.1.0
+opencv-python==4.8.1.78
+
+# Научные вычисления
+numpy==1.24.3
+scipy==1.11.4
+
+# Утилиты
+python-multipart==0.0.6
+aiofiles==23.2.1
+
+# Мониторинг и логирование
+psutil==5.9.6
+
+# Дополнительные оптимизации (опционально)
+# xformers==0.0.22.post7  # Для ускорения на CUDA
+# triton>=2.0.0  # Для оптимизации памяти
+
+# Для работы с различными форматами изображений
+imageio==2.31.5
+imageio-ffmpeg==0.4.9
+
+# Поддержка CUDA (если доступна)
+# Эти пакеты будут установлены автоматически с torch при наличии CUDA

@@ -19,6 +19,13 @@ const PORT = process.env.PORT || 3000;
 // JWT Secret Key - in production this should be set as an environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-key-2025';
 
+// Stable Diffusion Service Configuration
+const SD_PORT = process.env.SD_PORT || 5002;
+const SD_HOST = process.env.SD_HOST || '127.0.0.1';
+const SD_URL = `http://${SD_HOST}:${SD_PORT}`;
+let sdProcess = null;
+let sdServiceReady = false;
+
 // Environment check
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -195,6 +202,169 @@ userSubscriptions[ADMIN_EMAIL] = {
   endDate: null, // No end date for admin
   maxEditorSessions: Infinity
 };
+
+// ==================== Stable Diffusion Service Management ====================
+
+/**
+ * Запускает Stable Diffusion сервис
+ */
+async function startStableDiffusionService() {
+  return new Promise((resolve, reject) => {
+    if (sdProcess && !sdProcess.killed) {
+      console.log('🎨 Stable Diffusion сервис уже запущен');
+      return resolve(true);
+    }
+
+    console.log('🚀 Запуск Stable Diffusion сервиса...');
+    
+    const pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
+    const sdAppPath = path.join(__dirname, 'sd', 'sd_app.py');
+    
+    // Проверяем существование файла
+    if (!fs.existsSync(sdAppPath)) {
+      console.error('❌ Файл sd_app.py не найден:', sdAppPath);
+      return reject(new Error('SD app file not found'));
+    }
+
+    sdProcess = spawn(pythonExecutable, [sdAppPath], {
+      cwd: path.join(__dirname, 'sd'),
+      env: {
+        ...process.env,
+        PORT: SD_PORT,
+        HOST: SD_HOST,
+        PYTHONUNBUFFERED: '1'
+      },
+      stdio: ['inherit', 'pipe', 'pipe']
+    });
+
+    let startupOutput = '';
+    const startupTimeout = setTimeout(() => {
+      console.error('❌ Timeout при запуске Stable Diffusion сервиса');
+      reject(new Error('SD service startup timeout'));
+    }, 120000); // 2 минуты timeout
+
+    sdProcess.stdout.on('data', (data) => {
+      const output = data.toString();
+      startupOutput += output;
+      console.log(`SD stdout: ${output.trim()}`);
+      
+      if (output.includes('Application startup complete') || output.includes('Uvicorn running')) {
+        clearTimeout(startupTimeout);
+        console.log('✅ Stable Diffusion сервис запущен успешно');
+        sdServiceReady = true;
+        resolve(true);
+      }
+    });
+
+    sdProcess.stderr.on('data', (data) => {
+      const output = data.toString();
+      console.error(`SD stderr: ${output.trim()}`);
+      
+      if (output.includes('Error') || output.includes('Failed')) {
+        clearTimeout(startupTimeout);
+        reject(new Error(`SD service error: ${output}`));
+      }
+    });
+
+    sdProcess.on('close', (code) => {
+      clearTimeout(startupTimeout);
+      console.log(`🛑 Stable Diffusion сервис завершился с кодом: ${code}`);
+      sdServiceReady = false;
+      sdProcess = null;
+      
+      if (code !== 0 && code !== null) {
+        reject(new Error(`SD service exited with code ${code}`));
+      }
+    });
+
+    sdProcess.on('error', (error) => {
+      clearTimeout(startupTimeout);
+      console.error('❌ Ошибка запуска Stable Diffusion сервиса:', error);
+      sdServiceReady = false;
+      sdProcess = null;
+      reject(error);
+    });
+  });
+}
+
+/**
+ * Останавливает Stable Diffusion сервис
+ */
+async function stopStableDiffusionService() {
+  return new Promise((resolve) => {
+    if (!sdProcess) {
+      console.log('🎨 Stable Diffusion сервис не запущен');
+      return resolve(true);
+    }
+
+    console.log('🛑 Остановка Stable Diffusion сервиса...');
+    sdServiceReady = false;
+
+    const killTimeout = setTimeout(() => {
+      if (sdProcess && !sdProcess.killed) {
+        console.log('🔪 Принудительное завершение Stable Diffusion сервиса');
+        sdProcess.kill('SIGKILL');
+      }
+    }, 10000); // 10 секунд на graceful shutdown
+
+    sdProcess.on('close', () => {
+      clearTimeout(killTimeout);
+      console.log('✅ Stable Diffusion сервис остановлен');
+      sdProcess = null;
+      resolve(true);
+    });
+
+    // Пытаемся graceful shutdown
+    try {
+      sdProcess.kill('SIGTERM');
+    } catch (error) {
+      console.error('Ошибка при остановке SD сервиса:', error);
+      clearTimeout(killTimeout);
+      sdProcess = null;
+      resolve(true);
+    }
+  });
+}
+
+/**
+ * Проверяет готовность Stable Diffusion сервиса
+ */
+async function checkStableDiffusionHealth() {
+  try {
+    const response = await axios.get(`${SD_URL}/health`, {
+      timeout: 5000,
+      validateStatus: function (status) {
+        return status < 500; // Resolve only if the status code is less than 500
+      }
+    });
+    
+    if (response.status === 200) {
+      sdServiceReady = true;
+      return { healthy: true, data: response.data };
+    } else {
+      sdServiceReady = false;
+      return { healthy: false, error: `HTTP ${response.status}` };
+    }
+  } catch (error) {
+    sdServiceReady = false;
+    return { healthy: false, error: error.message };
+  }
+}
+
+// Запускаем Stable Diffusion сервис при старте сервера
+if (!process.env.SD_DISABLED) {
+  startStableDiffusionService().catch(error => {
+    console.error('⚠️ Не удалось запустить Stable Diffusion сервис:', error.message);
+    console.log('🔄 Продолжаем работу без SD сервиса...');
+  });
+}
+
+// Останавливаем сервис при завершении работы
+process.on('exit', () => {
+  if (sdProcess && !sdProcess.killed) {
+    sdProcess.kill('SIGTERM');
+  }
+});
 
 // Helper function to create JWT token
 function makeToken(email){
@@ -437,29 +607,64 @@ const upload = multer({
   }
 });
 
-// Legacy API endpoints (заглушки для совместимости)
+// ==================== AI Service API Endpoints ====================
+
+// Legacy endpoint для совместимости
 app.get('/api/lama-health', (req, res) => {
   res.status(503).json({
     status: 'disabled',
-    message: 'LaMa сервис отключён'
+    message: 'LaMa сервис заменён на Stable Diffusion'
   });
 });
 
-app.get('/api/sd-health', (req, res) => {
-  res.status(503).json({
-    status: 'disabled', 
-    message: 'SD сервис пока не реализован'
-  });
+// Stable Diffusion health check
+app.get('/api/sd-health', async (req, res) => {
+  try {
+    const health = await checkStableDiffusionHealth();
+    if (health.healthy) {
+      res.json({
+        status: 'ok',
+        service: 'stable-diffusion',
+        ...health.data
+      });
+    } else {
+      res.status(503).json({
+        status: 'error',
+        service: 'stable-diffusion',
+        error: health.error
+      });
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      service: 'stable-diffusion',
+      error: error.message
+    });
+  }
 });
 
-app.get('/api/ai-health', (req, res) => {
-  res.status(503).json({
-    status: 'disabled',
-    message: 'AI сервисы временно отключены'
-  });
+// General AI health check
+app.get('/api/ai-health', async (req, res) => {
+  try {
+    const sdHealth = await checkStableDiffusionHealth();
+    res.json({
+      status: sdHealth.healthy ? 'ok' : 'degraded',
+      services: {
+        'stable-diffusion': {
+          status: sdHealth.healthy ? 'ok' : 'error',
+          error: sdHealth.error || null
+        }
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      error: error.message
+    });
+  }
 });
 
-// Retouch API endpoint (заглушка)
+// Main retouch API endpoint with Stable Diffusion
 app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), async (req, res) => {
   try {
     const imageFile = req.files?.image?.[0];
@@ -469,17 +674,85 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
       return res.status(400).json({ error: 'Требуются файлы изображения и маски' });
     }
 
-    console.log(`🎨 Запрос на ретушь: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
+    // Получаем параметры Stable Diffusion из формы
+    const {
+      prompt = 'high quality, detailed',
+      negative_prompt = 'low quality, blurry, distorted',
+      num_inference_steps = 20,
+      guidance_scale = 7.5,
+      strength = 1.0
+    } = req.body;
 
-    // Возвращаем оригинальное изображение без изменений
-    res.setHeader('Content-Type', imageFile.mimetype || 'image/png');
-    res.setHeader('Content-Length', imageFile.size);
-    res.setHeader('X-Retouch-Status', 'disabled');
-    res.setHeader('X-Retouch-Message', 'AI обработка временно отключена');
-    return res.send(imageFile.buffer);
+    console.log(`🎨 Запрос на ретушь SD: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
+    console.log(`📝 Параметры: prompt="${prompt}", steps=${num_inference_steps}`);
+
+    // Проверяем готовность сервиса
+    if (!sdServiceReady) {
+      const health = await checkStableDiffusionHealth();
+      if (!health.healthy) {
+        console.log('⚠️ SD сервис недоступен, возвращаем оригинал');
+        res.setHeader('Content-Type', imageFile.mimetype || 'image/png');
+        res.setHeader('X-Retouch-Status', 'fallback');
+        res.setHeader('X-Retouch-Message', 'SD сервис недоступен');
+        return res.send(imageFile.buffer);
+      }
+    }
+
+    // Создаем FormData для отправки в SD сервис
+    const FormData = require('form-data');
+    const formData = new FormData();
+    
+    formData.append('image', imageFile.buffer, {
+      filename: imageFile.originalname || 'image.png',
+      contentType: imageFile.mimetype || 'image/png'
+    });
+    
+    formData.append('mask', maskFile.buffer, {
+      filename: maskFile.originalname || 'mask.png', 
+      contentType: maskFile.mimetype || 'image/png'
+    });
+    
+    formData.append('prompt', prompt);
+    formData.append('negative_prompt', negative_prompt);
+    formData.append('num_inference_steps', num_inference_steps.toString());
+    formData.append('guidance_scale', guidance_scale.toString());
+    formData.append('strength', strength.toString());
+
+    // Отправляем запрос в SD сервис
+    const response = await axios.post(`${SD_URL}/inpaint`, formData, {
+      headers: {
+        ...formData.getHeaders(),
+        'Accept': 'image/png'
+      },
+      responseType: 'arraybuffer',
+      timeout: 120000, // 2 минуты timeout для генерации
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity
+    });
+
+    if (response.status === 200) {
+      console.log('✅ SD обработка завершена успешно');
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('X-Retouch-Status', 'success');
+      res.setHeader('X-Retouch-Service', 'stable-diffusion');
+      return res.send(Buffer.from(response.data));
+    } else {
+      throw new Error(`SD service returned ${response.status}`);
+    }
     
   } catch (error) {
     console.error('❌ Retouch API error:', error);
+    
+    // В случае ошибки возвращаем оригинал
+    const imageFile = req.files?.image?.[0];
+    if (imageFile) {
+      console.log('🔄 Возвращаем оригинальное изображение');
+      res.setHeader('Content-Type', imageFile.mimetype || 'image/png');
+      res.setHeader('X-Retouch-Status', 'error');
+      res.setHeader('X-Retouch-Message', error.message);
+      return res.send(imageFile.buffer);
+    }
+    
     return res.status(500).json({ 
       error: 'Ошибка обработки изображения', 
       details: error.message 

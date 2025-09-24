@@ -1,3 +1,4 @@
+# Docker Compose с поддержкой GPU для Stable Diffusion
 version: '3.8'
 
 services:
@@ -22,45 +23,50 @@ services:
     networks:
       - color360-network
 
-  # Stable Diffusion AI Service
-  color360-sd:
-    build:
-      context: .
-      dockerfile: sd/Dockerfile
-      target: base  # Используем CPU версию по умолчанию
-    container_name: color360-sd
-    environment:
-      - PORT=5002
-      - HOST=0.0.0.0
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - sd-models:/home/app/.cache  # Кэш для моделей
-    expose:
-      - "5002"
-    restart: unless-stopped
-    networks:
-      - color360-network
-    # Для GPU версии добавьте:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
   # Panorama editor application
   color360-pano:
     build: ./pano
     container_name: color360-pano
-    # Доступ внутрь сети только через nginx reverse proxy
     volumes:
       - ./pano/export:/usr/share/nginx/html/export
     restart: unless-stopped
     networks:
       - color360-network
 
-  # React frontend app (inpainting UI)
+  # Stable Diffusion AI Service with GPU support
+  color360-sd:
+    build:
+      context: .
+      dockerfile: sd/Dockerfile
+      target: cuda  # GPU версия
+    container_name: color360-sd
+    environment:
+      - PORT=5002
+      - HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - sd-models:/home/app/.cache
+      - sd-temp:/home/app/temp
+    expose:
+      - "5002"
+    restart: unless-stopped
+    networks:
+      - color360-network
+    # GPU конфигурация
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Альтернативный способ для старых версий Docker Compose
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+
+  # React frontend app
   frontend:
     build: ./frontend
     container_name: color360-frontend
@@ -73,7 +79,7 @@ services:
     networks:
       - color360-network
 
-  # Reverse proxy to route traffic
+  # Reverse proxy
   nginx:
     image: nginx:alpine
     container_name: color360-proxy
@@ -87,6 +93,7 @@ services:
       - color360-main
       - color360-pano
       - color360-sd
+      - frontend
     restart: unless-stopped
     networks:
       - color360-network
@@ -97,4 +104,6 @@ networks:
 
 volumes:
   sd-models:
+    driver: local
+  sd-temp:
     driver: local
