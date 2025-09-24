@@ -5,32 +5,51 @@
 set -e
 
 # Конфигурация
-PROJECT_DIR="/opt/color360"
+PROJECT_DIR="/var/www/color360"
 GIT_REPO="https://github.com/RadaRish/color360.git"
 BRANCH="main"
-BACKUP_DIR="/opt/color360-backups"
+BACKUP_DIR="/var/www/color360-backups"
 
 echo "🔄 Обновление Color360 на VPS сервере..."
 
-# Проверяем права
+# Проверяем права и определяем режим работы
+IS_ROOT=false
 if [[ $EUID -eq 0 ]]; then
-   echo "❌ Не запускайте скрипт от root. Используйте sudo для отдельных команд."
-   exit 1
+    echo "⚠️ Запуск от root пользователя. Будут использованы системные команды."
+    IS_ROOT=true
+    # Проверяем существование пользователя color360
+    if ! id "color360" &>/dev/null; then
+        echo "📝 Создание пользователя color360..."
+        useradd -r -s /bin/bash -d "$PROJECT_DIR" color360 || true
+    fi
 fi
 
 # Создаем директорию для бэкапов
-sudo mkdir -p "$BACKUP_DIR"
+if [ "$IS_ROOT" = true ]; then
+    mkdir -p "$BACKUP_DIR"
+else
+    sudo mkdir -p "$BACKUP_DIR"
+fi
+
 BACKUP_NAME="backup-$(date +%Y%m%d-%H%M%S)"
 
 echo "📁 Создание бэкапа: $BACKUP_NAME"
 
 # Бэкап текущей версии
-sudo cp -r "$PROJECT_DIR" "$BACKUP_DIR/$BACKUP_NAME"
+if [ "$IS_ROOT" = true ]; then
+    cp -r "$PROJECT_DIR" "$BACKUP_DIR/$BACKUP_NAME"
+else
+    sudo cp -r "$PROJECT_DIR" "$BACKUP_DIR/$BACKUP_NAME"
+fi
 echo "✅ Бэкап создан: $BACKUP_DIR/$BACKUP_NAME"
 
 # Остановка сервисов
 echo "🛑 Остановка сервисов..."
-sudo systemctl stop color360-app color360-sd nginx || true
+if [ "$IS_ROOT" = true ]; then
+    systemctl stop color360-app color360-sd nginx || true
+else
+    sudo systemctl stop color360-app color360-sd nginx || true
+fi
 
 # Переходим в директорию проекта
 cd "$PROJECT_DIR"
@@ -52,7 +71,13 @@ git reset --hard origin/$BRANCH
 
 # Обновляем Node.js зависимости
 echo "📦 Обновление Node.js зависимостей..."
-sudo -u color360 npm install --production
+if [ "$IS_ROOT" = true ]; then
+    # Устанавливаем права на проект для пользователя color360
+    chown -R color360:color360 "$PROJECT_DIR"
+    sudo -u color360 npm install --production
+else
+    sudo -u color360 npm install --production
+fi
 
 # Проверяем изменения в Python зависимостях
 if [ -f "sd/requirements.txt" ]; then
@@ -61,11 +86,20 @@ if [ -f "sd/requirements.txt" ]; then
     # Активируем виртуальное окружение и обновляем зависимости
     if [ -d "sd_env" ]; then
         echo "📦 Обновление Python пакетов..."
-        sudo -u color360 bash -c "source sd_env/bin/activate && pip install --upgrade -r sd/requirements.txt"
+        if [ "$IS_ROOT" = true ]; then
+            sudo -u color360 bash -c "source sd_env/bin/activate && pip install --upgrade -r sd/requirements.txt"
+        else
+            sudo -u color360 bash -c "source sd_env/bin/activate && pip install --upgrade -r sd/requirements.txt"
+        fi
     else
         echo "⚠️ Виртуальное окружение не найдено. Создаем новое..."
-        sudo -u color360 python3 -m venv sd_env
-        sudo -u color360 bash -c "source sd_env/bin/activate && pip install --upgrade pip && pip install -r sd/requirements.txt"
+        if [ "$IS_ROOT" = true ]; then
+            sudo -u color360 python3 -m venv sd_env
+            sudo -u color360 bash -c "source sd_env/bin/activate && pip install --upgrade pip && pip install -r sd/requirements.txt"
+        else
+            sudo -u color360 python3 -m venv sd_env
+            sudo -u color360 bash -c "source sd_env/bin/activate && pip install --upgrade pip && pip install -r sd/requirements.txt"
+        fi
     fi
 fi
 
@@ -149,40 +183,74 @@ EOF
     fi
     
     if [ "$NEED_RELOAD" = true ]; then
-        sudo systemctl daemon-reload
-        sudo systemctl enable color360-app color360-sd
+        if [ "$IS_ROOT" = true ]; then
+            systemctl daemon-reload
+            systemctl enable color360-app color360-sd
+        else
+            sudo systemctl daemon-reload
+            sudo systemctl enable color360-app color360-sd
+        fi
     fi
 fi
 
 # Обновляем права доступа
 echo "🔐 Обновление прав доступа..."
-sudo chown -R color360:color360 "$PROJECT_DIR"
-sudo chmod +x "$PROJECT_DIR"/*.sh 2>/dev/null || true
+if [ "$IS_ROOT" = true ]; then
+    chown -R color360:color360 "$PROJECT_DIR"
+    chmod +x "$PROJECT_DIR"/*.sh 2>/dev/null || true
+else
+    sudo chown -R color360:color360 "$PROJECT_DIR"
+    sudo chmod +x "$PROJECT_DIR"/*.sh 2>/dev/null || true
+fi
 
 # Проверяем nginx конфигурацию
 echo "🌐 Проверка nginx конфигурации..."
-sudo nginx -t
+if [ "$IS_ROOT" = true ]; then
+    nginx -t
+else
+    sudo nginx -t
+fi
 
 # Запуск сервисов
 echo "🚀 Запуск сервисов..."
-sudo systemctl start color360-sd
-sleep 5  # Даем время SD сервису запуститься
-
-sudo systemctl start color360-app
-sudo systemctl start nginx
+if [ "$IS_ROOT" = true ]; then
+    systemctl start color360-sd
+    sleep 5  # Даем время SD сервису запуститься
+    
+    systemctl start color360-app
+    systemctl start nginx
+else
+    sudo systemctl start color360-sd
+    sleep 5  # Даем время SD сервису запуститься
+    
+    sudo systemctl start color360-app
+    sudo systemctl start nginx
+fi
 
 # Проверяем статус сервисов
 echo "✅ Проверка статуса сервисов..."
 sleep 10
 
 echo "📊 Статус color360-sd:"
-sudo systemctl is-active color360-sd --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+if [ "$IS_ROOT" = true ]; then
+    systemctl is-active color360-sd --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+else
+    sudo systemctl is-active color360-sd --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+fi
 
 echo "📊 Статус color360-app:"
-sudo systemctl is-active color360-app --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+if [ "$IS_ROOT" = true ]; then
+    systemctl is-active color360-app --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+else
+    sudo systemctl is-active color360-app --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+fi
 
 echo "📊 Статус nginx:"
-sudo systemctl is-active nginx --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+if [ "$IS_ROOT" = true ]; then
+    systemctl is-active nginx --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+else
+    sudo systemctl is-active nginx --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+fi
 
 # Тестирование endpoint-ов
 echo "🔍 Тестирование приложения..."
@@ -192,7 +260,11 @@ if curl -f -s http://localhost:3000/ > /dev/null; then
 else
     echo "❌ Основное приложение не отвечает"
     echo "📜 Последние логи:"
-    sudo journalctl -u color360-app --no-pager -n 10
+    if [ "$IS_ROOT" = true ]; then
+        journalctl -u color360-app --no-pager -n 10
+    else
+        sudo journalctl -u color360-app --no-pager -n 10
+    fi
 fi
 
 if curl -f -s http://localhost:5002/health > /dev/null; then
@@ -226,5 +298,9 @@ echo "   sudo systemctl start color360-sd color360-app"
 # Очистка старых бэкапов (оставляем последние 5)
 echo "🧹 Очистка старых бэкапов..."
 cd "$BACKUP_DIR"
-ls -t | tail -n +6 | sudo xargs -r rm -rf
+if [ "$IS_ROOT" = true ]; then
+    ls -t | tail -n +6 | xargs -r rm -rf
+else
+    ls -t | tail -n +6 | sudo xargs -r rm -rf
+fi
 echo "✅ Оставлено последние 5 бэкапов"
