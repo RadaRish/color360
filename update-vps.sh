@@ -54,6 +54,11 @@ fi
 # Переходим в директорию проекта
 cd "$PROJECT_DIR"
 
+# Исправляем проблему с правами Git репозитория
+if [ "$IS_ROOT" = true ]; then
+    git config --global --add safe.directory "$PROJECT_DIR"
+fi
+
 # Проверяем git статус
 echo "📊 Проверка Git статуса..."
 git status
@@ -240,9 +245,19 @@ fi
 
 echo "📊 Статус color360-app:"
 if [ "$IS_ROOT" = true ]; then
-    systemctl is-active color360-app --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+    if systemctl is-active color360-app --quiet; then
+        echo "✅ Активен"
+    else
+        echo "❌ Неактивен - проверяем логи..."
+        systemctl status color360-app --no-pager -l || true
+    fi
 else
-    sudo systemctl is-active color360-app --quiet && echo "✅ Активен" || echo "❌ Неактивен"
+    if sudo systemctl is-active color360-app --quiet; then
+        echo "✅ Активен"
+    else
+        echo "❌ Неактивен - проверяем логи..."
+        sudo systemctl status color360-app --no-pager -l || true
+    fi
 fi
 
 echo "📊 Статус nginx:"
