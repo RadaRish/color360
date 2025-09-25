@@ -1538,72 +1538,43 @@ export default class ViewerManager {
             )
           ]);
 
-          // FALLBACK: иногда A-Frame не успевает создать material.map — попробуем установить вручную через THREE
+          // FALLBACK: проверяем, создал ли A-Frame материал с текстурой
           try {
             const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
-            if (mesh && (!mesh.material || !mesh.material.map)) {
-              if (typeof THREE !== 'undefined') {
-                await new Promise((res) => {
-                  try {
-                    const loader = new THREE.TextureLoader();
-                    // Кросс-оригин для blob URL не требуется, но оставим пустой
-                    loader.load(blobUrl, (tex) => {
-                      try {
-                        if (mesh.material) {
-                          mesh.material.map = tex;
-                          mesh.material.needsUpdate = true;
-                        } else {
-                          mesh.material = new THREE.MeshBasicMaterial({ map: tex });
-                        }
-
-                      } catch (e) {
-
-                      }
-                      res();
-                    }, undefined, (err) => {
-
-                      res();
-                    });
-                  } catch (e) { console.warn('⚠️ TextureLoader fallback failed:', e); res(); }
+            console.log('🔧 Проверяем mesh после загрузки:', mesh ? 'найден' : 'отсутствует');
+            if (mesh && mesh.material) {
+              console.log('🎨 Material после загрузки:', mesh.material.type, 'map:', mesh.material.map ? 'есть' : 'нет');
+              if (!mesh.material.map && typeof THREE !== 'undefined') {
+                console.log('🛠️ Принудительно создаем текстуру из blob URL');
+                const loader = new THREE.TextureLoader();
+                loader.load(blobUrl, (tex) => {
+                  mesh.material.map = tex;
+                  mesh.material.needsUpdate = true;
+                  console.log('✅ Текстура успешно загружена через TextureLoader');
+                }, undefined, (err) => {
+                  console.error('❌ Ошибка загрузки текстуры через TextureLoader:', err);
                 });
               }
+            } else {
+              console.warn('⚠️ Mesh или material не найдены после загрузки');
             }
           } catch (e) {
-
+            console.error('❌ Ошибка в FALLBACK обработке:', e);
           }
 
-          // Принудительное обновление текстуры/рендера — помогает гарантировать, что новая панорама отобразится
-          try {
-            const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
-            if (mesh && mesh.material) {
-              // Радикальный подход: пересоздаём материал полностью
-              const oldMap = mesh.material.map;
-              if (oldMap) oldMap.dispose();
-              
-              // Создаём новый материал с новой текстурой
-              if (typeof THREE !== 'undefined') {
-                const loader = new THREE.TextureLoader();
-                loader.load(blobUrl, (newTexture) => {
-                  mesh.material = new THREE.MeshBasicMaterial({ map: newTexture });
-                  mesh.material.needsUpdate = true;
-                  // Принудительный рендер
-                  if (this.aframeScene && this.aframeScene.renderer && this.aframeScene.camera) {
-                    try { this.aframeScene.renderer.render(this.aframeScene.object3D, this.aframeScene.camera); } catch (e) {}
-                  }
-                });
-              } else {
-                // Fallback если THREE недоступен
-                if (mesh.material.map) mesh.material.map.needsUpdate = true;
-                mesh.material.needsUpdate = true;
-                if (this.aframeScene && this.aframeScene.renderer && this.aframeScene.camera) {
-                  try { this.aframeScene.renderer.render(this.aframeScene.object3D, this.aframeScene.camera); } catch (e) {}
-                }
-              }
-            }
-          } catch (e) { console.warn('⚠️ Принудительное обновление текстуры не удалось:', e); }
-
+          // Финальная проверка состояния
+          const finalMesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+          const hasMap = !!(finalMesh && finalMesh.material && finalMesh.material.map);
+          console.log('🏁 Завершение загрузки data URL:', { 
+            meshFound: !!finalMesh, 
+            materialFound: !!(finalMesh && finalMesh.material),
+            mapFound: hasMap,
+            skyVisible: this.aframeSky.getAttribute('visible'),
+            skySrc: this.aframeSky.getAttribute('src')
+          });
+          
           // Скрываем уведомление об успешной загрузке — не показываем toast
-          try { this.updateDebugOverlay({ stage: 'loaded', src: blobUrl, meshHasMap: !!(this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh') && this.aframeSky.getObject3D('mesh').material && this.aframeSky.getObject3D('mesh').material.map) }); } catch (e) {}
+          try { this.updateDebugOverlay({ stage: 'loaded', src: blobUrl, meshHasMap: hasMap }); } catch (e) {}
           return true;
         } catch (blobError) {
           console.error('❌ Ошибка конвертации в blob URL:', blobError);
