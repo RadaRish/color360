@@ -232,22 +232,55 @@ async function startStableDiffusionService() {
     
     // Используем Python из виртуального окружения если оно существует
     let pythonExecutable;
-    const venvPython = path.join(__dirname, '.venv', 'Scripts', 'python.exe');
-    if (process.platform === 'win32' && fs.existsSync(venvPython)) {
-      pythonExecutable = venvPython;
-      console.log('📦 Используем Python из виртуального окружения:', pythonExecutable);
-    } else {
-      pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
+    
+    // Проверяем различные возможные пути к виртуальному окружению
+    const venvPaths = [
+      path.join(__dirname, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'),
+      path.join(__dirname, 'sd_env', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'),
+      path.join(__dirname, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
+    ];
+    
+    let venvFound = false;
+    for (const venvPath of venvPaths) {
+      if (fs.existsSync(venvPath)) {
+        pythonExecutable = venvPath;
+        venvFound = true;
+        console.log('📦 Используем Python из виртуального окружения:', pythonExecutable);
+        break;
+      }
+    }
+    
+    if (!venvFound) {
+      // Определяем системный Python в зависимости от платформы
+      if (process.platform === 'win32') {
+        pythonExecutable = 'python';
+      } else {
+        // Для Linux/Unix проверяем доступные версии Python
+        const pythonCommands = ['python3.11', 'python3.10', 'python3.9', 'python3.8', 'python3', 'python'];
+        pythonExecutable = 'python3'; // Значение по умолчанию
+        
+        for (const cmd of pythonCommands) {
+          try {
+            const { execSync } = require('child_process');
+            execSync(`which ${cmd}`, { stdio: 'ignore' });
+            pythonExecutable = cmd;
+            break;
+          } catch (e) {
+            // Команда не найдена, пробуем следующую
+          }
+        }
+      }
       console.log('🐍 Используем системный Python:', pythonExecutable);
     }
     
     // Временно используем простую версию (полная требует дополнительной настройки)
     const sdAppPath = path.join(__dirname, 'sd', 'sd_app_simple.py');
     
-    // Проверяем существование файла
+    // Проверяем существование файла SD сервиса
     if (!fs.existsSync(sdAppPath)) {
-      console.error('❌ Файл sd_app.py не найден:', sdAppPath);
-      return reject(new Error('SD app file not found'));
+      console.warn('⚠️ Файл SD сервиса не найден:', sdAppPath);
+      console.log('🔄 Продолжаем работу без SD сервиса...');
+      return resolve(false); // Продолжаем без SD
     }
 
     sdProcess = spawn(pythonExecutable, [sdAppPath], {
@@ -263,9 +296,13 @@ async function startStableDiffusionService() {
 
     let startupOutput = '';
     const startupTimeout = setTimeout(() => {
-      console.error('❌ Timeout при запуске Stable Diffusion сервиса');
-      reject(new Error('SD service startup timeout'));
-    }, 120000); // 2 минуты timeout
+      console.warn('⚠️ Timeout при запуске Stable Diffusion сервиса');
+      console.log('🔄 Продолжаем работу без SD сервиса...');
+      if (sdProcess) {
+        sdProcess.kill();
+      }
+      resolve(false); // Продолжаем без SD
+    }, 60000); // 1 минута timeout
 
     sdProcess.stdout.on('data', (data) => {
       const output = data.toString();
@@ -284,9 +321,16 @@ async function startStableDiffusionService() {
       const output = data.toString();
       console.error(`SD stderr: ${output.trim()}`);
       
-      if (output.includes('Error') || output.includes('Failed')) {
+      if (output.includes('ImportError') || output.includes('ModuleNotFoundError') || 
+          output.includes('No module named')) {
         clearTimeout(startupTimeout);
-        reject(new Error(`SD service error: ${output}`));
+        console.warn('⚠️ Не удалось запустить Stable Diffusion сервис:', output.slice(0, 100) + '...');
+        console.log('🔄 Продолжаем работу без SD сервиса...');
+        resolve(false); // Продолжаем без SD
+      } else if (output.includes('Error') || output.includes('Failed')) {
+        clearTimeout(startupTimeout);
+        console.warn('⚠️ SD сервис завершился с ошибкой:', output.slice(0, 100) + '...');
+        resolve(false); // Продолжаем без SD вместо краха
       }
     });
 
@@ -296,17 +340,20 @@ async function startStableDiffusionService() {
       sdServiceReady = false;
       sdProcess = null;
       
-      if (code !== 0 && code !== null) {
-        reject(new Error(`SD service exited with code ${code}`));
+      // Не крашим сервер из-за проблем с SD
+      if (!sdServiceReady) {
+        console.log('🔄 Продолжаем работу без SD сервиса...');
+        resolve(false);
       }
     });
 
     sdProcess.on('error', (error) => {
       clearTimeout(startupTimeout);
-      console.error('❌ Ошибка запуска Stable Diffusion сервиса:', error);
+      console.warn('⚠️ Ошибка запуска Stable Diffusion сервиса:', error.message);
       sdServiceReady = false;
       sdProcess = null;
-      reject(error);
+      console.log('🔄 Продолжаем работу без SD сервиса...');
+      resolve(false); // Продолжаем без SD
     });
   });
 }
@@ -375,12 +422,15 @@ async function checkStableDiffusionHealth() {
   }
 }
 
-// Запускаем Stable Diffusion сервис при старте сервера
-if (!process.env.SD_DISABLED) {
+// Запускаем Stable Diffusion сервис при старте сервера (только если не отключен)
+if (!process.env.SD_DISABLED && process.env.NODE_ENV !== 'production') {
+  console.log('🎨 Попытка запуска Stable Diffusion сервиса...');
   startStableDiffusionService().catch(error => {
     console.error('⚠️ Не удалось запустить Stable Diffusion сервис:', error.message);
     console.log('🔄 Продолжаем работу без SD сервиса...');
   });
+} else {
+  console.log('🎨 Stable Diffusion сервис отключен (SD_DISABLED=true или production режим)');
 }
 
 // Останавливаем сервис при завершении работы
