@@ -230,8 +230,19 @@ async function startStableDiffusionService() {
 
     console.log('🚀 Запуск Stable Diffusion сервиса...');
     
-    const pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
-    const sdAppPath = path.join(__dirname, 'sd', 'sd_app.py');
+    // Используем Python из виртуального окружения если оно существует
+    let pythonExecutable;
+    const venvPython = path.join(__dirname, '.venv', 'Scripts', 'python.exe');
+    if (process.platform === 'win32' && fs.existsSync(venvPython)) {
+      pythonExecutable = venvPython;
+      console.log('📦 Используем Python из виртуального окружения:', pythonExecutable);
+    } else {
+      pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
+      console.log('🐍 Используем системный Python:', pythonExecutable);
+    }
+    
+    // Используем простую версию для разработки если torch недоступен
+    const sdAppPath = path.join(__dirname, 'sd', 'sd_app_simple.py');
     
     // Проверяем существование файла
     if (!fs.existsSync(sdAppPath)) {

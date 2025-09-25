@@ -1378,6 +1378,8 @@ export default class ViewerManager {
   }
 
   async setPanorama(imageSrc) {
+    console.log('🖼️ setPanorama() вызвана с imageSrc:', imageSrc ? imageSrc.slice(0, 100) + '...' : 'null');
+    
     if (!this.aframeSky) {
       console.error('A-Frame sky элемент не найден');
       // ИСПРАВЛЕНИЕ: Устанавливаем черный фон при ошибке
@@ -1767,6 +1769,31 @@ export default class ViewerManager {
             console.log('❌ Img element не готов или не найден');
           }
         }
+
+        // Защита от сброса материала - проверяем каждые 500мс
+        const protectMaterial = () => {
+          try {
+            const currentMesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
+            if (currentMesh && currentMesh.material && !currentMesh.material.map) {
+              const imgElement = document.getElementById(safeId);
+              if (imgElement && imgElement.complete && imgElement.naturalWidth > 0) {
+                console.log('🔧 Восстанавливаем потерянную текстуру');
+                const texture = new window.THREE.Texture(imgElement);
+                texture.needsUpdate = true;
+                texture.flipY = false;
+                texture.format = window.THREE.RGBFormat;
+                currentMesh.material.map = texture;
+                currentMesh.material.needsUpdate = true;
+              }
+            }
+          } catch (e) {
+            console.error('❌ Ошибка защиты материала:', e);
+          }
+        };
+
+        // Запускаем защиту на 5 секунд
+        const protectionInterval = setInterval(protectMaterial, 500);
+        setTimeout(() => clearInterval(protectionInterval), 5000);
 
         if (mesh && (!mesh.material || !mesh.material.map)) {
           // Попробуем взять изображение из a-assets

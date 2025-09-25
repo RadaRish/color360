@@ -12,10 +12,12 @@ export default class SceneManager {
   }
 
   async addScene(scene) {
+    console.log('🎬 SceneManager.addScene() вызвана:', scene.name, scene.src ? 'с src' : 'без src');
+    
     try {
       // ЗАЩИТА: блокируем только автоматически созданные проблематичные сцены без src
       if (scene.name && scene.name.match(/^\d+\.(JPG|jpg)$/) && !scene.src) {
-
+        console.log('🚫 Блокируем проблематичную сцену без src');
         return false;
       }
 
@@ -158,7 +160,7 @@ export default class SceneManager {
       this.viewerManager.clearMarkers();
 
       // Загружаем новую панораму
-
+      console.log('🎬 SceneManager: загружаем панораму для сцены', scene.name, 'src:', scene.src ? scene.src.slice(0, 100) + '...' : 'null');
       const success = await this.viewerManager.setPanorama(scene.src);
       if (!success) {
         console.error('Не удалось загрузить панораму для сцены:', scene.name);

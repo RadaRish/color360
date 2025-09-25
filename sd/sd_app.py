@@ -21,6 +21,9 @@ from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+# Отключаем xformers для избежания проблем на Windows
+os.environ["XFORMERS_DISABLED"] = "1"
+
 from diffusers import StableDiffusionInpaintPipeline
 from diffusers.utils import logging as diffusers_logging
 
@@ -87,9 +90,13 @@ async def load_model():
         # Оптимизация для различных устройств
         if device == "cuda":
             pipeline.enable_model_cpu_offload()
-            pipeline.enable_xformers_memory_efficient_attention()
+            # Отключаем xformers из-за проблем на Windows
+            # pipeline.enable_xformers_memory_efficient_attention()
         elif device == "mps":
             pipeline.enable_model_cpu_offload()
+        else:
+            # Для CPU используем минимальные настройки
+            logger.info("Используем CPU режим без дополнительных оптимизаций")
         
         logger.info("Модель Stable Diffusion успешно загружена")
         return True
