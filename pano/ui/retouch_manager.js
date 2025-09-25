@@ -68,7 +68,7 @@ export default class RetouchManager {
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.lineWidth = 20;
+      ctx.lineWidth = 40; // Увеличили размер кисти для лучшего покрытия
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(255,0,0,0.9)';
@@ -456,7 +456,7 @@ export default class RetouchManager {
       // Соответствие масштабов: сколько пикселей эквиректа приходится на 1 пиксель экрана
       const scaleUF = targetWidth / Math.max(1, sceneRect.width);
       const scaleVF = targetHeight / Math.max(1, sceneRect.height);
-      const baseSplat = Math.ceil(Math.min(48, Math.max(2, Math.max(scaleUF, scaleVF) * 0.75)));
+      const baseSplat = Math.ceil(Math.min(80, Math.max(8, Math.max(scaleUF, scaleVF) * 1.5))); // Увеличили покрытие
       // Адаптивная дискретизация по бюджету пикселей (не более ~600k рейкастов)
       const pixelBudget = 600000;
       const step = Math.max(1, Math.floor(Math.sqrt((scrW * scrH) / pixelBudget)));
@@ -687,7 +687,7 @@ export default class RetouchManager {
       if (maskDataUrlEq) {
         const diffMean = await calcMaskedDiff(imageBlob, resultDataUrl, maskDataUrlEq, imgSize);
         console.log('🧪 Debug RetouchManager: masked mean diff =', diffMean.toFixed(2));
-        if (diffMean < 4) {
+        if (diffMean < 1.5) { // Снизили порог для более мягкой проверки
           console.warn('🎨 Warning RetouchManager: низкая разница внутри маски, пробуем инверсию U');
           const maskEqU = await this._exportMaskEquirect(imgSize.width, imgSize.height, { invertU: true });
           if (maskEqU) {

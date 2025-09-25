@@ -751,3 +751,23 @@ document.addEventListener('DOMContentLoaded', updateUIForUserStatus);
 
 // Close dropdown when clicking outside
 document.addEventListener('click', closeDropdownOutside);
+
+// AI Settings for Retouch functionality
+window.getAISettings = function() {
+  return {
+    // Промпт для качественного inpainting с удалением объектов
+    prompt: 'high quality, detailed, professional inpainting, seamless background restoration, natural textures, clean removal, perfect blending',
+    
+    // Негативный промпт для предотвращения артефактов
+    negative_prompt: 'low quality, blurry, distorted, artifacts, seams, visible edges, inconsistent lighting, noise, compression artifacts, poor blending',
+    
+    // Увеличиваем guidance_scale для более точного следования промпту
+    guidance_scale: 12.0,
+    
+    // Увеличиваем количество шагов для лучшего качества
+    num_inference_steps: 30,
+    
+    // Максимальная сила для полного удаления/замещения
+    strength: 1.0
+  };
+};
