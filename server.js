@@ -626,7 +626,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { 
     fileSize: 50 * 1024 * 1024, // 50MB max file size
-    fields: 2, // image and mask
+    fields: 10, // image, mask, prompt, negative_prompt, guidance_scale, num_inference_steps, strength, etc.
     files: 2
   }
 });
