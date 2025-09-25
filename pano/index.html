@@ -2742,13 +2742,22 @@
 
         // Удален обработчик тестового видео для продакшна
 
-        // Get current AI settings for retouch (simplified version)
+        // Get current AI settings for retouch (aggressive object removal version)
         window.getAISettings = function() {
           return {
-            prompt: "high quality, detailed, professional inpainting",
-            negative_prompt: "low quality, blurry, distorted, artifacts",
-            guidance_scale: 7.5,
-            num_inference_steps: 20,
+            // Агрессивный промпт специально для удаления объектов
+            prompt: "remove object completely, fill with background, seamless inpainting, natural background continuation, perfect object removal, clean erasure, background restoration, photorealistic fill",
+            
+            // Строгий негативный промпт против сохранения объектов
+            negative_prompt: "object visible, incomplete removal, artifacts, seams, visible edges, poor inpainting, blurry, distorted, low quality, noise, watermark, text, logo, object remains, partial removal",
+            
+            // Максимальный guidance_scale для строгого следования промпту удаления
+            guidance_scale: 20.0,
+            
+            // Много шагов для качественного удаления
+            num_inference_steps: 75,
+            
+            // Максимальная сила для полного замещения
             strength: 1.0
           };
         };

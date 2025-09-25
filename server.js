@@ -241,7 +241,7 @@ async function startStableDiffusionService() {
       console.log('🐍 Используем системный Python:', pythonExecutable);
     }
     
-    // Используем простую версию для разработки если torch недоступен
+    // Временно используем простую версию (полная требует дополнительной настройки)
     const sdAppPath = path.join(__dirname, 'sd', 'sd_app_simple.py');
     
     // Проверяем существование файла
@@ -698,17 +698,25 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
       return res.status(400).json({ error: 'Требуются файлы изображения и маски' });
     }
 
-    // Получаем параметры Stable Diffusion из формы
+    // Получаем параметры Stable Diffusion из формы с явным приведением типов
     const {
       prompt = 'high quality, detailed',
       negative_prompt = 'low quality, blurry, distorted',
-      num_inference_steps = 20,
-      guidance_scale = 7.5,
-      strength = 1.0
     } = req.body;
+    
+    // Явно приводим числовые параметры к нужному типу
+    const num_inference_steps = parseInt(req.body.num_inference_steps) || 20;
+    const guidance_scale = parseFloat(req.body.guidance_scale) || 7.5;
+    const strength = parseFloat(req.body.strength) || 1.0;
 
     console.log(`🎨 Запрос на ретушь SD: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
-    console.log(`📝 Параметры: prompt="${prompt}", steps=${num_inference_steps}`);
+    console.log(`📝 Подробные параметры AI:`, {
+      prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+      negative_prompt: negative_prompt.substring(0, 100) + (negative_prompt.length > 100 ? '...' : ''),
+      num_inference_steps,
+      guidance_scale,
+      strength
+    });
 
     // Проверяем готовность сервиса
     if (!sdServiceReady) {
@@ -741,6 +749,15 @@ app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), a
     formData.append('num_inference_steps', num_inference_steps.toString());
     formData.append('guidance_scale', guidance_scale.toString());
     formData.append('strength', strength.toString());
+
+    console.log(`🚀 Отправляем запрос в SD: ${SD_URL}/inpaint`);
+    console.log(`📊 Финальные параметры для SD:`, {
+      prompt: prompt.substring(0, 50) + '...',
+      negative_prompt: negative_prompt.substring(0, 50) + '...',
+      num_inference_steps,
+      guidance_scale,
+      strength
+    });
 
     // Отправляем запрос в SD сервис
     const response = await axios.post(`${SD_URL}/inpaint`, formData, {

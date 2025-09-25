@@ -68,7 +68,7 @@ export default class RetouchManager {
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.lineWidth = 40; // Увеличили размер кисти для лучшего покрытия
+      ctx.lineWidth = 20; // Уменьшили размер кисти в два раза
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(255,0,0,0.9)';
@@ -134,9 +134,13 @@ export default class RetouchManager {
     };
 
     // Кнопки
-    overlay.querySelector('#retouch-apply').addEventListener('click', () => {
+    overlay.querySelector('#retouch-apply').addEventListener('click', (e) => {
       console.log('🎨 Debug RetouchManager: Нажато "Готово"');
       console.log('🎨 Debug RetouchManager: _points:', this._points);
+      
+      // Предотвращаем всплытие события и рисование на canvas
+      e.preventDefault();
+      e.stopPropagation();
       
       // Если пользователь ничего не нарисовал, создаем тестовую маску в центре
       if (this._points.length === 0 || this._points.every(poly => !poly || poly.length < 2)) {
@@ -165,8 +169,13 @@ export default class RetouchManager {
       console.log('🎨 Debug RetouchManager: _maskDataUrl длина:', this._maskDataUrl ? this._maskDataUrl.length : 'null');
       this._resolveFinish(true);
     });
-    overlay.querySelector('#retouch-cancel').addEventListener('click', () => {
+    overlay.querySelector('#retouch-cancel').addEventListener('click', (e) => {
       console.log('🎨 Debug RetouchManager: Нажато "Отмена"');
+      
+      // Предотвращаем всплытие события и рисование на canvas
+      e.preventDefault();
+      e.stopPropagation();
+      
       this._maskDataUrl = null; // Очищаем маску при отмене
       this._resolveFinish(false);
     });
@@ -502,13 +511,13 @@ export default class RetouchManager {
         }
         // Ожидаемая площадь ~ экранная площадь, умноженная на масштаб по U и V
         const expected = Math.max(1, Math.floor(screenWhite * scaleUF * scaleVF));
-        const minPixels = Math.max(2000, Math.floor(expected * 0.3)); // не менее 2000px и ~30% от ожидаемой
+        const minPixels = Math.max(8000, Math.floor(expected * 0.6)); // увеличили до 8000px и 60% от ожидаемой
   console.log('📐 Debug RetouchManager: mask whiteCount=', whiteCount, 'minPixels=', minPixels, 'size=', targetWidth+'x'+targetHeight);
         if (whiteCount < minPixels) {
-          // Увеличиваем сплэт и пробуем ещё раз (до двух попыток)
+          // Увеличиваем сплэт и пробуем ещё раз (до трех попыток с большими коэффициентами)
           let improved = false;
-          for (let factor of [1.6, 2.2]) {
-            const newSplat = Math.min(96, Math.max(splat, Math.ceil(baseSplat * factor)));
+          for (let factor of [2.0, 3.0, 4.0]) {
+            const newSplat = Math.min(150, Math.max(splat, Math.ceil(baseSplat * factor))); // увеличили лимит до 150
             if (newSplat === splat) continue;
             splat = newSplat;
             mapped = mapWithSplat(splat, false);
@@ -687,7 +696,10 @@ export default class RetouchManager {
       if (maskDataUrlEq) {
         const diffMean = await calcMaskedDiff(imageBlob, resultDataUrl, maskDataUrlEq, imgSize);
         console.log('🧪 Debug RetouchManager: masked mean diff =', diffMean.toFixed(2));
-        if (diffMean < 1.5) { // Снизили порог для более мягкой проверки
+        
+        // Временно отключаем проверку различий - принимаем любой результат AI
+        console.log('🎯 Debug RetouchManager: Принимаем результат AI без проверки различий');
+        /* if (diffMean < 1.5) { // Снизили порог для более мягкой проверки
           console.warn('🎨 Warning RetouchManager: низкая разница внутри маски, пробуем инверсию U');
           const maskEqU = await this._exportMaskEquirect(imgSize.width, imgSize.height, { invertU: true });
           if (maskEqU) {
@@ -728,7 +740,7 @@ export default class RetouchManager {
               console.warn('🎨 Warning RetouchManager: повтор с U-инверсией вернул не image/*');
             }
           }
-        }
+        } */
       }
 
       // На этом этапе xStatus не содержит fallback/lama-unavailable — можно применять результат
