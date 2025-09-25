@@ -8,6 +8,7 @@ export default class ViewerManager {
     this.aframeCamera = null;
     this.aframeSky = null;
     this.currentPanorama = null;
+    this._currentPanoramaBlobUrl = null;
     this.zoomSpeed = 1.0; // Скорость зума по умолчанию
     this.hotspotManager = hotspotManager; // Ссылка на менеджер хотспотов
     this.coordinateManager = new CoordinateManager(this); // Передаем ссылку на ViewerManager
@@ -1391,6 +1392,16 @@ export default class ViewerManager {
 
     try {
 
+      // Освобождаем предыдущий blob URL, если он был, при загрузке НЕ из data URL
+      if (!imageSrc.startsWith('data:') && this._currentPanoramaBlobUrl) {
+        try {
+          URL.revokeObjectURL(this._currentPanoramaBlobUrl);
+        } catch (revokeError) {
+          console.warn('⚠️ Не удалось освободить предыдущий blob URL панорамы:', revokeError);
+        }
+        this._currentPanoramaBlobUrl = null;
+      }
+
   try { this.updateDebugOverlay({ stage: 'start', src: imageSrc }); } catch (e) {}
 
       // ИСПРАВЛЕНИЕ: Устанавливаем черный фон до загрузки изображения
@@ -1478,8 +1489,17 @@ export default class ViewerManager {
           }
 
           // Конвертируем Data URL в Blob
+          if (this._currentPanoramaBlobUrl) {
+            try {
+              URL.revokeObjectURL(this._currentPanoramaBlobUrl);
+            } catch (revokeError) {
+              console.warn('⚠️ Не удалось освободить предыдущий blob URL панорамы:', revokeError);
+            }
+            this._currentPanoramaBlobUrl = null;
+          }
           const blob = dataURLtoBlob(imageSrc);
           const blobUrl = URL.createObjectURL(blob);
+          this._currentPanoramaBlobUrl = blobUrl;
 
           // Убираем цвет перед установкой изображения и принудительно сбрасываем src
           this.aframeSky.removeAttribute('color');
@@ -1552,10 +1572,6 @@ export default class ViewerManager {
 
           }
 
-          // Освобождаем blob URL через некоторое время
-          setTimeout(() => {
-            URL.revokeObjectURL(blobUrl);
-          }, 5000);
           // Принудительное обновление текстуры/рендера — помогает гарантировать, что новая панорама отобразится
           try {
             const mesh = this.aframeSky.getObject3D && this.aframeSky.getObject3D('mesh');
