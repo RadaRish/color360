@@ -24,15 +24,33 @@ This repository contains a minimal prototype for the main landing page of Color3
 
 ## Deploy to VPS
 
-For production deployment on a VPS, see [README-DEPLOY.md](README-DEPLOY.md) for detailed instructions in English or [INSTALL-RU.md](INSTALL-RU.md) for instructions in Russian.
+### 🚀 Быстрая установка
+```bash
+# Автоматическая установка (рекомендуется)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.sh | sudo bash
+```
 
-For deployment on reg.ru hosting, see [INSTALL-REG-RU.md](INSTALL-REG-RU.md).
+### 📚 Подробная документация
+- [INSTALL-UPDATE-GUIDE.md](INSTALL-UPDATE-GUIDE.md) — полная инструкция по установке и обновлению
+- [README-DEPLOY.md](README-DEPLOY.md) — подробные инструкции по развертыванию (English)
+- [INSTALL-RU.md](INSTALL-RU.md) — инструкции на русском языке
+- [INSTALL-REG-RU.md](INSTALL-REG-RU.md) — развертывание на reg.ru хостинге
 
-This deployment includes:
-- Docker configuration for both main site and panorama editor
-- Nginx reverse proxy for routing requests
-- SSL setup instructions with Let's Encrypt
-- Backup and monitoring strategies
+### ⚡ Обновления
+```bash
+# Полное обновление с проверками
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.sh | sudo bash
+
+# Быстрое обновление (только код)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/quick-update.sh | sudo bash
+```
+
+**Особенности развертывания:**
+- Docker конфигурация для основного сайта и панорамного редактора
+- Nginx reverse proxy для маршрутизации запросов  
+- SSL настройка с Let's Encrypt
+- **Резервные копии НЕ создаются автоматически** — создавайте их вручную при необходимости
+- Мониторинг и диагностика системы
 
 ## Notes & next steps
 - This is a demo / prototype. The backend stores users in memory — for production use a database and secure password hashing.
