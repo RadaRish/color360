@@ -1745,7 +1745,8 @@ export default class ViewerManager {
               const texture = new window.THREE.Texture(imgElement);
               texture.needsUpdate = true;
               texture.flipY = false; // Важно для правильной ориентации
-              texture.format = window.THREE.RGBFormat;
+              // Исправлено: используем RGBAFormat или RGB если недоступен
+              texture.format = window.THREE.RGBAFormat || window.THREE.RGBFormat;
               mesh.material.map = texture;
               mesh.material.needsUpdate = true;
               console.log('✅ Текстура принудительно создана');
@@ -1768,7 +1769,8 @@ export default class ViewerManager {
                 const texture = new window.THREE.Texture(imgElement);
                 texture.needsUpdate = true;
                 texture.flipY = false;
-                texture.format = window.THREE.RGBFormat;
+                // Исправлено: используем RGBAFormat или RGB если недоступен
+                texture.format = window.THREE.RGBAFormat || window.THREE.RGBFormat;
                 currentMesh.material.map = texture;
                 currentMesh.material.needsUpdate = true;
               }

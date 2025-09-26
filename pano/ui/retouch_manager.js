@@ -474,12 +474,19 @@ export default class RetouchManager {
       mctx.fillRect(0, 0, targetWidth, targetHeight);
       mctx.fillStyle = '#fff';
 
-      // Сцена и сохранённая геометрия overlay
+      // 🎯 КРИТИЧЕСКИ ВАЖНО: получаем точные координаты renderer canvas
       const sceneRect = canvas.getBoundingClientRect();
       const ov = this._overlayRect || sceneRect;
+      
+      // Проверяем совпадение overlay и renderer canvas
+      const overlayOffsetX = (ov.left || 0) - (sceneRect.left || 0);
+      const overlayOffsetY = (ov.top || 0) - (sceneRect.top || 0);
+      
       const scaleX = sceneRect.width > 0 && ov.width > 0 ? (sceneRect.width / ov.width) : 1;
       const scaleY = sceneRect.height > 0 && ov.height > 0 ? (sceneRect.height / ov.height) : 1;
+      
       console.log('🎨 Debug RetouchManager: sceneRect=', sceneRect, ' overlayRect=', ov, ' scale=', scaleX.toFixed(4), scaleY.toFixed(4));
+      console.log('🎯 Debug RetouchManager: overlay offset=', overlayOffsetX.toFixed(2), overlayOffsetY.toFixed(2));
 
       // 1) Построим экранную маску (в координатах renderer canvas) из сохранённых полигонов
       const scrW = Math.max(1, Math.round(sceneRect.width));
@@ -493,10 +500,11 @@ export default class RetouchManager {
       let drewAny = false;
       for (const poly of this._savedPolygons) {
         if (!poly || poly.length < 3) continue;
-        const sx0 = poly[0].x * scaleX, sy0 = poly[0].y * scaleY;
+        // 🎯 Учитываем offset overlay относительно renderer canvas
+        const sx0 = (poly[0].x - overlayOffsetX) * scaleX, sy0 = (poly[0].y - overlayOffsetY) * scaleY;
         scrCtx.moveTo(sx0, sy0);
         for (let i=1; i<poly.length; i++) {
-          scrCtx.lineTo(poly[i].x * scaleX, poly[i].y * scaleY);
+          scrCtx.lineTo((poly[i].x - overlayOffsetX) * scaleX, (poly[i].y - overlayOffsetY) * scaleY);
         }
         scrCtx.closePath();
         drewAny = true;
