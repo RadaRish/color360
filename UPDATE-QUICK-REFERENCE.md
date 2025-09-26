@@ -4,7 +4,11 @@
 
 ### Автоматическое полное обновление
 ```bash
+# Стандартный скрипт (с отдельным пользователем)
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.sh | sudo bash
+
+# Упрощенный скрипт (от root, если есть проблемы с sudo)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-root.sh | sudo bash
 ```
 
 ### Быстрое обновление (только код)

@@ -11,20 +11,27 @@
 
 ### Автоматическое обновление (рекомендуется)
 ```bash
-# Загрузка и запуск скрипта обновления
+# Загрузка и запуск стандартного скрипта обновления
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.sh | sudo bash
 ```
 
-### Альтернативный способ
+### Альтернативный способ (если есть проблемы с sudo/пользователями)
 ```bash
-# Скачивание скрипта
+# Упрощенный скрипт, работающий полностью от root
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-root.sh | sudo bash
+```
+
+### Ручное скачивание и запуск
+```bash
+# Скачивание стандартного скрипта
 wget https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.sh
-
-# Установка прав на выполнение
 chmod +x update-vps.sh
-
-# Запуск обновления
 sudo ./update-vps.sh
+
+# Или упрощенного скрипта
+wget https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-root.sh
+chmod +x update-vps-root.sh
+sudo ./update-vps-root.sh
 ```
 
 ## 🔧 Ручная установка
@@ -128,11 +135,18 @@ curl http://your-domain.com/
 
 ### Решение частых проблем
 
-#### 🚨 Ошибка "Permission denied"
+#### 🚨 Ошибка "Permission denied" или проблемы с sudo
 ```bash
 # Исправление прав доступа
 sudo chown -R color360:color360 /var/www/color360
 sudo chmod -R 755 /var/www/color360
+
+# Если проблемы с sudo для пользователя color360:
+# Используйте упрощенный скрипт от root
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-root.sh | sudo bash
+
+# Или настройте sudoers (осторожно!)
+echo "color360 ALL=(ALL) NOPASSWD: /usr/local/bin/npm, /usr/bin/npm" | sudo tee -a /etc/sudoers.d/color360
 ```
 
 #### 🚨 Ошибка "Port already in use"

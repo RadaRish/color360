@@ -36,9 +36,34 @@ cd "$PROJECT_DIR"
 # Функция для выполнения команд от имени пользователя
 run_as_user() {
     if [[ $EUID -eq 0 ]]; then
-        sudo -u "$APP_USER" -H "$@"
+        if id "$APP_USER" &>/dev/null; then
+            su - "$APP_USER" -c "cd '$PROJECT_DIR' && $*"
+        else
+            log_warning "Пользователь $APP_USER не найден, выполняем от root"
+            cd "$PROJECT_DIR" && "$@"
+        fi
     else
         "$@"
+    fi
+}
+
+# Функция для npm команд
+run_npm_as_user() {
+    local npm_cmd="$*"
+    
+    if [[ $EUID -eq 0 ]]; then
+        if id "$APP_USER" &>/dev/null; then
+            if su - "$APP_USER" -c "cd '$PROJECT_DIR' && $npm_cmd" 2>/dev/null; then
+                return 0
+            fi
+            log_warning "Выполнение npm от root..."
+            cd "$PROJECT_DIR" && $npm_cmd
+            chown -R "$APP_USER":"$APP_USER" "$PROJECT_DIR"
+        else
+            cd "$PROJECT_DIR" && $npm_cmd
+        fi
+    else
+        cd "$PROJECT_DIR" && $npm_cmd
     fi
 }
 
@@ -74,9 +99,9 @@ fi
 if [[ -f "package.json" ]]; then
     log_info "Проверка Node.js зависимостей..."
     if [[ -f "package-lock.json" ]]; then
-        run_as_user npm ci --production --silent
+        run_npm_as_user npm ci --production --silent
     else
-        run_as_user npm install --production --silent
+        run_npm_as_user npm install --production --silent
     fi
     log_success "Зависимости проверены"
 fi

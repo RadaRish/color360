@@ -32,6 +32,45 @@ log_error() { echo -e "${RED}❌ $1${NC}"; }
 log_info "Запуск обновления Color360 на VPS сервере..."
 log_info "Проект: $PROJECT_DIR | Ветка: $BRANCH | Пользователь: $APP_USER"
 
+# Диагностика пользователя и прав
+diagnose_user_permissions() {
+    log_info "Проверка пользователя и прав доступа"
+    
+    if id "$APP_USER" &>/dev/null; then
+        log_success "Пользователь $APP_USER существует"
+        
+        # Проверяем группы пользователя
+        local user_groups
+        user_groups=$(groups "$APP_USER" 2>/dev/null | cut -d: -f2 || echo "неизвестно")
+        log_info "Группы пользователя: $user_groups"
+    else
+        log_warning "Пользователь $APP_USER не существует, будет создан"
+    fi
+    
+    # Проверяем права на директорию проекта
+    if [[ -d "$PROJECT_DIR" ]]; then
+        local dir_owner
+        dir_owner=$(stat -c '%U:%G' "$PROJECT_DIR" 2>/dev/null || echo "неизвестно")
+        log_info "Владелец директории $PROJECT_DIR: $dir_owner"
+    fi
+    
+    # Проверяем доступ к npm
+    if command -v npm &>/dev/null; then
+        local npm_path
+        npm_path=$(which npm)
+        log_info "NPM найден: $npm_path"
+        
+        # Проверяем глобальный префикс npm
+        local npm_prefix
+        npm_prefix=$(npm config get prefix 2>/dev/null || echo "неизвестно")
+        log_info "NPM prefix: $npm_prefix"
+    else
+        log_warning "NPM не найден в PATH"
+    fi
+}
+
+diagnose_user_permissions
+
 # Функция проверки команд
 check_command() {
     if ! command -v "$1" &> /dev/null; then
@@ -48,9 +87,54 @@ done
 # Функция для запуска команд от нужного пользователя
 run_as_user() {
     if [[ $EUID -eq 0 ]]; then
-        sudo -u "$APP_USER" -H "$@"
+        # Проверяем существование пользователя
+        if ! id "$APP_USER" &>/dev/null; then
+            log_warning "Пользователь $APP_USER не найден, выполняем от root"
+            cd "$PROJECT_DIR" && "$@"
+            return
+        fi
+        
+        # Используем su с правильным окружением
+        su - "$APP_USER" -c "cd '$PROJECT_DIR' && $*"
     else
         "$@"
+    fi
+}
+
+# Специальная функция для npm команд с дополнительными проверками
+run_npm_as_user() {
+    local npm_cmd="$*"
+    
+    if [[ $EUID -eq 0 ]]; then
+        # Проверяем права на директорию
+        if [[ ! -w "$PROJECT_DIR" ]]; then
+            run_as_root chown -R "$APP_USER":"$APP_USER" "$PROJECT_DIR"
+        fi
+        
+        # Пробуем разные способы выполнения npm
+        if id "$APP_USER" &>/dev/null; then
+            # Способ 1: su с полным окружением
+            if su - "$APP_USER" -c "cd '$PROJECT_DIR' && $npm_cmd" 2>/dev/null; then
+                return 0
+            fi
+            
+            # Способ 2: sudo с HOME
+            log_warning "Попытка через sudo с HOME..."
+            if HOME="/home/$APP_USER" sudo -u "$APP_USER" bash -c "cd '$PROJECT_DIR' && $npm_cmd" 2>/dev/null; then
+                return 0
+            fi
+            
+            # Способ 3: выполнение от root с правильными правами
+            log_warning "Выполнение npm от root с последующей сменой владельца..."
+            cd "$PROJECT_DIR" && $npm_cmd
+            run_as_root chown -R "$APP_USER":"$APP_USER" "$PROJECT_DIR"
+        else
+            # Если пользователя нет, выполняем от root
+            log_warning "Пользователь $APP_USER не найден, выполняем npm от root"
+            cd "$PROJECT_DIR" && $npm_cmd
+        fi
+    else
+        cd "$PROJECT_DIR" && $npm_cmd
     fi
 }
 
@@ -84,7 +168,24 @@ check_disk_space
 # Создаём системного пользователя при необходимости
 if [[ $EUID -eq 0 ]] && ! id "$APP_USER" &>/dev/null; then
     log_info "Создание пользователя $APP_USER"
-    useradd -r -s /bin/bash -d "$PROJECT_DIR" "$APP_USER" || true
+    
+    # Создаём группу если не существует
+    if ! getent group "$APP_USER" &>/dev/null; then
+        groupadd -r "$APP_USER" 2>/dev/null || true
+    fi
+    
+    # Создаём пользователя
+    if useradd -r -s /bin/bash -g "$APP_USER" -d "/home/$APP_USER" "$APP_USER" 2>/dev/null; then
+        log_success "Пользователь $APP_USER создан"
+        
+        # Создаём домашнюю директорию
+        mkdir -p "/home/$APP_USER"
+        chown "$APP_USER":"$APP_USER" "/home/$APP_USER"
+        chmod 755 "/home/$APP_USER"
+    else
+        log_warning "Не удалось создать пользователя $APP_USER, продолжаем от root"
+        APP_USER="root"
+    fi
 fi
 
 # Проверяем и создаём директорию проекта
@@ -203,9 +304,9 @@ update_dependencies() {
     if [[ -f "package.json" ]]; then
         log_info "Обновление Node.js зависимостей"
         if [[ -f "package-lock.json" ]]; then
-            run_as_user npm ci --production
+            run_npm_as_user npm ci --production
         else
-            run_as_user npm install --production
+            run_npm_as_user npm install --production
         fi
         log_success "Node.js зависимости обновлены"
     else

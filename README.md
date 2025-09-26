@@ -28,6 +28,9 @@ This repository contains a minimal prototype for the main landing page of Color3
 ```bash
 # Автоматическая установка (рекомендуется)
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.sh | sudo bash
+
+# Если есть проблемы с sudo/пользователями (альтернативный метод)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-root.sh | sudo bash
 ```
 
 ### 📚 Подробная документация
