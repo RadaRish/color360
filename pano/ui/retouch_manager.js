@@ -394,6 +394,14 @@ export default class RetouchManager {
   const canvas = renderer && renderer.domElement ? renderer.domElement : undefined;
       if (!camera || !renderer || !canvas) return null;
 
+      // 🔧 КРИТИЧЕСКИ ВАЖНО: сбрасываем камеру в исходное положение для стабильных координат
+      const originalRotation = camera.rotation.clone();
+      console.log('🎯 Debug RetouchManager: сохранили исходную ориентацию камеры:', 
+        `x:${originalRotation.x.toFixed(3)}, y:${originalRotation.y.toFixed(3)}, z:${originalRotation.z.toFixed(3)}`);
+      camera.rotation.set(0, 0, 0);
+      camera.updateMatrixWorld(true);
+      console.log('🎯 Debug RetouchManager: сброшена камера в (0,0,0) для стабильного маппинга');
+
   const sphereRadius = (this.viewerManager && this.viewerManager.coordinateManager && this.viewerManager.coordinateManager.sphereRadius) ? this.viewerManager.coordinateManager.sphereRadius : 10;
 
       const screenToUV = (localX, localY) => {
@@ -577,9 +585,23 @@ export default class RetouchManager {
         }
   } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось оценить/исправить площадь маски:', e && e.message); }
 
+      // 🔧 Восстанавливаем исходную позицию камеры
+      camera.rotation.copy(originalRotation);
+      camera.updateMatrixWorld(true);
+      console.log('🎯 Debug RetouchManager: восстановлена исходная ориентация камеры');
+
       return mask.toDataURL('image/png');
     } catch (e) {
   console.warn('🎨 Warning RetouchManager: _exportMaskEquirect failed:', e && e.message);
+      
+      // 🔧 Восстанавливаем камеру даже в случае ошибки
+      if (typeof originalRotation !== 'undefined' && camera) {
+        try {
+          camera.rotation.copy(originalRotation);
+          camera.updateMatrixWorld(true);
+        } catch (restoreErr) { /* игнорируем ошибки восстановления */ }
+      }
+      
       return null;
     }
   }
