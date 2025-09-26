@@ -56,12 +56,19 @@ apt-mark hold ubuntu-keyring ubuntu-minimal 2>/dev/null || true
 # Принудительно удаляем ВСЕ следы Node.js
 log_info "Удаление всех Node.js пакетов..."
 
-# Список всех возможных Node.js пакетов
-NODE_PACKAGES="nodejs npm node libnode-dev libnode72 node-* libjs-*"
+# Удаляем все node-* пакеты принудительно
+dpkg --remove --force-remove-reinstreq --force-depends nodejs npm libnode-dev libnode72 2>/dev/null || true
 
-for pkg in $NODE_PACKAGES; do
-    dpkg --remove --force-remove-reinstreq --force-depends $pkg 2>/dev/null || true
+# Удаляем ВСЕ node-* пакеты
+apt-get remove --purge -y node-* 2>/dev/null || true
+
+# Принудительно удаляем через dpkg все что осталось
+for pkg in $(dpkg -l | grep -E '^ii.*node-' | awk '{print $2}'); do
+    dpkg --remove --force-remove-reinstreq --force-depends "$pkg" 2>/dev/null || true
 done
+
+# Исправляем сломанные зависимости
+apt-get --fix-broken install -y 2>/dev/null || true
 
 # Физически удаляем файлы
 rm -rf /usr/include/node*
@@ -89,7 +96,17 @@ log_success "Node.js полностью удален"
 
 # УСТАНОВКА БАЗОВЫХ ПАКЕТОВ
 log_info "📦 Установка базовых пакетов..."
-apt-get install -y git nginx curl python3 python3-pip python3-venv build-essential
+
+# Исправляем любые проблемы с зависимостями
+apt-get --fix-broken install -y 2>/dev/null || true
+apt-get autoremove --purge -y 2>/dev/null || true
+
+# Устанавливаем базовые пакеты
+apt-get install -y git nginx curl python3 python3-pip python3-venv build-essential 2>/dev/null || {
+    log_warning "Ошибка установки пакетов, исправляем..."
+    apt-get --fix-broken install -y
+    apt-get install -y git nginx curl python3 python3-pip python3-venv build-essential
+}
 
 # УСТАНОВКА NODE.JS ЧЕРЕЗ BINARY
 log_info "🟢 Установка Node.js через бинарные файлы..."
