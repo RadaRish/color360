@@ -479,21 +479,31 @@ app.post('/api/inpaint', upload.fields([
 });
 
 // Temporary file endpoint for data URL conversion
-app.post('/api/temp-file-from-data', express.raw({ limit: '200mb', type: '*/*' }), async (req, res) => {
+app.post('/api/temp-file-from-data', express.text({ limit: '200mb', type: '*/*' }), async (req, res) => {
   try {
-    const dataUrl = req.body.toString();
-    if (!dataUrl.startsWith('data:')) {
+    console.log('🔄 Temp file request received, body type:', typeof req.body, 'length:', req.body ? req.body.length : 0);
+    
+    let dataUrl = req.body;
+    if (typeof dataUrl !== 'string') {
+      dataUrl = dataUrl.toString();
+    }
+    
+    if (!dataUrl || !dataUrl.startsWith('data:')) {
+      console.warn('❌ Invalid data URL:', dataUrl ? dataUrl.substring(0, 50) + '...' : 'null');
       return res.status(400).json({ error: 'Invalid data URL' });
     }
 
     // Extract MIME type and base64 data
     const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
     if (!matches) {
+      console.warn('❌ Invalid data URL format');
       return res.status(400).json({ error: 'Invalid data URL format' });
     }
 
     const mimeType = matches[1];
     const base64Data = matches[2];
+    
+    console.log('✅ Processing data URL:', mimeType, 'size:', Math.round(base64Data.length / 1024), 'KB');
     
     // Convert to buffer
     const buffer = Buffer.from(base64Data, 'base64');
@@ -510,6 +520,8 @@ app.post('/api/temp-file-from-data', express.raw({ limit: '200mb', type: '*/*' }
     // Return public URL
     const publicUrl = `/temp/${filename}`;
     
+    console.log('✅ Temp file created:', publicUrl);
+    
     // Auto-cleanup after 1 hour
     setTimeout(() => {
       fs.promises.unlink(tempPath).catch(() => {});
@@ -519,7 +531,7 @@ app.post('/api/temp-file-from-data', express.raw({ limit: '200mb', type: '*/*' }
     
   } catch (error) {
     console.error('❌ Temp file error:', error.message);
-    res.status(500).json({ error: 'Failed to create temporary file' });
+    res.status(500).json({ error: 'Failed to create temporary file', details: error.message });
   }
 });
 

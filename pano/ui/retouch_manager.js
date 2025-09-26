@@ -415,15 +415,36 @@ export default class RetouchManager {
         // Преобразуем 3D точку в UV координаты эквиректангулярной проекции
         const n = intersectionPoint.clone().normalize();
         
-        // Исправленные формулы для A-Frame (учитываем что в A-Frame Y вверх, Z к зрителю)
-        // Yaw (горизонтальный угол): atan2(-x, -z) для правильной ориентации
-        const yaw = Math.atan2(-n.x, -n.z);
-        // Pitch (вертикальный угол): asin(y)  
+        // Правильные формулы для сферической панорамы в A-Frame
+        // В A-Frame: Y вверх, Z к зрителю, X вправо
+        // Для эквиректангулярной проекции нужно учесть начальную ориентацию камеры
+        
+        // Получаем текущую ориентацию камеры для корректировки
+        let cameraYaw = 0;
+        try {
+          if (cameraEl && cameraEl.getAttribute) {
+            const rotation = cameraEl.getAttribute('rotation');
+            if (rotation && rotation.y !== undefined) {
+              cameraYaw = (rotation.y * Math.PI) / 180; // Convert to radians
+            }
+          } else if (camera.rotation && camera.rotation.y !== undefined) {
+            cameraYaw = camera.rotation.y;
+          }
+        } catch (e) {
+          cameraYaw = 0;
+        }
+        
+        // Yaw: горизонтальный угол с учетом поворота камеры
+        let yaw = Math.atan2(n.x, -n.z) - cameraYaw;
+        // Pitch: вертикальный угол
         const pitch = Math.asin(Math.max(-1, Math.min(1, n.y)));
         
-        // Преобразуем углы в UV координаты [0,1]
-        let u = (yaw / (2 * Math.PI)) + 0.5; // yaw [-π,π] -> u [0,1]
-        let v = 0.5 - (pitch / Math.PI); // pitch [-π/2,π/2] -> v [0,1], инвертируем для верхнего левого угла
+        // Нормализуем yaw в диапазон [-π, π]
+        yaw = ((yaw + Math.PI) % (2 * Math.PI)) - Math.PI;
+        
+        // Преобразуем в UV координаты [0,1]
+        let u = (yaw + Math.PI) / (2 * Math.PI); // yaw [-π,π] -> u [0,1]
+        let v = 0.5 - (pitch / Math.PI); // pitch [-π/2,π/2] -> v [0,1]
         
         // Нормализуем U в диапазон [0,1] с учетом wrap-around
         u = ((u % 1) + 1) % 1;
@@ -842,12 +863,9 @@ export default class RetouchManager {
         const response = await fetch('/api/temp-file-from-data', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'text/plain'
           },
-          body: JSON.stringify({
-            dataUrl: src,
-            ext: '.png'
-          })
+          body: src
         });
         
         if (response.ok) {
