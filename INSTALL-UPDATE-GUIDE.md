@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.s
 
 ### Альтернативный способ (если есть проблемы с sudo/пользователями)
 ```bash
-# Упрощенный скрипт, работающий полностью от root
+# Улучшенный скрипт v2.0, работающий полностью от root
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-root.sh | sudo bash
 ```
 
@@ -236,6 +236,15 @@ git log -1 --pretty=format:"%h - %an, %ar: %s"
 # Сравнение с remote
 git fetch
 git status
+```
+
+### Комплексная диагностика системы
+```bash
+# Полная диагностика Color360 (новый инструмент)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/diagnostic-system.sh | bash
+
+# Мониторинг в реальном времени
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/monitor-vps.sh | bash
 ```
 
 ## 🆘 Контакты и поддержка

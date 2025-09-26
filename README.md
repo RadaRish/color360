@@ -24,12 +24,27 @@ This repository contains a minimal prototype for the main landing page of Color3
 
 ## Deploy to VPS
 
-### 🚀 Быстрая установка
+### 🚀 Установка на VPS
+
+#### 🎯 Полная установка с нуля (для color360.ru)
 ```bash
-# Автоматическая установка (рекомендуется)
+# Интерактивный установщик с выбором типа установки
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-color360.sh | sudo bash
+
+# Или прямые команды:
+# Полная установка (с AI)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-fresh-vps.sh | sudo bash
+
+# Минимальная установка (без AI)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-minimal.sh | sudo bash
+```
+
+#### 🔄 Обновление существующей установки
+```bash
+# Стандартное обновление
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.sh | sudo bash
 
-# Если есть проблемы с sudo/пользователями (альтернативный метод)
+# Упрощенное обновление (для root)
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-root.sh | sudo bash
 ```
 
@@ -46,6 +61,9 @@ curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.s
 
 # Быстрое обновление (только код)
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/quick-update.sh | sudo bash
+
+# Диагностика системы
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/diagnostic-system.sh | bash
 ```
 
 **Особенности развертывания:**

@@ -34,6 +34,9 @@ curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.s
 ## 🔍 Проверка статуса
 
 ```bash
+# Комплексная диагностика системы (рекомендуется)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/diagnostic-system.sh | bash
+
 # Статус всех сервисов
 systemctl status color360-app color360-sd nginx
 
