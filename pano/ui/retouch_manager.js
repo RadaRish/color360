@@ -422,9 +422,17 @@ export default class RetouchManager {
         const nx = (localX / rect.width) * 2 - 1;
         const ny = -(localY / rect.height) * 2 + 1;
         
-        // Создаем луч от камеры через точку на экране
+        // 🎯 КРИТИЧЕСКИ ВАЖНО: создаем НЕЗАВИСИМУЮ камеру для стабильного маппинга
+        const cleanCamera = new THREE.PerspectiveCamera(80, rect.width / rect.height, 0.1, 1000);
+        cleanCamera.position.set(0, 0, 0);
+        cleanCamera.rotation.set(0, 0, 0);
+        cleanCamera.updateMatrix();
+        cleanCamera.updateMatrixWorld(true);
+        cleanCamera.updateProjectionMatrix();
+        
+        // Создаем луч от независимой камеры
         const ray = new THREE.Raycaster();
-        ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
+        ray.setFromCamera(new THREE.Vector2(nx, ny), cleanCamera);
         
         // Находим пересечение луча со сферой
         const intersectionPoint = new THREE.Vector3();

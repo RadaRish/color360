@@ -127,7 +127,7 @@ export default class SceneManager {
   async switchToScene(sceneId) {
     // ЗАЩИТА от повторных вызовов в течение короткого времени
     const now = Date.now();
-    if (this._lastSwitchTime && this._lastSwitchTarget === sceneId && (now - this._lastSwitchTime) < 200) { // Уменьшаем время защиты до 200ms
+    if (this._lastSwitchTime && this._lastSwitchTarget === sceneId && (now - this._lastSwitchTime) < 1000) { // Увеличиваем защиту до 1 секунды
 
       // ИСПРАВЛЕНИЕ: Убедимся, что фон черный даже при блокировке
       if (this.viewerManager && this.viewerManager.aframeSky) {
@@ -138,6 +138,7 @@ export default class SceneManager {
     }
     this._lastSwitchTime = now;
     this._lastSwitchTarget = sceneId;
+    console.log('🎯 SceneManager: начинаем переключение на сцену', sceneId, 'текущая:', this.currentScene?.name || 'none');
 
     const scene = this.getSceneById(sceneId);
     if (!scene) {
@@ -151,7 +152,7 @@ export default class SceneManager {
     }
 
     if (scene === this.currentScene) {
-
+      console.log('🎯 SceneManager: уже находимся на сцене', sceneId, '- пропускаем переключение');
       return true; // Уже на этой сцене
     }
 
