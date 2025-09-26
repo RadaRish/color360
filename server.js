@@ -93,9 +93,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Body parser middleware
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+// Body parser middleware with increased limits for panorama processing
+app.use(bodyParser.json({ limit: '200mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '200mb' }));
 app.use(cookieParser());
 
 // Static files (diagnostic logging for CSS/JS issues behind nginx)
@@ -309,9 +309,9 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: { 
-    fileSize: 50 * 1024 * 1024, // 50MB
-    fields: 10,
-    files: 2
+    fileSize: 200 * 1024 * 1024, // 200MB for large panoramas
+    fields: 15,
+    files: 5
   }
 });
 
@@ -463,6 +463,104 @@ app.post('/api/inpaint', upload.fields([
     } else {
       res.status(500).json({
         error: 'Внутренняя ошибка сервера',
+        details: error.message
+      });
+    }
+  }
+});
+
+// Retouch endpoint for panorama editor
+app.post('/api/retouch', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'mask', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    if (!req.files || !req.files.image || !req.files.mask) {
+      return res.status(400).json({
+        error: 'Требуются файлы image и mask для ретуши'
+      });
+    }
+
+    const imageFile = req.files.image[0];
+    const maskFile = req.files.mask[0];
+
+    console.log('🎨 Запрос ретуши панорамы через LaMa');
+    console.log(`📏 Размер изображения: ${Math.round(imageFile.size / 1024 / 1024)}MB`);
+    console.log(`📏 Размер маски: ${Math.round(maskFile.size / 1024)}KB`);
+
+    if (!lamaServiceReady) {
+      const health = await checkLamaHealth();
+      if (!health.healthy) {
+        return res.status(503).json({
+          error: 'LaMa сервис недоступен для ретуши',
+          details: health.error
+        });
+      }
+    }
+
+    // Создаём FormData для Node.js
+    const FormDataNode = require('form-data');
+    const formData = new FormDataNode();
+    
+    formData.append('image', imageFile.buffer, {
+      filename: 'panorama.jpg',
+      contentType: imageFile.mimetype
+    });
+    
+    formData.append('mask', maskFile.buffer, {
+      filename: 'mask.png', 
+      contentType: maskFile.mimetype
+    });
+    
+    // Добавляем параметры специально для панорам
+    formData.append('prompt', req.body.prompt || 'remove object completely, seamless background restoration, photorealistic fill');
+    formData.append('negative_prompt', req.body.negative_prompt || 'object visible, incomplete removal, artifacts, seams, borders, watermark, text, logo');
+    formData.append('num_inference_steps', req.body.num_inference_steps || '50');
+    formData.append('guidance_scale', req.body.guidance_scale || '15.0');
+    formData.append('strength', req.body.strength || '1.0');
+
+    const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
+      headers: {
+        ...formData.getHeaders(),
+      },
+      responseType: 'arraybuffer',
+      timeout: 300000, // 5 минут для больших панорам
+      maxContentLength: 200 * 1024 * 1024, // 200MB
+      maxBodyLength: 200 * 1024 * 1024
+    });
+
+    res.set({
+      'Content-Type': 'image/jpeg',
+      'X-Retouch-Method': response.headers['x-inpaint-method'] || 'lama',
+      'X-Retouch-Status': response.headers['x-inpaint-status'] || 'success',
+      'X-Processing-Time': response.headers['x-processing-time'] || 'unknown',
+      'X-Original-Size': `${Math.round(imageFile.size / 1024 / 1024)}MB`
+    });
+
+    res.send(response.data);
+    console.log('✅ Ретушь панорамы выполнена успешно');
+
+  } catch (error) {
+    console.error('❌ Ошибка ретуши панорамы:', error.message);
+    
+    if (error.response) {
+      res.status(error.response.status).json({
+        error: 'Ошибка AI сервиса при ретуши',
+        details: error.response.data?.detail || error.message
+      });
+    } else if (error.code === 'ECONNREFUSED') {
+      res.status(503).json({
+        error: 'AI сервис недоступен для ретуши',
+        details: 'Подключение отклонено'
+      });
+    } else if (error.code === 'EMSGSIZE' || error.message.includes('too large')) {
+      res.status(413).json({
+        error: 'Файл слишком большой для обработки',
+        details: 'Попробуйте уменьшить разрешение панорамы'
+      });
+    } else {
+      res.status(500).json({
+        error: 'Внутренняя ошибка сервера при ретуши',
         details: error.message
       });
     }

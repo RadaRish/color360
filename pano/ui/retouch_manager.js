@@ -617,9 +617,23 @@ export default class RetouchManager {
 
       // Отправка на backend, который проксирует в AI
       console.log('🎨 Debug RetouchManager: отправляем запрос на /api/retouch');
-  const resp = await fetch('/api/retouch', { method: 'POST', body: fd });
+      
+      const resp = await fetch('/api/retouch', { method: 'POST', body: fd });
       console.log('🎨 Debug RetouchManager: получен ответ:', resp.status, resp.statusText);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      
+      if (!resp.ok) {
+        // Обработка специфичных ошибок
+        if (resp.status === 413) {
+          throw new Error('Файл панорамы слишком большой для обработки. Попробуйте уменьшить разрешение.');
+        } else if (resp.status === 503) {
+          throw new Error('AI сервис временно недоступен. Попробуйте позже.');
+        } else if (resp.status === 500) {
+          const errorText = await resp.text().catch(() => 'Unknown server error');
+          throw new Error(`Внутренняя ошибка сервера: ${errorText}`);
+        } else {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+      }
 
   // Диагностика статуса ретуши: сервер выставляет X-Retouch-Status
   const xStatus = resp.headers.get('x-retouch-status');
