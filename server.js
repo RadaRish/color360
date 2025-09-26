@@ -15,6 +15,8 @@ const axios = require('axios');
 const { spawn } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
+// Доверяем первому прокси (nginx) для корректного req.ip и заголовков X-Forwarded-For
+app.set('trust proxy', 1);
 
 // JWT Secret Key
 const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-key-2025';
@@ -61,9 +63,9 @@ if (isProduction) {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://unpkg.com", "https://aframe.io", "https://cdnjs.cloudflare.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
-        connectSrc: ["'self'", "ws:", "wss:", "https:", "http:"],
+        connectSrc: ["'self'", "ws:", "wss:", "https:", "http:", "https://aframe.io", "https://cdnjs.cloudflare.com"],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"]
@@ -94,7 +96,13 @@ app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
-// Static files
+// Static files (diagnostic logging for CSS/JS issues behind nginx)
+app.use((req, res, next) => {
+  if (req.url.startsWith('/assets/') && (req.url.endsWith('.css') || req.url.endsWith('.js'))) {
+    console.log('📦 Static request:', req.method, req.url, 'IP:', req.ip);
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname)));
 
 // CORS headers
