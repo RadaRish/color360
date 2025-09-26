@@ -238,58 +238,43 @@ export default class SceneManager {
       // Устанавливаем вид камеры для сцены, если он сохранен
       if (scene.cameraPosition) {
 
-        // Функция для применения камеры с повторными попытками
-        const applyCameraWithRetries = (attempt = 0) => {
-          if (attempt > 8) {
-
-            return;
-          }
-          
+        // 🎯 ИСПРАВЛЕНИЕ: Стабильное управление камерой без резких скачков
+        const applyCameraPosition = async () => {
           try {
-            // Отключаем look-controls перед применением позиции
             const camera = this.viewerManager.aframeCamera;
-            const lookControls = camera?.components?.['look-controls'];
+            if (!camera) return;
             
+            const lookControls = camera.components && camera.components['look-controls'];
+            console.log('🎯 SceneManager: устанавливаем дефолтный вид камеры для сцены', scene.name);
+            
+            // 🔧 КРИТИЧЕСКИ ВАЖНО: отключаем look-controls БЕЗ повторных включений
             if (lookControls && lookControls.pause) {
               lookControls.pause();
             }
             
+            // Устанавливаем позицию за один раз без повторных попыток
             const applied = this.viewerManager.setCameraPosition(scene.cameraPosition);
             
             if (applied) {
-              // Ждём немного больше для корректного применения
+              console.log('🎯 SceneManager: дефолтная позиция камеры установлена:', scene.cameraPosition);
+              
+              // 🔧 Ждем стабилизации и включаем look-controls обратно ОДИН раз
               setTimeout(() => {
-                const got = this.viewerManager.getCameraPosition();
-                if (got) {
-                  const near = (a, b) => Math.abs((a || 0) - (b || 0)) < 0.1;
-                  if (!near(got.rotation.x, scene.cameraPosition.rotation.x) || 
-                      !near(got.rotation.y, scene.cameraPosition.rotation.y)) {
-
-                    setTimeout(() => applyCameraWithRetries(attempt + 1), 300);
-                  } else {
-
-                    // Включаем look-controls обратно
-                    if (lookControls && lookControls.play) {
-                      setTimeout(() => lookControls.play(), 100);
-                    }
-                  }
-                } else {
-
-                  setTimeout(() => applyCameraWithRetries(attempt + 1), 300);
+                if (lookControls && lookControls.play) {
+                  lookControls.play();
+                  console.log('🎯 SceneManager: look-controls включены, пользователь может управлять камерой');
                 }
-              }, 200);
-            } else {
-
-              setTimeout(() => applyCameraWithRetries(attempt + 1), 300);
+              }, 500); // Увеличили задержку для стабильности
             }
-          } catch (e) {
-
-            setTimeout(() => applyCameraWithRetries(attempt + 1), 200);
+          } catch (error) {
+            console.error('🎯 SceneManager: ошибка установки позиции камеры:', error);
           }
         };
 
-        // Применяем камеру после завершения загрузки панорамы
-        setTimeout(() => applyCameraWithRetries(), 300);
+        // Применяем позицию камеры сразу после загрузки панорамы
+        setTimeout(() => {
+          applyCameraPosition();
+        }, 300); // Ждем полной загрузки панорамы
       }
 
       return true;

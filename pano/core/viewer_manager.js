@@ -7195,23 +7195,19 @@ export default class ViewerManager {
     }
 
     try {
-      // Временно отключаем look-controls чтобы он не мешал
-      const lookControls = camera.components && camera.components['look-controls'];
-      if (lookControls && lookControls.pause) {
-        lookControls.pause();
-      }
-
+      // 🎯 ИСПРАВЛЕНИЕ: НЕ трогаем look-controls здесь - управляется извне
+      
       // Сначала FOV, если задан
       if (cameraData.fov != null) {
         const fov = Math.max(10, Math.min(130, parseFloat(cameraData.fov)));
         camera.setAttribute('fov', fov);
-
+        console.log('🎯 ViewerManager: установлен FOV:', fov);
       }
 
       if (cameraData.position) {
         const p = cameraData.position;
         camera.setAttribute('position', `${p.x || 0} ${p.y || 0} ${p.z || 0}`);
-
+        console.log('🎯 ViewerManager: установлена позиция:', `${p.x || 0} ${p.y || 0} ${p.z || 0}`);
       }
 
       if (cameraData.rotation) {
@@ -7229,15 +7225,9 @@ export default class ViewerManager {
             'XYZ'
           );
         }
-
+        
+        console.log('🎯 ViewerManager: установлена ориентация:', rotationString);
       }
-
-      // Возобновляем look-controls после небольшой задержки
-      setTimeout(() => {
-        if (lookControls && lookControls.play) {
-          lookControls.play();
-        }
-      }, 100);
 
       return true;
     } catch (error) {
