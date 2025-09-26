@@ -31,11 +31,14 @@ This repository contains a minimal prototype for the main landing page of Color3
 # Интерактивный установщик (рекомендуется)
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-color360.sh | sudo bash
 
+# УЛЬТРА-НАДЕЖНАЯ установка (решает ВСЕ проблемы Node.js)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-ultra-reliable.sh | sudo bash
+
 # Прямые команды:
-# Полная рабочая установка (с LaMa AI)
+# Полная установка (с LaMa AI) - если нет конфликтов
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-working-vps.sh | sudo bash
 
-# Быстрая рабочая установка (без AI)
+# Быстрая установка (без AI) - если нет конфликтов  
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-simple-working.sh | sudo bash
 ```
 

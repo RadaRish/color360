@@ -45,7 +45,19 @@ apt-get install -y git nginx curl certbot python3-certbot-nginx ufw
 
 # Node.js через NVM
 log_info "🟢 Установка Node.js..."
-rm -rf ~/.nvm /usr/local/bin/node /usr/local/bin/npm 2>/dev/null || true
+
+# Агрессивная очистка Node.js
+killall apt apt-get dpkg 2>/dev/null || true
+dpkg --configure -a 2>/dev/null || true
+apt-get remove --purge -y nodejs npm libnode-dev node-* 2>/dev/null || true
+apt-get autoremove --purge -y 2>/dev/null || true
+apt-get clean && apt-get autoclean
+rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+apt-get update -qq
+
+rm -rf /usr/include/node /usr/lib/node_modules /usr/share/nodejs
+rm -rf /usr/local/bin/node /usr/local/bin/npm /usr/bin/node /usr/bin/npm
+rm -rf ~/.nvm ~/.npm
 
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
 export NVM_DIR="$HOME/.nvm"

@@ -1,7 +1,37 @@
 #!/bin/bash
 # Color360 - Рабочий скрипт полной установки на VPS
-# Домен: color360.ru
-# Основан на проверенных скриптах из репозитория
+# Домен: color360# Установка Node.js через NVM (проверенный способ)
+log_info "🟢 Установка Node.js через NVM..."
+
+# АГРЕССИВНАЯ очистка Node.js конфликтов
+log_info "Полная очистка Node.js пакетов..."
+
+# Останавливаем apt процессы
+killall apt apt-get dpkg 2>/dev/null || true
+sleep 2
+
+# Исправляем сломанные пакеты
+dpkg --configure -a 2>/dev/null || true
+
+# Принудительно удаляем конфликтующие пакеты
+apt-get remove --purge -y nodejs npm libnode-dev node-* 2>/dev/null || true
+apt-get autoremove --purge -y 2>/dev/null || true
+
+# Чистим apt кэш
+apt-get clean
+apt-get autoclean
+rm -rf /var/lib/apt/lists/*
+rm -rf /var/cache/apt/archives/*
+
+# Обновляем базу пакетов заново
+apt-get update -qq
+
+# Полностью удаляем следы Node.js
+rm -rf /usr/include/node /usr/lib/node_modules /usr/share/nodejs
+rm -rf /usr/local/bin/node /usr/local/bin/npm /usr/bin/node /usr/bin/npm
+rm -rf ~/.nvm ~/.npm
+
+log_success "Node.js полностью удален"ован на проверенных скриптах из репозитория
 
 set -e
 

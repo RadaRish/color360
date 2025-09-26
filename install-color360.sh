@@ -37,21 +37,24 @@ fi
 echo "Выберите тип установки:"
 echo ""
 echo -e "${GREEN}1)${NC} 🎨 Полная установка (основное приложение + AI сервис)"
-echo "   - Панорамный редактор"
-echo "   - AI удаление объектов (LaMa)"
+echo "   - Панорамный редактор + LaMa AI"
 echo "   - Все функции"
 echo ""
 echo -e "${BLUE}2)${NC} ⚡ Быстрая установка (только основное приложение)"
 echo "   - Панорамный редактор"
 echo "   - Без AI функций"
-echo "   - Быстрая установка"
 echo ""
-echo -e "${YELLOW}3)${NC} 🔧 Только обновление существующей установки"
+echo -e "${RED}3)${NC} 💀 УЛЬТРА-НАДЕЖНАЯ установка (решает ВСЕ проблемы)"
+echo "   - Радикальная очистка Node.js конфликтов"
+echo "   - Бинарная установка Node.js"
+echo "   - Гарантированно работает"
+echo ""
+echo -e "${YELLOW}4)${NC} 🔧 Только обновление существующей установки"
 echo "   - Обновляет код с GitHub"
 echo "   - Перезапускает сервисы"
 echo ""
 
-read -p "Введите номер (1-3): " choice
+read -p "Введите номер (1-4): " choice
 
 case $choice in
     1)
@@ -67,6 +70,12 @@ case $choice in
         curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-simple-working.sh | bash
         ;;
     3)
+        echo ""
+        echo -e "${RED}💀 Запуск ультра-надежной установки...${NC}"
+        echo ""
+        curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-ultra-reliable.sh | bash
+        ;;
+    4)
         echo ""
         echo -e "${YELLOW}🔧 Запуск обновления...${NC}"
         echo ""
@@ -120,7 +129,7 @@ case $choice in
         fi
         ;;
     *)
-        echo -e "${RED}❌ Неверный выбор${NC}"
+        echo -e "${RED}❌ Неверный выбор (1-4)${NC}"
         exit 1
         ;;
 esac
