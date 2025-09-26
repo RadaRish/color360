@@ -68,7 +68,7 @@ export default class RetouchManager {
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.lineWidth = 20; // Уменьшили размер кисти в два раза
+      ctx.lineWidth = 10; // Делаем кисть еще тоньше для более точного выделения
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(255,0,0,0.9)';
@@ -396,11 +396,23 @@ export default class RetouchManager {
 
       // 🔧 КРИТИЧЕСКИ ВАЖНО: сбрасываем камеру в исходное положение для стабильных координат
       const originalRotation = camera.rotation.clone();
+      const originalPosition = camera.position.clone();
       console.log('🎯 Debug RetouchManager: сохранили исходную ориентацию камеры:', 
-        `x:${originalRotation.x.toFixed(3)}, y:${originalRotation.y.toFixed(3)}, z:${originalRotation.z.toFixed(3)}`);
+        `rotation: x:${originalRotation.x.toFixed(3)}, y:${originalRotation.y.toFixed(3)}, z:${originalRotation.z.toFixed(3)}`,
+        `position: x:${originalPosition.x.toFixed(3)}, y:${originalPosition.y.toFixed(3)}, z:${originalPosition.z.toFixed(3)}`);
+      
+      // Полный сброс камеры
+      camera.position.set(0, 0, 0);
       camera.rotation.set(0, 0, 0);
+      camera.updateMatrix();
       camera.updateMatrixWorld(true);
-      console.log('🎯 Debug RetouchManager: сброшена камера в (0,0,0) для стабильного маппинга');
+      
+      // Принудительно обновляем проекционную матрицу
+      if (camera.updateProjectionMatrix) {
+        camera.updateProjectionMatrix();
+      }
+      
+      console.log('🎯 Debug RetouchManager: камера полностью сброшена в исходное состояние');
 
   const sphereRadius = (this.viewerManager && this.viewerManager.coordinateManager && this.viewerManager.coordinateManager.sphereRadius) ? this.viewerManager.coordinateManager.sphereRadius : 10;
 
@@ -585,20 +597,30 @@ export default class RetouchManager {
         }
   } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось оценить/исправить площадь маски:', e && e.message); }
 
-      // 🔧 Восстанавливаем исходную позицию камеры
+      // 🔧 Восстанавливаем исходную позицию и ориентацию камеры
+      camera.position.copy(originalPosition);
       camera.rotation.copy(originalRotation);
+      camera.updateMatrix();
       camera.updateMatrixWorld(true);
-      console.log('🎯 Debug RetouchManager: восстановлена исходная ориентация камеры');
+      if (camera.updateProjectionMatrix) {
+        camera.updateProjectionMatrix();
+      }
+      console.log('🎯 Debug RetouchManager: восстановлена исходная позиция и ориентация камеры');
 
       return mask.toDataURL('image/png');
     } catch (e) {
   console.warn('🎨 Warning RetouchManager: _exportMaskEquirect failed:', e && e.message);
       
       // 🔧 Восстанавливаем камеру даже в случае ошибки
-      if (typeof originalRotation !== 'undefined' && camera) {
+      if (typeof originalRotation !== 'undefined' && typeof originalPosition !== 'undefined' && camera) {
         try {
+          camera.position.copy(originalPosition);
           camera.rotation.copy(originalRotation);
+          camera.updateMatrix();
           camera.updateMatrixWorld(true);
+          if (camera.updateProjectionMatrix) {
+            camera.updateProjectionMatrix();
+          }
         } catch (restoreErr) { /* игнорируем ошибки восстановления */ }
       }
       

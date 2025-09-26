@@ -247,9 +247,10 @@ export default class SceneManager {
             const lookControls = camera.components && camera.components['look-controls'];
             console.log('🎯 SceneManager: устанавливаем дефолтный вид камеры для сцены', scene.name);
             
-            // 🔧 КРИТИЧЕСКИ ВАЖНО: отключаем look-controls БЕЗ повторных включений
+            // 🔧 КРИТИЧЕСКИ ВАЖНО: отключаем look-controls на ДОЛЬШЕ для предотвращения конфликтов
             if (lookControls && lookControls.pause) {
               lookControls.pause();
+              console.log('🎯 SceneManager: look-controls отключены для установки дефолтного вида');
             }
             
             // Устанавливаем позицию за один раз без повторных попыток
@@ -258,13 +259,13 @@ export default class SceneManager {
             if (applied) {
               console.log('🎯 SceneManager: дефолтная позиция камеры установлена:', scene.cameraPosition);
               
-              // 🔧 Ждем стабилизации и включаем look-controls обратно ОДИН раз
+              // 🔧 УВЕЛИЧИВАЕМ задержку до 2 секунд для полной стабилизации
               setTimeout(() => {
                 if (lookControls && lookControls.play) {
                   lookControls.play();
-                  console.log('🎯 SceneManager: look-controls включены, пользователь может управлять камерой');
+                  console.log('🎯 SceneManager: look-controls включены после 2сек стабилизации');
                 }
-              }, 500); // Увеличили задержку для стабильности
+              }, 2000); // Увеличили до 2 секунд для предотвращения возврата к предыдущей позиции
             }
           } catch (error) {
             console.error('🎯 SceneManager: ошибка установки позиции камеры:', error);

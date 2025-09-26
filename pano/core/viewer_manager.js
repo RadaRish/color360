@@ -7227,6 +7227,15 @@ export default class ViewerManager {
         }
         
         console.log('🎯 ViewerManager: установлена ориентация:', rotationString);
+        
+        // 🔧 ПРИНУДИТЕЛЬНО очищаем внутреннее состояние A-Frame look-controls
+        const lookControls = camera.components && camera.components['look-controls'];
+        if (lookControls && lookControls.data) {
+          // Сбрасываем внутренние переменные look-controls для предотвращения возврата к предыдущей позиции
+          lookControls.pitchObject.rotation.x = (r.x || 0) * Math.PI / 180;
+          lookControls.yawObject.rotation.y = (r.y || 0) * Math.PI / 180;
+          console.log('🎯 ViewerManager: сброшено внутреннее состояние look-controls');
+        }
       }
 
       return true;
