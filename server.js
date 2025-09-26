@@ -105,6 +105,15 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Serve temporary files
+app.use('/temp', express.static(path.join(__dirname, 'temp'), {
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+  }
+}));
+
 app.use(express.static(path.join(__dirname)));
 
 // CORS headers
@@ -466,6 +475,51 @@ app.post('/api/inpaint', upload.fields([
         details: error.message
       });
     }
+  }
+});
+
+// Temporary file endpoint for data URL conversion
+app.post('/api/temp-file-from-data', express.raw({ limit: '200mb', type: '*/*' }), async (req, res) => {
+  try {
+    const dataUrl = req.body.toString();
+    if (!dataUrl.startsWith('data:')) {
+      return res.status(400).json({ error: 'Invalid data URL' });
+    }
+
+    // Extract MIME type and base64 data
+    const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ error: 'Invalid data URL format' });
+    }
+
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    
+    // Convert to buffer
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Generate temporary filename
+    const ext = mimeType.includes('jpeg') ? 'jpg' : mimeType.includes('png') ? 'png' : 'bin';
+    const filename = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+    
+    // Save to temp directory
+    const tempPath = path.join(__dirname, 'temp', filename);
+    await fs.promises.mkdir(path.dirname(tempPath), { recursive: true });
+    await fs.promises.writeFile(tempPath, buffer);
+    
+    // Return public URL
+    const publicUrl = `/temp/${filename}`;
+    
+    // Auto-cleanup after 1 hour
+    setTimeout(() => {
+      fs.promises.unlink(tempPath).catch(() => {});
+    }, 3600000);
+    
+    res.json({ url: publicUrl });
+    
+  } catch (error) {
+    console.error('❌ Temp file error:', error.message);
+    res.status(500).json({ error: 'Failed to create temporary file' });
   }
 });
 

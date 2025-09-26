@@ -398,21 +398,37 @@ export default class RetouchManager {
 
       const screenToUV = (localX, localY) => {
         const rect = canvas.getBoundingClientRect();
+        // Нормализуем координаты экрана в NDC [-1, 1]
         const nx = (localX / rect.width) * 2 - 1;
         const ny = -(localY / rect.height) * 2 + 1;
+        
+        // Создаем луч от камеры через точку на экране
         const ray = new THREE.Raycaster();
         ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
+        
+        // Находим пересечение луча со сферой
         const intersectionPoint = new THREE.Vector3();
-        const ok = ray.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(0,0,0), sphereRadius), intersectionPoint);
+        const sphere = new THREE.Sphere(new THREE.Vector3(0,0,0), sphereRadius);
+        const ok = ray.ray.intersectSphere(sphere, intersectionPoint);
         if (!ok) return null;
-  const n = intersectionPoint.clone().normalize();
-  // Используем atan2(n.x, -n.z), чтобы центр взгляда (-Z) давал u≈0.5
-  const yaw = Math.atan2(n.x, -n.z);
-        const pitch = Math.asin(n.y);
-        let u = (yaw / (2*Math.PI)) + 0.5;
-        let v = 0.5 - (pitch / Math.PI);
-        u = (u % 1 + 1) % 1;
-        v = Math.min(1, Math.max(0, v));
+        
+        // Преобразуем 3D точку в UV координаты эквиректангулярной проекции
+        const n = intersectionPoint.clone().normalize();
+        
+        // Исправленные формулы для A-Frame (учитываем что в A-Frame Y вверх, Z к зрителю)
+        // Yaw (горизонтальный угол): atan2(-x, -z) для правильной ориентации
+        const yaw = Math.atan2(-n.x, -n.z);
+        // Pitch (вертикальный угол): asin(y)  
+        const pitch = Math.asin(Math.max(-1, Math.min(1, n.y)));
+        
+        // Преобразуем углы в UV координаты [0,1]
+        let u = (yaw / (2 * Math.PI)) + 0.5; // yaw [-π,π] -> u [0,1]
+        let v = 0.5 - (pitch / Math.PI); // pitch [-π/2,π/2] -> v [0,1], инвертируем для верхнего левого угла
+        
+        // Нормализуем U в диапазон [0,1] с учетом wrap-around
+        u = ((u % 1) + 1) % 1;
+        v = Math.max(0, Math.min(1, v));
+        
         return { u, v };
       };
 
@@ -500,6 +516,24 @@ export default class RetouchManager {
       let splat = Math.max(baseSplat, step);
       let mapped = mapWithSplat(splat, false);
       console.log('🧭 Debug RetouchManager: screen->equirect mapped pixels:', mapped, 'of', scrW*scrH, 'splat=', splat, 'scaleUF/VF=', scaleUF.toFixed(2), scaleVF.toFixed(2), 'screenWhite=', screenWhite);
+      
+      // Диагностика: проверяем несколько контрольных точек маппинга
+      if (mapped > 0) {
+        const testPoints = [
+          {x: scrW/4, y: scrH/4, name: 'top-left'},
+          {x: scrW/2, y: scrH/2, name: 'center'}, 
+          {x: 3*scrW/4, y: 3*scrH/4, name: 'bottom-right'}
+        ];
+        console.log('🔍 Debug RetouchManager: UV mapping samples:');
+        for (const pt of testPoints) {
+          const uv = screenToUV(pt.x, pt.y);
+          if (uv) {
+            const eqX = Math.floor(uv.u * targetWidth);
+            const eqY = Math.floor(uv.v * targetHeight);
+            console.log(`  ${pt.name}: screen(${Math.round(pt.x)},${Math.round(pt.y)}) -> UV(${uv.u.toFixed(3)},${uv.v.toFixed(3)}) -> equirect(${eqX},${eqY})`);
+          }
+        }
+      }
 
       // Оценим площадь белой маски; если она слишком мала — попробуем инвертировать U (внутренние сферы могут зеркалить текстуру)
       try {
