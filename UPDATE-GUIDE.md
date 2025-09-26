@@ -13,7 +13,7 @@ chmod +x scripts/vps-update-from-github.sh
 *Опционально:* можно переопределять параметры через переменные окружения или флаги, например:
 
 ```bash
-APP_USER=www-data PROJECT_DIR=/opt/color360 ./scripts/vps-update-from-github.sh --skip-backup
+APP_USER=www-data PROJECT_DIR=/opt/color360 ./scripts/vps-update-from-github.sh --no-healthcheck
 ```
 
 ### Linux VPS (Ubuntu/CentOS)

@@ -4,18 +4,16 @@
 #   ./vps-update-from-github.sh
 # Environment / CLI overrides:
 #   PROJECT_DIR=/var/www/color360 BRANCH=main ./vps-update-from-github.sh
-#   ./vps-update-from-github.sh --project /opt/color360 --branch develop --skip-backup
+#   ./vps-update-from-github.sh --project /opt/color360 --branch develop
 
 set -euo pipefail
 
 # --- Defaults ---------------------------------------------------------------
 PROJECT_DIR=${PROJECT_DIR:-/var/www/color360}
-BACKUP_DIR=${BACKUP_DIR:-/var/www/color360-backups}
 REPO_URL=${REPO_URL:-https://github.com/RadaRish/color360.git}
 BRANCH=${BRANCH:-main}
 APP_USER=${APP_USER:-color360}
 SERVICES=${SERVICES:-"color360-app color360-sd nginx"}
-SKIP_BACKUP=0
 HEALTHCHECK=${HEALTHCHECK:-1}
 NODE_ENV_INSTALL_FLAGS=${NODE_ENV_INSTALL_FLAGS:---production}
 PYTHON_ENV_DIR=${PYTHON_ENV_DIR:-sd_env}
@@ -54,7 +52,6 @@ Options:
   -r, --repo    URL      Git-репозиторий (default: $REPO_URL)
   -u, --user    NAME     Системный пользователь приложения (default: $APP_USER)
   -s, --services LIST    Сервисы systemd через пробел (default: "$SERVICES")
-  --skip-backup          Пропустить создание tar-бэкапа перед обновлением
   --no-healthcheck       Не выполнять curl-проверки после рестарта
   -h, --help             Показать помощь
 EOF
@@ -73,8 +70,6 @@ while [[ $# -gt 0 ]]; do
       APP_USER=$2; shift 2;;
     -s|--services)
       SERVICES=$2; shift 2;;
-    --skip-backup)
-      SKIP_BACKUP=1; shift;;
     --no-healthcheck)
       HEALTHCHECK=0; shift;;
     -h|--help)
@@ -141,17 +136,6 @@ if [[ "$CURRENT_BRANCH" != "$BRANCH" ]]; then
   git checkout "$BRANCH"
 fi
 
-# --- Резервная копия --------------------------------------------------------
-if [[ $SKIP_BACKUP -eq 0 ]]; then
-  log "Создание резервной копии в $BACKUP_DIR"
-  run_root mkdir -p "$BACKUP_DIR"
-  BACKUP_FILE="${BACKUP_DIR}/color360-$(date +%Y%m%d-%H%M%S).tar.gz"
-  run_root tar -czf "$BACKUP_FILE" --exclude='.git' -C "$(dirname "$PROJECT_DIR")" "$(basename "$PROJECT_DIR")"
-  log "Бэкап сохранён: $BACKUP_FILE"
-else
-  warn "Создание бэкапа отключено"
-fi
-
 # --- Обновление репозитория -------------------------------------------------
 if ! git diff --quiet || ! git diff --cached --quiet; then
   warn "Обнаружены локальные изменения. Сохраняю их в stash."
@@ -184,8 +168,8 @@ if [[ -f "$PYTHON_REQUIREMENTS" ]]; then
   if ! command_exists python3 || ! command_exists pip; then
     warn "python3/pip отсутствуют — пропускаю обновление Python окружения"
   else
-  log "Обновление Python окружения"
-  run_as_app mkdir -p "$PROJECT_DIR/$PYTHON_ENV_DIR"
+    log "Обновление Python окружения"
+    run_as_app mkdir -p "$PROJECT_DIR/$PYTHON_ENV_DIR"
     if [[ ! -d "$PROJECT_DIR/$PYTHON_ENV_DIR/bin" ]]; then
       log "Создаю виртуальное окружение $PYTHON_ENV_DIR"
       run_as_app python3 -m venv "$PROJECT_DIR/$PYTHON_ENV_DIR"
