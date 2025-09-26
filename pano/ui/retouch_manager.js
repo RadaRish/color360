@@ -419,32 +419,16 @@ export default class RetouchManager {
         // В A-Frame: Y вверх, Z к зрителю, X вправо
         // Для эквиректангулярной проекции нужно учесть начальную ориентацию камеры
         
-        // Получаем текущую ориентацию камеры для корректировки
-        let cameraYaw = 0;
-        try {
-          if (cameraEl && cameraEl.getAttribute) {
-            const rotation = cameraEl.getAttribute('rotation');
-            if (rotation && rotation.y !== undefined) {
-              cameraYaw = (rotation.y * Math.PI) / 180; // Convert to radians
-            }
-          } else if (camera.rotation && camera.rotation.y !== undefined) {
-            cameraYaw = camera.rotation.y;
-          }
-        } catch (e) {
-          cameraYaw = 0;
-        }
+        // Упрощенное преобразование без учета поворота камеры для стабильности
+        // Используем стандартную сферическую проекцию без корректировок
         
-        // Yaw: горизонтальный угол с учетом поворота камеры
-        let yaw = Math.atan2(n.x, -n.z) - cameraYaw;
-        // Pitch: вертикальный угол
-        const pitch = Math.asin(Math.max(-1, Math.min(1, n.y)));
+        // Стандартные сферические координаты
+        const theta = Math.atan2(n.x, -n.z); // Azimuth angle (longitude)
+        const phi = Math.acos(-n.y); // Polar angle from -Y axis (colatitude)
         
-        // Нормализуем yaw в диапазон [-π, π]
-        yaw = ((yaw + Math.PI) % (2 * Math.PI)) - Math.PI;
-        
-        // Преобразуем в UV координаты [0,1]
-        let u = (yaw + Math.PI) / (2 * Math.PI); // yaw [-π,π] -> u [0,1]
-        let v = 0.5 - (pitch / Math.PI); // pitch [-π/2,π/2] -> v [0,1]
+        // Преобразуем в UV координаты эквиректангулярной проекции
+        let u = (theta + Math.PI) / (2 * Math.PI); // theta [-π,π] -> u [0,1]
+        let v = phi / Math.PI; // phi [0,π] -> v [0,1]
         
         // Нормализуем U в диапазон [0,1] с учетом wrap-around
         u = ((u % 1) + 1) % 1;
@@ -644,26 +628,39 @@ export default class RetouchManager {
       fd.append('image', imageBlob, 'image.png');
       fd.append('mask', maskBlob, 'mask.png');
 
-      // Add AI settings if available
+      // Добавляем улучшенные настройки AI для высококачественной ретуши панорам
       try {
+        // Специальные параметры для панорамных изображений
+        fd.append('prompt', 'remove object completely, seamless inpainting, natural background restoration, photorealistic result, high quality, detailed texture, preserve architectural details, maintain perspective');
+        fd.append('negative_prompt', 'object visible, incomplete removal, artifacts, blurry, low quality, distorted, seams, borders, unnatural, cartoon, painting, sketch, watermark, text, logo');
+        fd.append('guidance_scale', '12.0'); // Снижен для более естественного результата
+        fd.append('num_inference_steps', '50'); // Увеличен для лучшего качества
+        fd.append('strength', '0.95'); // Немного снижен для сохранения деталей
+        
+        // Дополнительные параметры для LaMa-cleaner если поддерживаются
+        fd.append('model', 'lama'); // Явно указываем модель
+        fd.append('device', 'auto'); // Автовыбор устройства
+        
+        // Переопределяем пользовательскими настройками если есть
         if (typeof window.getAISettings === 'function') {
           const aiSettings = window.getAISettings();
           console.log('🎨 Debug RetouchManager: добавляем AI настройки:', aiSettings);
           
-          if (aiSettings.prompt) {
-            fd.append('prompt', aiSettings.prompt);
+          // Переопределяем только если пользователь задал специфичные настройки
+          if (aiSettings.prompt && aiSettings.prompt.length > 10) {
+            fd.set('prompt', aiSettings.prompt);
           }
-          if (aiSettings.negative_prompt) {
-            fd.append('negative_prompt', aiSettings.negative_prompt);
+          if (aiSettings.negative_prompt && aiSettings.negative_prompt.length > 5) {
+            fd.set('negative_prompt', aiSettings.negative_prompt);
           }
-          if (aiSettings.guidance_scale) {
-            fd.append('guidance_scale', aiSettings.guidance_scale.toString());
+          if (aiSettings.guidance_scale && aiSettings.guidance_scale > 0) {
+            fd.set('guidance_scale', Math.min(20, Math.max(1, aiSettings.guidance_scale)).toString());
           }
-          if (aiSettings.num_inference_steps) {
-            fd.append('num_inference_steps', aiSettings.num_inference_steps.toString());
+          if (aiSettings.num_inference_steps && aiSettings.num_inference_steps > 0) {
+            fd.set('num_inference_steps', Math.min(100, Math.max(10, aiSettings.num_inference_steps)).toString());
           }
-          if (aiSettings.strength) {
-            fd.append('strength', aiSettings.strength.toString());
+          if (aiSettings.strength && aiSettings.strength > 0) {
+            fd.set('strength', Math.min(1.0, Math.max(0.1, aiSettings.strength)).toString());
           }
         }
       } catch (error) {
