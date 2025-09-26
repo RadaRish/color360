@@ -54,17 +54,25 @@ def simulate_inpainting(original_image: Image.Image, mask_image: Image.Image) ->
     # Создаем копию изображения
     result_array = img_array.copy()
     
-    # Заполняем замаскированные области размытым окружением
+    # Улучшенное заполнение замаскированных областей
     if np.any(white_mask):
-        # Размываем оригинал для создания фона
-        blurred = original_image.filter(ImageFilter.GaussianBlur(radius=5))
-        blurred_array = np.array(blurred)
+        # Многоуровневое размытие для более естественного результата
+        blur1 = original_image.filter(ImageFilter.GaussianBlur(radius=3))
+        blur2 = original_image.filter(ImageFilter.GaussianBlur(radius=8))
+        blur3 = original_image.filter(ImageFilter.GaussianBlur(radius=15))
         
-        # Применяем размытие в замаскированных областях
-        result_array[white_mask] = blurred_array[white_mask]
+        blur1_array = np.array(blur1)
+        blur2_array = np.array(blur2)
+        blur3_array = np.array(blur3)
         
-        # Дополнительно затемняем для видимости изменений
-        result_array[white_mask] = (result_array[white_mask] * 0.8).astype(np.uint8)
+        # Смешиваем разные уровни размытия для естественности
+        mixed_blur = (blur1_array * 0.5 + blur2_array * 0.3 + blur3_array * 0.2).astype(np.uint8)
+        
+        # Применяем смешанное размытие в замаскированных областях
+        result_array[white_mask] = mixed_blur[white_mask]
+        
+        # Легкое затемнение для видимости изменений
+        result_array[white_mask] = (result_array[white_mask] * 0.9).astype(np.uint8)
     
     return Image.fromarray(result_array)
 

@@ -92,7 +92,7 @@ function initVideoEnhancements() {
     
     heroVideo.addEventListener('error', function(e) {
       console.log('Hero video error:', e);
-      console.log('Hero video error code:', heroVideo.error?.code);
+  console.log('Hero video error code:', heroVideo.error && heroVideo.error.code);
       console.log('Hero video network state:', heroVideo.networkState);
       console.log('Hero video ready state:', heroVideo.readyState);
       

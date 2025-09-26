@@ -297,7 +297,7 @@ export default class RetouchManager {
   async _getCurrentPanoramaBlob() {
     // Получаем src текущей сцены
     const currentScene = this.sceneManager.getCurrentScene();
-    const src = currentScene?.src || this.viewerManager?.currentPanorama;
+  const src = (currentScene && currentScene.src ? currentScene.src : (this.viewerManager && this.viewerManager.currentPanorama ? this.viewerManager.currentPanorama : undefined));
     console.log('🎨 Debug RetouchManager: _getCurrentPanoramaBlob src:', src ? src.substring(0, 50) + '...' : 'null');
     if (!src) throw new Error('Источник панорамы не найден');
 
@@ -376,7 +376,7 @@ export default class RetouchManager {
       URL.revokeObjectURL(url);
       return size;
     } catch (e) {
-      console.warn('🎨 Warning RetouchManager: не удалось определить размер изображения маски:', e?.message);
+  console.warn('🎨 Warning RetouchManager: не удалось определить размер изображения маски:', e && e.message);
       return null;
     }
   }
@@ -386,15 +386,15 @@ export default class RetouchManager {
     try {
       if (!this._savedPolygons || !this._savedPolygons.length) return null;
       const aScene = document.querySelector('a-scene');
-      const cameraEl = aScene?.querySelector('[camera]');
+  const cameraEl = aScene && typeof aScene.querySelector === 'function' ? aScene.querySelector('[camera]') : undefined;
       if (!aScene || !cameraEl || typeof THREE === 'undefined') return null;
 
       const camera = cameraEl.getObject3D('camera');
       const renderer = aScene.renderer;
-      const canvas = renderer?.domElement;
+  const canvas = renderer && renderer.domElement ? renderer.domElement : undefined;
       if (!camera || !renderer || !canvas) return null;
 
-      const sphereRadius = this.viewerManager?.coordinateManager?.sphereRadius || 10;
+  const sphereRadius = (this.viewerManager && this.viewerManager.coordinateManager && this.viewerManager.coordinateManager.sphereRadius) ? this.viewerManager.coordinateManager.sphereRadius : 10;
 
       const screenToUV = (localX, localY) => {
         const rect = canvas.getBoundingClientRect();
@@ -536,11 +536,11 @@ export default class RetouchManager {
             console.warn('🎨 Warning RetouchManager: площадь мала, пробуем u->1-u; mapped2=', mapped2, 'wc3=', wc3);
           }
         }
-      } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось оценить/исправить площадь маски:', e?.message); }
+  } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось оценить/исправить площадь маски:', e && e.message); }
 
       return mask.toDataURL('image/png');
     } catch (e) {
-      console.warn('🎨 Warning RetouchManager: _exportMaskEquirect failed:', e?.message);
+  console.warn('🎨 Warning RetouchManager: _exportMaskEquirect failed:', e && e.message);
       return null;
     }
   }
@@ -578,7 +578,7 @@ export default class RetouchManager {
             maskBlob = this._dataURLtoBlob(maskDataUrlEq);
             console.log('🎨 Debug RetouchManager: использована эквирект-маска', imgSize.width + 'x' + imgSize.height);
           }
-        } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось построить эквирект-маску, используем screen-маску:', e?.message); }
+  } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось построить эквирект-маску, используем screen-маску:', e && e.message); }
       }
       if (!maskBlob) {
         console.log('🎨 Debug RetouchManager: используем ранее сохранённую screen-маску');
@@ -624,12 +624,21 @@ export default class RetouchManager {
   // Диагностика статуса ретуши: сервер выставляет X-Retouch-Status
   const xStatus = resp.headers.get('x-retouch-status');
   const xError = resp.headers.get('x-retouch-error');
+  const xMessage = resp.headers.get('x-retouch-message');
   if (xStatus) console.log('🎨 Debug RetouchManager: X-Retouch-Status:', xStatus);
   if (xError) console.warn('🎨 Debug RetouchManager: X-Retouch-Error:', xError);
-  // Если сервер сообщил о недоступности AI или fallback-е — не применяем исходник как результат
-  if (xStatus && (/fallback/i.test(xStatus) || /lama-unavailable/i.test(xStatus))) {
-    try { this.viewerManager?.showToast?.('AI ретушь недоступна. Повторите попытку позже.', 'error', 6000); } catch(e){}
-    throw new Error('AI service unavailable: ' + xStatus + (xError ? (' - ' + xError) : ''));
+  if (xMessage) console.log('🎨 Debug RetouchManager: X-Retouch-Message:', xMessage);
+  
+  // Обрабатываем разные статусы
+  if (xStatus) {
+    if (xStatus === 'error' && /original|fallback/i.test(xMessage || '')) {
+      try { if (this.viewerManager && typeof this.viewerManager.showToast === 'function') this.viewerManager.showToast('AI ретушь недоступна. Показан оригинал.', 'warning', 4000); } catch(e){}
+      throw new Error('AI service unavailable: ' + xStatus + (xMessage ? (' - ' + xMessage) : ''));
+    } else if (xStatus === 'simulated') {
+      try { if (this.viewerManager && typeof this.viewerManager.showToast === 'function') this.viewerManager.showToast('Применена базовая симуляция ретуши', 'info', 3000); } catch(e){}
+    } else if (xStatus === 'success') {
+      try { if (this.viewerManager && typeof this.viewerManager.showToast === 'function') this.viewerManager.showToast('AI ретушь успешно применена!', 'success', 2000); } catch(e){}
+    }
   }
 
       // Ответ может быть как json { imageBase64 } так и прямой image/* поток
@@ -689,7 +698,7 @@ export default class RetouchManager {
           }
           URL.revokeObjectURL(origUrl);
           return cnt ? (sum / cnt) : 0;
-        } catch(e) { console.warn('🎨 Warning RetouchManager: diff calc failed', e?.message); return 999; }
+  } catch(e) { console.warn('🎨 Warning RetouchManager: diff calc failed', e && e.message); return 999; }
       };
 
       let appliedSrc = resultDataUrl;
@@ -815,7 +824,7 @@ export default class RetouchManager {
     console.log('🎨 Debug RetouchManager: viewerManager.setPanorama завершен');
     
     // Восстановим маркеры по сцене
-    this.viewerManager.restoreMarkersForScene?.(scene.id);
+  if (this.viewerManager && typeof this.viewerManager.restoreMarkersForScene === 'function') this.viewerManager.restoreMarkersForScene(scene.id);
     console.log('🎨 Debug RetouchManager: маркеры восстановлены для сцены', scene.id);
   }
 

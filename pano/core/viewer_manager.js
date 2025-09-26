@@ -2068,7 +2068,7 @@ export default class ViewerManager {
     if (intersects.length > 0) {
       // ИСПРАВЛЯЕМ: берем САМОЕ БЛИЗКОЕ пересечение и проверяем, что это действительно resize handle
       const closest = intersects[0];
-      const handleElement = closest.object.userData?.element || closest.object.parent?.userData?.element;
+  const handleElement = (closest.object.userData && closest.object.userData.element) ? closest.object.userData.element : (closest.object.parent && closest.object.parent.userData && closest.object.parent.userData.element ? closest.object.parent.userData.element : undefined);
 
       if (handleElement && handleElement.classList.contains('resize-handle')) {
         const corner = handleElement.getAttribute('data-corner');
@@ -2176,7 +2176,7 @@ export default class ViewerManager {
 
     if (intersects.length > 0) {
       const closest = intersects[0];
-      const handleElement = closest.object.userData?.element || closest.object.parent?.userData?.element;
+  const handleElement = (closest.object.userData && closest.object.userData.element) ? closest.object.userData.element : (closest.object.parent && closest.object.parent.userData && closest.object.parent.userData.element ? closest.object.parent.userData.element : undefined);
 
       if (handleElement) {
         const action = handleElement.getAttribute('data-rotation-action');
@@ -2251,7 +2251,7 @@ export default class ViewerManager {
 
     if (intersects.length > 0) {
       const closest = intersects[0];
-      const zoneElement = closest.object.userData?.element || closest.object.parent?.userData?.element;
+  const zoneElement = (closest.object.userData && closest.object.userData.element) ? closest.object.userData.element : (closest.object.parent && closest.object.parent.userData && closest.object.parent.userData.element ? closest.object.parent.userData.element : undefined);
 
       if (zoneElement) {
         const markerEl = zoneElement.parentElement;
@@ -2785,14 +2785,14 @@ export default class ViewerManager {
         if (hotspot.type === 'hotspot' && hotspot.targetSceneId) {
 
           // ЗАЩИТА: проверяем, что целевая сцена существует
-          const targetScene = window.sceneManager?.getSceneById(hotspot.targetSceneId);
+          const targetScene = window.sceneManager && typeof window.sceneManager.getSceneById === 'function' ? window.sceneManager.getSceneById(hotspot.targetSceneId) : undefined;
           if (!targetScene) {
 
             return;
           }
 
           // ЗАЩИТА: проверяем, что мы не на целевой сцене уже
-          const currentScene = window.sceneManager?.getCurrentScene();
+          const currentScene = window.sceneManager && typeof window.sceneManager.getCurrentScene === 'function' ? window.sceneManager.getCurrentScene() : undefined;
           if (currentScene && currentScene.id === hotspot.targetSceneId) {
 
             return;
@@ -3051,7 +3051,7 @@ export default class ViewerManager {
       markerEl = document.createElement('a-entity');
       markerEl.id = `marker-${hotspot.id}`;
       markerEl.setAttribute('data-hotspot-id', hotspot.id);
-      const posStr = `${hotspot.position?.x || 0} ${hotspot.position?.y || 1.5} ${hotspot.position?.z || -3}`;
+  const posStr = `${hotspot.position && hotspot.position.x ? hotspot.position.x : 0} ${hotspot.position && hotspot.position.y ? hotspot.position.y : 1.5} ${hotspot.position && hotspot.position.z ? hotspot.position.z : -3}`;
       markerEl.setAttribute('position', posStr);
     }
 
@@ -4418,7 +4418,7 @@ export default class ViewerManager {
           const dx = e.touches[0].clientX - e.touches[1].clientX;
           const dy = e.touches[0].clientY - e.touches[1].clientY;
           this._pinch.startDist = Math.hypot(dx, dy);
-          this._pinch.startFov = parseFloat(this.aframeCamera?.getAttribute('fov')) || 80;
+          this._pinch.startFov = (this.aframeCamera && typeof this.aframeCamera.getAttribute === 'function' ? parseFloat(this.aframeCamera.getAttribute('fov')) : NaN) || 80;
         }
       }, { passive: false });
 
@@ -5678,7 +5678,7 @@ export default class ViewerManager {
           const urlParams = new URLSearchParams(new URL(url).search);
           videoId = urlParams.get('v');
         } else if (url.includes('youtu.be/')) {
-          videoId = url.split('youtu.be/')[1]?.split('?')[0];
+          videoId = url.split('youtu.be/')[1] ? url.split('youtu.be/')[1].split('?')[0] : undefined;
         }
 
         if (videoId) {
@@ -6076,7 +6076,7 @@ export default class ViewerManager {
         const markerId = markerEl.id;
 
         // Проверяем классы элемента
-        const targetClasses = targetEl.className?.split(' ') || [];
+  const targetClasses = targetEl.className ? targetEl.className.split(' ') : [];
         const validClasses = [
           'video-area',
           'move-zone',
@@ -6118,7 +6118,7 @@ export default class ViewerManager {
 
         // Проверяем что событие от элементов именно этой видео-области
         if (targetEl.id === markerId ||
-          targetEl.parentElement?.id === markerId ||
+          (targetEl.parentElement && targetEl.parentElement.id === markerId) || 
           targetEl.closest(`#${markerId}`) === markerEl) {
 
           return true;
@@ -6129,7 +6129,7 @@ export default class ViewerManager {
           targetEl.closest('.rotation-arrow-indicator') ||
           targetEl.closest('.video-play-button') ||
           targetEl.closest('.video-progress-container') ||
-          targetEl.classList?.contains('rotation-arrow-indicator');
+          (targetEl.classList && targetEl.classList.contains('rotation-arrow-indicator'));
 
         if (isVideoAreaElement && markerEl.contains(targetEl)) {
 
@@ -6138,7 +6138,7 @@ export default class ViewerManager {
 
         // Дополнительная проверка для A-Frame событий
         if (event.detail && event.detail.intersection &&
-          event.detail.intersection.object?.el?.id === markerId) {
+          (event.detail.intersection.object && event.detail.intersection.object.el && event.detail.intersection.object.el.id === markerId)) {
 
           return true;
         }
@@ -6654,8 +6654,8 @@ export default class ViewerManager {
 
     // Используем координаты события напрямую (canvas или DOM)
     const startMousePos = {
-      x: startEvent.clientX || startEvent.detail?.clientX || 0,
-      y: startEvent.clientY || startEvent.detail?.clientY || 0
+  x: startEvent.clientX || (startEvent.detail && startEvent.detail.clientX) || 0,
+  y: startEvent.clientY || (startEvent.detail && startEvent.detail.clientY) || 0
     };
 
     console.log('🔄 Начальные размеры для изменения:', {
@@ -7140,8 +7140,8 @@ export default class ViewerManager {
    */
   getCameraPosition() {
     // Пробуем найти камеру разными способами
-    let camera = this.aframeScene?.querySelector('a-camera') ||
-      this.aframeScene?.querySelector('[camera]') ||
+    let camera = (this.aframeScene && typeof this.aframeScene.querySelector === 'function' ? this.aframeScene.querySelector('a-camera') : null) ||
+      (this.aframeScene && typeof this.aframeScene.querySelector === 'function' ? this.aframeScene.querySelector('[camera]') : null) ||
       document.querySelector('a-camera') ||
       document.querySelector('[camera]');
 
@@ -7149,7 +7149,7 @@ export default class ViewerManager {
 
       // Пробуем получить камеру через THREE.js
       try {
-        const scene3D = this.aframeScene?.object3D;
+  const scene3D = this.aframeScene && this.aframeScene.object3D ? this.aframeScene.object3D : undefined;
         if (scene3D) {
           scene3D.traverse((child) => {
             if (child.isCamera && !camera) {
@@ -7184,8 +7184,8 @@ export default class ViewerManager {
   setCameraPosition(cameraData) {
     // Пробуем найти камеру разными способами
     let camera = this.aframeCamera ||
-      this.aframeScene?.querySelector('a-camera') ||
-      this.aframeScene?.querySelector('[camera]') ||
+  (this.aframeScene && typeof this.aframeScene.querySelector === 'function' ? this.aframeScene.querySelector('a-camera') : null) ||
+  (this.aframeScene && typeof this.aframeScene.querySelector === 'function' ? this.aframeScene.querySelector('[camera]') : null) ||
       document.querySelector('a-camera') ||
       document.querySelector('[camera]');
 
@@ -7263,7 +7263,7 @@ export default class ViewerManager {
 
     // Добавим текущий FOV
     try {
-      const camComp = this.aframeCamera?.getAttribute('camera') || {};
+  const camComp = this.aframeCamera && typeof this.aframeCamera.getAttribute === 'function' ? this.aframeCamera.getAttribute('camera') : {};
       const fov = parseFloat(camComp.fov);
       if (!isNaN(fov)) cameraPosition.fov = fov;
     } catch {}

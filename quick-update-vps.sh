@@ -1,5 +1,5 @@
 #!/bin/bash
-# Быстрое обновление Color360 без создания бэкапа (для экстренных случаев)
+# Быстрое обновление Color360 с исправлениями ретуши
 
 set -e
 
@@ -8,7 +8,7 @@ PROJECT_DIR="/var/www/color360"
 GIT_REPO="https://github.com/RadaRish/color360.git"
 BRANCH="main"
 
-echo "⚡ Быстрое обновление Color360 (БЕЗ бэкапа)..."
+echo "⚡ Быстрое обновление Color360 с исправлениями ретуши..."
 
 # Проверяем права и определяем режим работы
 IS_ROOT=false
@@ -134,5 +134,15 @@ echo "   📅 Время: $(date)"
 echo "   🌿 Ветка: $BRANCH"
 echo "   📝 Коммит: $(git rev-parse --short HEAD)"
 echo ""
-echo "⚠️ ВНИМАНИЕ: Бэкап НЕ создавался!"
+echo "🎨 Новые улучшения ретуши:"
+echo "   ✓ Исправлены ошибки HTTP заголовков"
+echo "   ✓ Добавлена симуляция удаления объектов"
+echo "   ✓ Улучшена обработка недоступности AI"
+echo "   ✓ Лучшие уведомления пользователю"
+echo ""
+echo "📱 Полезные команды:"
+echo "   sudo journalctl -u color360-app -f  # Логи в реальном времени"
+echo "   sudo systemctl restart color360-app # Перезапуск сервиса"
+echo "   ./monitor-vps.sh                    # Мониторинг системы"
+echo ""
 echo "💡 Для полного обновления с бэкапом используйте: ./update-vps.sh"
