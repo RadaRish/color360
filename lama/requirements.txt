@@ -1,0 +1,25 @@
+# LaMa Inpainting Service Dependencies
+# Оптимизировано для VPS с 2GB RAM
+
+# Основные зависимости
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Обработка изображений
+pillow==10.1.0
+opencv-python-headless==4.8.1.78
+numpy==1.24.3
+
+# LaMa Cleaner для профессионального inpainting
+lama-cleaner==1.2.2
+
+# PyTorch CPU версия
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.1.0+cpu
+torchvision==0.16.0+cpu
+torchaudio==2.1.0+cpu
+
+# Дополнительные утилиты
+psutil==5.9.6
+requests==2.31.0

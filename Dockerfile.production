@@ -1,0 +1,100 @@
+# Color360 Production Docker Image
+# Полный образ с LaMa AI для профессионального удаления объектов
+
+FROM ubuntu:22.04
+
+# Основная информация
+LABEL maintainer="Color360 Team"
+LABEL description="Color360 Panorama Editor with LaMa AI Inpainting"
+LABEL version="2.0.0"
+
+# Переменные окружения
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NODE_VERSION=20.19.3
+ENV PYTHON_VERSION=3.10
+ENV PORT=3000
+ENV LAMA_PORT=5002
+ENV NODE_ENV=production
+ENV PYTHONUNBUFFERED=1
+
+# Установка системных зависимостей
+RUN apt-get update && apt-get install -y \
+    # Базовые утилиты
+    curl wget git build-essential \
+    # Python
+    python3 python3-pip python3-venv python3-dev \
+    # Системные библиотеки для OpenCV и AI
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 \
+    libgthread-2.0-0 libgtk-3-0 libcairo-gobject2 libgtk-3-0 libgdk-pixbuf2.0-0 \
+    # Nginx для production
+    nginx supervisor \
+    # Утилиты
+    htop nano unzip ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Установка Node.js через NodeSource
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && node --version \
+    && npm --version
+
+# Создание рабочей директории
+WORKDIR /app
+
+# Копирование основных файлов проекта
+COPY package*.json ./
+COPY server.js ./
+COPY index.html main.html privacy.html profile.html admin-dashboard.html ./
+COPY assets/ ./assets/
+COPY favicon.ico ./
+
+# Установка Node.js зависимостей
+RUN npm ci --only=production && npm cache clean --force
+
+# Настройка LaMa AI
+COPY lama/ ./lama/
+
+# Создание Python окружения для LaMa
+RUN cd lama && \
+    python3 -m venv lama_env && \
+    . lama_env/bin/activate && \
+    pip install --upgrade pip && \
+    # Установка PyTorch CPU
+    pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+        torch==2.1.0+cpu torchvision==0.16.0+cpu torchaudio==2.1.0+cpu && \
+    # FastAPI и веб компоненты
+    pip install fastapi==0.104.1 uvicorn[standard]==0.24.0 python-multipart==0.0.6 && \
+    # Обработка изображений
+    pip install pillow==10.1.0 opencv-python-headless==4.8.1.78 numpy==1.24.3 && \
+    # LaMa AI
+    pip install lama-cleaner==1.2.2 && \
+    # Утилиты
+    pip install psutil==5.9.6 requests==2.31.0 && \
+    # Очистка кеша
+    pip cache purge
+
+# Настройка Nginx
+COPY docker-nginx.conf /etc/nginx/sites-available/default
+
+# Создание необходимых директорий
+RUN mkdir -p /app/temp /app/avatars /app/news_images /app/pano \
+    && chmod 755 /app/temp /app/avatars /app/news_images /app/pano
+
+# Создание supervisor конфигурации
+RUN mkdir -p /etc/supervisor/conf.d
+COPY docker-supervisor.conf /etc/supervisor/conf.d/color360.conf
+
+# Скрипт запуска
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Открытие портов
+EXPOSE 80 3000 5002
+
+# Проверка здоровья контейнера
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Точка входа
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["supervisord", "-n"]

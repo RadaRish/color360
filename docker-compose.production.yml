@@ -1,0 +1,82 @@
+# Color360 Production Docker Compose
+# Полная производственная среда с LaMa AI
+
+version: '3.8'
+
+services:
+  color360-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      args:
+        - NODE_ENV=production
+    image: color360:production
+    container_name: color360-production
+    
+    ports:
+      - "80:80"
+      - "3000:3000"
+      - "5002:5002"
+    
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LAMA_PORT=5002
+      - LAMA_ENABLED=true
+      - PYTHONUNBUFFERED=1
+    
+    volumes:
+      # Persistent data
+      - ./data/temp:/app/temp
+      - ./data/avatars:/app/avatars
+      - ./data/news_images:/app/news_images
+      - ./data/pano:/app/pano
+      
+      # Logs
+      - ./logs/supervisor:/var/log/supervisor
+      - ./logs/nginx:/var/log/nginx
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Опциональный мониторинг
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: color360-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=3600
+      - WATCHTOWER_CLEANUP=true
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+networks:
+  default:
+    name: color360-network
+
+volumes:
+  data:
+    driver: local

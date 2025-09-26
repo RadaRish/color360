@@ -171,7 +171,7 @@ async function startLamaService() {
       console.log('🐍 Системный Python:', pythonExecutable);
     }
     
-    const lamaAppPath = path.join(__dirname, 'sd', 'lama_service.py');
+    const lamaAppPath = path.join(__dirname, 'lama', 'service.py');
     
     if (!fs.existsSync(lamaAppPath)) {
       console.warn('⚠️ Файл LaMa сервиса не найден:', lamaAppPath);
@@ -179,7 +179,7 @@ async function startLamaService() {
     }
 
     lamaProcess = spawn(pythonExecutable, [lamaAppPath], {
-      cwd: path.join(__dirname, 'sd'),
+      cwd: path.join(__dirname, 'lama'),
       env: {
         ...process.env,
         PORT: LAMA_PORT,
