@@ -398,9 +398,19 @@ app.post('/api/inpaint', upload.fields([
       }
     }
 
-    const formData = new FormData();
-    formData.append('image', new Blob([imageFile.buffer], { type: imageFile.mimetype }), 'image.jpg');
-    formData.append('mask', new Blob([maskFile.buffer], { type: maskFile.mimetype }), 'mask.jpg');
+    // Создаём FormData для Node.js
+    const FormDataNode = require('form-data');
+    const formData = new FormDataNode();
+    
+    formData.append('image', imageFile.buffer, {
+      filename: 'image.jpg',
+      contentType: imageFile.mimetype
+    });
+    
+    formData.append('mask', maskFile.buffer, {
+      filename: 'mask.jpg', 
+      contentType: maskFile.mimetype
+    });
     
     // Добавляем параметры для лучшего качества
     formData.append('prompt', req.body.prompt || 'remove object completely, natural background');
@@ -411,7 +421,7 @@ app.post('/api/inpaint', upload.fields([
 
     const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        ...formData.getHeaders(),
       },
       responseType: 'arraybuffer',
       timeout: 120000, // 2 минуты
