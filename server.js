@@ -71,12 +71,14 @@ if (isProduction) {
         baseUri: ["'self'"]
       }
     },
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    hsts: false  // Отключаем HSTS до настройки TLS
   }));
 } else {
   app.use(helmet({
     contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    hsts: false
   }));
 }
 
