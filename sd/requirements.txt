@@ -1,32 +1,32 @@
-# Stable Diffusion Inpainting Service Dependencies
-# Основные зависимости для работы с Stable Diffusion
+# LaMa Inpainting Service Dependencies для Color360
+# Оптимизировано для VPS с 2GB RAM
 
-# FastAPI и веб-сервер
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-
-# Машинное обучение и Stable Diffusion
-torch>=2.0.0
-torchvision>=0.15.0
-diffusers==0.24.0
-transformers==4.35.2
-accelerate==0.24.1
-safetensors==0.4.0
+# Основные зависимости
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
 
 # Обработка изображений
-Pillow==10.1.0
-opencv-python==4.8.1.78
+pillow>=10.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
 
-# Научные вычисления
-numpy==1.24.3
-scipy==1.11.4
+# LaMa Cleaner для профессионального inpainting
+lama-cleaner>=1.2.0
 
-# Утилиты
-python-multipart==0.0.6
-aiofiles==23.2.1
+# PyTorch (CPU версия для экономии памяти)
+torch>=2.0.0+cpu
+torchvision>=0.15.0+cpu
+torchaudio>=2.0.0+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
 
-# Мониторинг и логирование
-psutil==5.9.6
+# Дополнительные утилиты
+psutil>=5.9.0
+requests>=2.31.0
+
+# Опциональные зависимости для улучшения производительности
+# accelerate>=0.21.0  # Закомментировано для экономии памяти
+# xformers>=0.0.20   # Закомментировано для экономии памяти
 
 # Дополнительные оптимизации (опционально)
 # xformers==0.0.22.post7  # Для ускорения на CUDA

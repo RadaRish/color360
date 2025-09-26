@@ -1,4 +1,4 @@
-// Simple Node.js + Express backend for demo site
+// Color360 Server with LaMa Inpainting Integration
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const path = require('path');
@@ -16,13 +16,26 @@ const { spawn } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// JWT Secret Key - in production this should be set as an environment variable
+// JWT Secret Key
 const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-key-2025';
 
-// Stable Diffusion Service Configuration
-const SD_PORT = process.env.SD_PORT || 5002;
-const SD_HOST = process.env.SD_HOST || '127.0.0.1';
-const SD_URL = `http://${SD_HOST}:${SD_PORT}`;
+// LaMa Inpainting Service Configuration
+const LAMA_PORT = process.env.LAMA_PORT || 5002;
+const LAMA_HOST = process.env.LAMA_HOST || '127.0.0.1';
+const LAMA_URL = `http://${LAMA_HOST}:${LAMA_PORT}`;
+const LAMA_ENABLED = process.env.LAMA_ENABLED !== 'false';
+let lamaProcess = null;
+let lamaServiceReady = false;
+
+// Backward compatibility
+const AI_PORT = LAMA_PORT;
+const AI_HOST = LAMA_HOST;
+const AI_URL = LAMA_URL;
+const SD_PORT = LAMA_PORT;
+const SD_HOST = LAMA_HOST; 
+const SD_URL = LAMA_URL;
+let aiProcess = null;
+let aiServiceReady = false;
 let sdProcess = null;
 let sdServiceReady = false;
 
@@ -41,202 +54,89 @@ process.on('SIGTERM', () => {
 });
 
 // Security headers with production configuration
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://aframe.io", "https://cdnjs.cloudflare.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://aframe.io"],
-      fontSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
-      objectSrc: ["'none'"],
-      frameSrc: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"]
-    }
-  },
-  hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
-}));
+if (isProduction) {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+        connectSrc: ["'self'", "ws:", "wss:", "https:", "http:"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"]
+      }
+    },
+    crossOriginEmbedderPolicy: false
+  }));
+} else {
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+  }));
+}
 
-// Parse cookies
-app.use(cookieParser());
-
-// Trust proxy for proper IP detection behind reverse proxy
-// Use number instead of boolean for better security
-app.set('trust proxy', 1);
-
-// Enable gzip compression
+// Enable compression
 app.use(compression());
 
 // Rate limiting
-const apiLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // Limit each IP to 100 requests per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { message: 'Слишком много запросов, пожалуйста, повторите попытку позже.' },
-  // Skip validation for unexpected X-Forwarded-For headers
-  validate: {
-    xForwardedForHeader: false
-  }
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Limit each IP to 1000 requests per windowMs
+  message: 'Слишком много запросов с этого IP, попробуйте позже.'
 });
+app.use(limiter);
 
-// Apply rate limiting to all API routes
-app.use('/api/', apiLimiter);
+// Body parser middleware
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cookieParser());
 
-// More strict rate limiting for authentication routes
-const authLimiter = rateLimit({
-  windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 60 * 60 * 1000, // 1 hour window
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_ATTEMPTS) || 10, // 10 attempts per hour
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { message: 'Слишком много попыток входа, пожалуйста, повторите позже.' },
-  // Skip validation for unexpected X-Forwarded-For headers
-  validate: {
-    xForwardedForHeader: false
-  }
-});
+// Static files
+app.use(express.static(path.join(__dirname)));
 
-// Apply stricter rate limiting to login/register endpoints
-app.use('/api/login', authLimiter);
-app.use('/api/register', authLimiter);
-
-// Serve static files from the root directory
-app.use(express.static(path.join(__dirname), {
-  setHeaders: (res, path) => {
-    // Set secure headers for static files
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    // More permissive CSP for static files to allow images and videos
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
-    
-    // Set proper MIME type for MP4 files
-    if (path.endsWith('.mp4')) {
-      res.setHeader('Content-Type', 'video/mp4');
-    }
-  }
-}));
-
-// Serve static files from the pano directory
-app.use('/pano', express.static(path.join(__dirname, 'pano'), {
-  setHeaders: (res, path) => {
-    // Set secure headers for pano static files
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    // More permissive CSP for pano app to allow required external resources
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self'; connect-src 'self' https://aframe.io https://releases.aframe.io ws: wss:;");
-  }
-}));
-
-// For API routes under /pano subpath, we need to handle that as well
-// But for the main site, we serve from root
-// Conditional JSON parser: apply small limit by default, but skip for large upload endpoints
+// CORS headers
 app.use((req, res, next) => {
-  const p = req.path || '';
-  // Skip small JSON parser for large upload endpoints
-  if (p.startsWith('/api/temp-file')) {
-    return next();
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
   }
-  return bodyParser.json({ limit: '10kb' })(req, res, next);
 });
 
-// Special body parser for temp file endpoints with larger limit (30MB)
-const tempFileBodyParser = bodyParser.json({ limit: '50mb' });
+console.log(`
+🚀 Color360 с LaMa AI запускается...
+🎯 LaMa Service: ${LAMA_ENABLED ? 'включён' : 'отключён'}  
+🌐 Port: ${PORT}
+🔧 Mode: ${isProduction ? 'production' : 'development'}
+`);
 
-// Serve uploaded avatars from /avatars
-const avatarsDir = path.join(__dirname, 'avatars');
-if (!fs.existsSync(avatarsDir)) {
-  try { fs.mkdirSync(avatarsDir); } catch (e) { console.error('Could not create avatars dir', e); }
-}
-// Max avatar upload size (200 KB)
-const MAX_AVATAR_BYTES = parseInt(process.env.MAX_AVATAR_BYTES) || 200 * 1024;
-app.use('/avatars', express.static(avatarsDir, {
-  setHeaders: (res, filePath) => {
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.jpg' || ext === '.jpeg') res.setHeader('Content-Type', 'image/jpeg');
-    else res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-  }
-}));
-
-// Directory for news images
-const newsImagesDir = path.join(__dirname, 'news_images');
-if (!fs.existsSync(newsImagesDir)) {
-  try { fs.mkdirSync(newsImagesDir); } catch (e) { console.error('Could not create news_images dir', e); }
-}
-app.use('/news_images', express.static(newsImagesDir, {
-  setHeaders: (res, filePath) => {
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.jpg' || ext === '.jpeg') res.setHeader('Content-Type', 'image/jpeg');
-    else res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-  }
-}));
-
-// In-memory user store (demo only)
-// Limit to 100 users as requested
-const users = {};
-const MAX_USERS = 100;
-
-// In-memory storage for user subscriptions and editor sessions
-const userSubscriptions = {};
-const editorSessions = {};
-
-// In-memory session store
-const sessions = {};
-
-// In-memory news store
-let newsItems = [
-  {id: 1, title:'Запуск демо-платформы', date:'2025-08-31', text:'Привет! Это демонстрационная новость.'},
-  {id: 2, title:'Новый функционал редактора', date:'2025-08-25', text:'Добавлены инструменты для управления сценами и хотспотами.'}
-];
-
-// Admin user (for demo purposes)
-const ADMIN_EMAIL = 'admin@color360.online';
-const ADMIN_PASSWORD = 'admin123';
-
-// Initialize admin user with subscription
-// Initialize admin user with hashed password
-const adminPasswordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
-users[ADMIN_EMAIL] = {
-  name: 'Администратор',
-  email: ADMIN_EMAIL,
-  password: adminPasswordHash,
-  registered: new Date().toISOString(),
-  isAdmin: true
-};
-
-// Initialize admin subscription (unlimited)
-userSubscriptions[ADMIN_EMAIL] = {
-  plan: 'business',
-  status: 'active',
-  startDate: new Date().toISOString(),
-  endDate: null, // No end date for admin
-  maxEditorSessions: Infinity
-};
-
-// ==================== Stable Diffusion Service Management ====================
+// ==================== LaMa Service Management ====================
 
 /**
- * Запускает Stable Diffusion сервис
+ * Запускает LaMa Inpainting сервис
  */
-async function startStableDiffusionService() {
+async function startLamaService() {
   return new Promise((resolve, reject) => {
-    if (sdProcess && !sdProcess.killed) {
-      console.log('🎨 Stable Diffusion сервис уже запущен');
+    if (lamaProcess && !lamaProcess.killed) {
+      console.log('🎯 LaMa сервис уже запущен');
       return resolve(true);
     }
 
-    console.log('🚀 Запуск Stable Diffusion сервиса...');
+    console.log('🚀 Запуск LaMa Inpainting сервиса...');
     
-    // Используем Python из виртуального окружения если оно существует
+    // Используем Python из виртуального окружения
     let pythonExecutable;
     
-    // Проверяем различные возможные пути к виртуальному окружению
     const venvPaths = [
       path.join(__dirname, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'),
       path.join(__dirname, 'sd_env', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'),
+      path.join(__dirname, 'lama_env', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'),
       path.join(__dirname, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
     ];
     
@@ -245,19 +145,17 @@ async function startStableDiffusionService() {
       if (fs.existsSync(venvPath)) {
         pythonExecutable = venvPath;
         venvFound = true;
-        console.log('📦 Используем Python из виртуального окружения:', pythonExecutable);
+        console.log('📦 Python из виртуального окружения:', pythonExecutable);
         break;
       }
     }
     
     if (!venvFound) {
-      // Определяем системный Python в зависимости от платформы
       if (process.platform === 'win32') {
         pythonExecutable = 'python';
       } else {
-        // Для Linux/Unix проверяем доступные версии Python
         const pythonCommands = ['python3.11', 'python3.10', 'python3.9', 'python3.8', 'python3', 'python'];
-        pythonExecutable = 'python3'; // Значение по умолчанию
+        pythonExecutable = 'python3';
         
         for (const cmd of pythonCommands) {
           try {
@@ -266,467 +164,201 @@ async function startStableDiffusionService() {
             pythonExecutable = cmd;
             break;
           } catch (e) {
-            // Команда не найдена, пробуем следующую
+            // Команда не найдена
           }
         }
       }
-      console.log('🐍 Используем системный Python:', pythonExecutable);
+      console.log('🐍 Системный Python:', pythonExecutable);
     }
     
-    // Временно используем простую версию (полная требует дополнительной настройки)
-    const sdAppPath = path.join(__dirname, 'sd', 'sd_app_simple.py');
+    const lamaAppPath = path.join(__dirname, 'sd', 'lama_service.py');
     
-    // Проверяем существование файла SD сервиса
-    if (!fs.existsSync(sdAppPath)) {
-      console.warn('⚠️ Файл SD сервиса не найден:', sdAppPath);
-      console.log('🔄 Продолжаем работу без SD сервиса...');
-      return resolve(false); // Продолжаем без SD
+    if (!fs.existsSync(lamaAppPath)) {
+      console.warn('⚠️ Файл LaMa сервиса не найден:', lamaAppPath);
+      return resolve(false);
     }
 
-    sdProcess = spawn(pythonExecutable, [sdAppPath], {
+    lamaProcess = spawn(pythonExecutable, [lamaAppPath], {
       cwd: path.join(__dirname, 'sd'),
       env: {
         ...process.env,
-        PORT: SD_PORT,
-        HOST: SD_HOST,
+        PORT: LAMA_PORT,
+        HOST: LAMA_HOST,
         PYTHONUNBUFFERED: '1'
       },
       stdio: ['inherit', 'pipe', 'pipe']
     });
 
-    let startupOutput = '';
     const startupTimeout = setTimeout(() => {
-      console.warn('⚠️ Timeout при запуске Stable Diffusion сервиса');
-      console.log('🔄 Продолжаем работу без SD сервиса...');
-      if (sdProcess) {
-        sdProcess.kill();
+      console.warn('⚠️ Timeout при запуске LaMa сервиса');
+      if (lamaProcess) {
+        lamaProcess.kill();
       }
-      resolve(false); // Продолжаем без SD
-    }, 60000); // 1 минута timeout
+      resolve(false);
+    }, 60000);
 
-    sdProcess.stdout.on('data', (data) => {
+    lamaProcess.stdout.on('data', (data) => {
       const output = data.toString();
-      startupOutput += output;
-      console.log(`SD stdout: ${output.trim()}`);
+      console.log(`LaMa stdout: ${output.trim()}`);
       
       if (output.includes('Application startup complete') || output.includes('Uvicorn running')) {
         clearTimeout(startupTimeout);
-        console.log('✅ Stable Diffusion сервис запущен успешно');
+        console.log('✅ LaMa сервис запущен');
+        lamaServiceReady = true;
         sdServiceReady = true;
+        aiServiceReady = true;
         resolve(true);
       }
     });
 
-    sdProcess.stderr.on('data', (data) => {
+    lamaProcess.stderr.on('data', (data) => {
       const output = data.toString();
-      console.error(`SD stderr: ${output.trim()}`);
+      console.error(`LaMa stderr: ${output.trim()}`);
       
-      if (output.includes('ImportError') || output.includes('ModuleNotFoundError') || 
-          output.includes('No module named')) {
+      if (output.includes('ImportError') || output.includes('ModuleNotFoundError')) {
         clearTimeout(startupTimeout);
-        console.warn('⚠️ Не удалось запустить Stable Diffusion сервис:', output.slice(0, 100) + '...');
-        console.log('🔄 Продолжаем работу без SD сервиса...');
-        resolve(false); // Продолжаем без SD
-      } else if (output.includes('Error') || output.includes('Failed')) {
-        clearTimeout(startupTimeout);
-        console.warn('⚠️ SD сервис завершился с ошибкой:', output.slice(0, 100) + '...');
-        resolve(false); // Продолжаем без SD вместо краха
-      }
-    });
-
-    sdProcess.on('close', (code) => {
-      clearTimeout(startupTimeout);
-      console.log(`🛑 Stable Diffusion сервис завершился с кодом: ${code}`);
-      sdServiceReady = false;
-      sdProcess = null;
-      
-      // Не крашим сервер из-за проблем с SD
-      if (!sdServiceReady) {
-        console.log('🔄 Продолжаем работу без SD сервиса...');
+        console.warn('⚠️ LaMa зависимости не установлены');
         resolve(false);
       }
     });
 
-    sdProcess.on('error', (error) => {
+    lamaProcess.on('close', (code) => {
       clearTimeout(startupTimeout);
-      console.warn('⚠️ Ошибка запуска Stable Diffusion сервиса:', error.message);
+      console.log(`LaMa процесс завершён: ${code}`);
+      lamaServiceReady = false;
       sdServiceReady = false;
-      sdProcess = null;
-      console.log('🔄 Продолжаем работу без SD сервиса...');
-      resolve(false); // Продолжаем без SD
+      aiServiceReady = false;
+      resolve(code === 0);
+    });
+
+    lamaProcess.on('error', (error) => {
+      clearTimeout(startupTimeout);
+      console.error('❌ Ошибка LaMa:', error.message);
+      resolve(false);
     });
   });
 }
 
 /**
- * Останавливает Stable Diffusion сервис
+ * Проверка здоровья LaMa сервиса
  */
-async function stopStableDiffusionService() {
-  return new Promise((resolve) => {
-    if (!sdProcess) {
-      console.log('🎨 Stable Diffusion сервис не запущен');
-      return resolve(true);
-    }
-
-    console.log('🛑 Остановка Stable Diffusion сервиса...');
-    sdServiceReady = false;
-
-    const killTimeout = setTimeout(() => {
-      if (sdProcess && !sdProcess.killed) {
-        console.log('🔪 Принудительное завершение Stable Diffusion сервиса');
-        sdProcess.kill('SIGKILL');
-      }
-    }, 10000); // 10 секунд на graceful shutdown
-
-    sdProcess.on('close', () => {
-      clearTimeout(killTimeout);
-      console.log('✅ Stable Diffusion сервис остановлен');
-      sdProcess = null;
-      resolve(true);
-    });
-
-    // Пытаемся graceful shutdown
-    try {
-      sdProcess.kill('SIGTERM');
-    } catch (error) {
-      console.error('Ошибка при остановке SD сервиса:', error);
-      clearTimeout(killTimeout);
-      sdProcess = null;
-      resolve(true);
-    }
-  });
-}
-
-/**
- * Проверяет готовность Stable Diffusion сервиса
- */
-async function checkStableDiffusionHealth() {
+async function checkLamaHealth() {
   try {
-    const response = await axios.get(`${SD_URL}/health`, {
+    const response = await axios.get(`${LAMA_URL}/health`, {
       timeout: 5000,
       validateStatus: function (status) {
-        return status < 500; // Resolve only if the status code is less than 500
+        return status < 500;
       }
     });
     
     if (response.status === 200) {
+      lamaServiceReady = true;
       sdServiceReady = true;
+      aiServiceReady = true;
       return { healthy: true, data: response.data };
     } else {
+      lamaServiceReady = false;
       sdServiceReady = false;
+      aiServiceReady = false;
       return { healthy: false, error: `HTTP ${response.status}` };
     }
   } catch (error) {
+    lamaServiceReady = false;
     sdServiceReady = false;
+    aiServiceReady = false;
     return { healthy: false, error: error.message };
   }
 }
 
-// Запускаем Stable Diffusion сервис при старте сервера (только если не отключен)
-if (!process.env.SD_DISABLED && process.env.NODE_ENV !== 'production') {
-  console.log('🎨 Попытка запуска Stable Diffusion сервиса...');
-  startStableDiffusionService().catch(error => {
-    console.error('⚠️ Не удалось запустить Stable Diffusion сервис:', error.message);
-    console.log('🔄 Продолжаем работу без SD сервиса...');
+// Backward compatibility functions
+async function startStableDiffusionService() {
+  console.log('🔄 Backward compatibility: запуск LaMa как SD');
+  return startLamaService();
+}
+
+async function checkStableDiffusionHealth() {
+  return checkLamaHealth();
+}
+
+// Запуск LaMa сервиса при старте
+if (LAMA_ENABLED && process.env.NODE_ENV !== 'production') {
+  console.log('🎯 Запуск LaMa сервиса...');
+  startLamaService().catch(error => {
+    console.error('⚠️ LaMa сервис не запустился:', error.message);
+    console.log('🔄 Продолжаем без AI...');
   });
+} else if (process.env.NODE_ENV === 'production') {
+  console.log('🎯 Production: LaMa через systemctl');
 } else {
-  console.log('🎨 Stable Diffusion сервис отключен (SD_DISABLED=true или production режим)');
+  console.log('🎯 LaMa отключён');
 }
 
-// Останавливаем сервис при завершении работы
-process.on('exit', () => {
-  if (sdProcess && !sdProcess.killed) {
-    sdProcess.kill('SIGTERM');
-  }
-});
+// ==================== File Upload Configuration ====================
 
-// Helper function to create JWT token
-function makeToken(email){
-  // Create a token with 1 hour expiration
-  return jwt.sign({ email }, JWT_SECRET, { expiresIn: '1h' });
-}
-
-// Helper function to get plan name
-function getPlanName(plan) {
-  switch(plan) {
-    case 'free': return 'Бесплатный';
-    case 'professional': return 'Профессионал';
-    case 'business': return 'Бизнес';
-    default: return plan;
-  }
-}
-
-// Helper function to get status name
-function getStatusName(status) {
-  switch(status) {
-    case 'active': return 'Активна';
-    case 'inactive': return 'Неактивна';
-    case 'expired': return 'Истекла';
-    default: return status;
-  }
-}
-
-// Middleware to authenticate user with JWT
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-  
-  if (!token) {
-    return res.status(401).json({ message: 'Токен не предоставлен' });
-  }
-  
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-  if (err || !decoded || !decoded.email) {
-      // Token verification failed
-      return res.status(403).json({ message: 'Неверный или просроченный токен' });
-    }
-    
-    // Check if user exists
-    const user = users[decoded.email];
-    if (!user) {
-      return res.status(403).json({ message: 'Пользователь не найден' });
-    }
-    
-    req.user = { email: decoded.email, token };
-    next();
-  });
-}
-
-// Middleware to check if user is admin
-function authenticateAdmin(req, res, next) {
-  // First authenticate the token
-  authenticateToken(req, res, () => {
-    // If we reach this point, authentication was successful
-    // Now check if user is admin
-    const user = users[req.user.email];
-    if (!user || !user.isAdmin) {
-      return res.status(403).json({ message: 'Доступ запрещен. Только для администраторов.' });
-    }
-    next();
-  });
-}
-
-// Register endpoint with user limit and validation
-app.post('/api/register', [
-  // Input validation
-  body('email').isEmail().normalizeEmail().withMessage('Неверный формат email'),
-  body('password').isLength({ min: 8 }).withMessage('Пароль должен быть минимум 8 символов'),
-  body('name').trim().notEmpty().withMessage('Имя обязательно'),
-  body('privacyConsent').equals('on').withMessage('Необходимо согласие на обработку персональных данных')
-], async (req, res) => {
-  // Check validation errors
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  
-  const {name, email, password, privacyConsent} = req.body || {};
-  
-  try {
-    // Additional check for privacy consent
-    if (!privacyConsent) {
-      return res.status(400).json({message:'Необходимо согласие на обработку персональных данных'});
-    }
-    
-    // Check user limit
-    if (Object.keys(users).length >= MAX_USERS) {
-      return res.status(400).json({message:'Достигнут лимит количества пользователей. Регистрация временно недоступна.'});
-    }
-    
-    if(users[email]) {
-      return res.status(400).json({message:'Пользователь уже зарегистрирован'});
-    }
-    
-    // Hash the password before saving
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    users[email] = {
-      name, 
-      email, 
-      password: hashedPassword, 
-      registered: new Date().toISOString(),
-      isAdmin: false,
-      privacyConsentDate: new Date().toISOString() // Сохраняем дату согласия
-    };
-    
-    // Create JWT token
-    const token = makeToken(email);
-    
-    // Create initial session
-    sessions[email] = sessions[email] || [];
-    sessions[email].push({
-      id: token,
-      loginTime: new Date().toISOString(),
-      device: req.headers['user-agent'] || 'Неизвестное устройство'
-    });
-    
-    // Initialize subscription
-    userSubscriptions[email] = {
-      plan: 'free',
-      status: 'active',
-      startDate: new Date().toISOString(),
-      endDate: null,
-      maxEditorSessions: 3
-    };
-    
-    return res.status(201).json({message:'ok', token});
-  } catch (error) {
-    console.error('Registration error:', error);
-    return res.status(500).json({message:'Ошибка регистрации'});
-  }
-});
-
-// Login endpoint with secure authentication
-app.post('/api/login', [
-  // Input validation
-  body('email').isEmail().normalizeEmail().withMessage('Неверный формат email'),
-  body('password').notEmpty().withMessage('Пароль обязателен')
-], async (req, res) => {
-  // Check validation errors
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  
-  const {email, password} = req.body || {};
-  
-  try {
-    const user = users[email];
-    if (!user) {
-      // Use same error message for both email and password errors to prevent user enumeration
-      return res.status(401).json({message:'Неверные учетные данные'});
-    }
-    
-    // Compare password with hashed version
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      // Add delay to prevent timing attacks
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return res.status(401).json({message:'Неверные учетные данные'});
-    }
-    
-    // Create JWT token
-    const token = makeToken(email);
-    
-    // Manage sessions - limit to 3 active sessions per user
-    sessions[email] = sessions[email] || [];
-    if (sessions[email].length >= 3) {
-      // Remove oldest session
-      sessions[email].shift();
-    }
-    
-    // Add new session
-    sessions[email].push({
-      id: token,
-      loginTime: new Date().toISOString(),
-      device: req.headers['user-agent'] || 'Неизвестное устройство',
-      ip: req.ip || req.headers['x-forwarded-for'] || 'Неизвестный IP'
-    });
-    
-    // Set HttpOnly cookie for extra security
-    res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 3600000 // 1 hour
-    });
-    
-    // Initialize subscription for new users
-    if (!userSubscriptions[email]) {
-      userSubscriptions[email] = {
-        plan: 'free',
-        status: 'active',
-        startDate: new Date().toISOString(),
-        endDate: null,
-        maxEditorSessions: 3
-      };
-    }
-    
-    return res.json({
-      message: 'ok', 
-      token,
-      user: {
-        name: user.name,
-        email: user.email,
-        isAdmin: user.isAdmin || false,
-        avatar: users[email].avatar || null
-      }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    return res.status(500).json({message:'Ошибка входа в систему'});
-  }
-});
-
-app.post('/api/demo', (req, res) => {
-  try {
-    // Create a demo token with limited permissions
-    const token = jwt.sign({ email: 'demo@color360.online', isDemo: true }, JWT_SECRET, { expiresIn: '4h' });
-    
-    // Demo behaviour: return token and a suggested link to the local pano app
-    return res.json({message:'demo issued', token, app:'/pano'});
-  } catch (error) {
-    console.error('Demo error:', error);
-    return res.status(500).json({message:'Ошибка создания демо-доступа'});
-  }
-});
-
-// Setup multer for file uploads (in-memory storage for retouch API)
-const upload = multer({ 
-  storage: multer.memoryStorage(),
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
   limits: { 
-    fileSize: 50 * 1024 * 1024, // 50MB max file size
-    fields: 10, // image, mask, prompt, negative_prompt, guidance_scale, num_inference_steps, strength, etc.
+    fileSize: 50 * 1024 * 1024, // 50MB
+    fields: 10,
     files: 2
   }
 });
 
-// ==================== AI Service API Endpoints ====================
+// ==================== Health Endpoints ====================
 
-// Legacy endpoint для совместимости
-app.get('/api/lama-health', (req, res) => {
-  res.status(503).json({
-    status: 'disabled',
-    message: 'LaMa сервис заменён на Stable Diffusion'
-  });
-});
-
-// Stable Diffusion health check
-app.get('/api/sd-health', async (req, res) => {
+app.get('/api/lama-health', async (req, res) => {
   try {
-    const health = await checkStableDiffusionHealth();
+    const health = await checkLamaHealth();
     if (health.healthy) {
       res.json({
         status: 'ok',
-        service: 'stable-diffusion',
+        service: 'lama-inpainting',
         ...health.data
       });
     } else {
       res.status(503).json({
         status: 'error',
-        service: 'stable-diffusion',
+        service: 'lama-inpainting',
         error: health.error
       });
     }
   } catch (error) {
     res.status(503).json({
       status: 'error',
-      service: 'stable-diffusion',
+      service: 'lama-inpainting',
       error: error.message
     });
   }
 });
 
-// General AI health check
+app.get('/api/sd-health', async (req, res) => {
+  try {
+    const health = await checkLamaHealth();
+    res.json({
+      status: health.healthy ? 'ok' : 'error',
+      service: 'lama-inpainting',
+      compatibility: 'sd-api',
+      error: health.error || null
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      service: 'lama-inpainting',
+      error: error.message
+    });
+  }
+});
+
 app.get('/api/ai-health', async (req, res) => {
   try {
-    const sdHealth = await checkStableDiffusionHealth();
+    const health = await checkLamaHealth();
     res.json({
-      status: sdHealth.healthy ? 'ok' : 'degraded',
+      status: health.healthy ? 'ok' : 'degraded',
       services: {
-        'stable-diffusion': {
-          status: sdHealth.healthy ? 'ok' : 'error',
-          error: sdHealth.error || null
+        'lama-inpainting': {
+          status: health.healthy ? 'ok' : 'error',
+          error: health.error || null
         }
       }
     });
@@ -738,1001 +370,220 @@ app.get('/api/ai-health', async (req, res) => {
   }
 });
 
-// Main retouch API endpoint with Stable Diffusion
-app.post('/api/retouch', upload.fields([{ name: 'image' }, { name: 'mask' }]), async (req, res) => {
+// ==================== Inpainting Endpoints ====================
+
+app.post('/api/inpaint', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'mask', maxCount: 1 }
+]), async (req, res) => {
   try {
-  const imageFile = req.files && req.files.image && req.files.image[0] ? req.files.image[0] : undefined;
-  const maskFile = req.files && req.files.mask && req.files.mask[0] ? req.files.mask[0] : undefined;
-    
-    if (!imageFile || !maskFile) {
-      return res.status(400).json({ error: 'Требуются файлы изображения и маски' });
+    if (!req.files || !req.files.image || !req.files.mask) {
+      return res.status(400).json({
+        error: 'Требуются файлы image и mask'
+      });
     }
 
-    // Получаем параметры Stable Diffusion из формы с явным приведением типов
-    const {
-      prompt = 'high quality, detailed',
-      negative_prompt = 'low quality, blurry, distorted',
-    } = req.body;
-    
-    // Явно приводим числовые параметры к нужному типу
-    const num_inference_steps = parseInt(req.body.num_inference_steps) || 20;
-    const guidance_scale = parseFloat(req.body.guidance_scale) || 7.5;
-    const strength = parseFloat(req.body.strength) || 1.0;
+    const imageFile = req.files.image[0];
+    const maskFile = req.files.mask[0];
 
-    console.log(`🎨 Запрос на ретушь SD: изображение ${imageFile.size} байт, маска ${maskFile.size} байт`);
-    console.log(`📝 Подробные параметры AI:`, {
-      prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
-      negative_prompt: negative_prompt.substring(0, 100) + (negative_prompt.length > 100 ? '...' : ''),
-      num_inference_steps,
-      guidance_scale,
-      strength
-    });
+    console.log('🎨 Запрос inpainting через LaMa');
 
-    // Проверяем готовность сервиса
-    if (!sdServiceReady) {
-      const health = await checkStableDiffusionHealth();
+    if (!lamaServiceReady) {
+      const health = await checkLamaHealth();
       if (!health.healthy) {
-        console.log('⚠️ SD сервис недоступен, возвращаем оригинал');
-        res.setHeader('Content-Type', imageFile.mimetype || 'image/png');
-        res.setHeader('X-Retouch-Status', 'error');
-        res.setHeader('X-Retouch-Message', 'SD service unavailable');
-        return res.send(imageFile.buffer);
+        return res.status(503).json({
+          error: 'LaMa сервис недоступен',
+          details: health.error
+        });
       }
     }
 
-    // Создаем FormData для отправки в SD сервис
-    const FormData = require('form-data');
     const formData = new FormData();
+    formData.append('image', new Blob([imageFile.buffer], { type: imageFile.mimetype }), 'image.jpg');
+    formData.append('mask', new Blob([maskFile.buffer], { type: maskFile.mimetype }), 'mask.jpg');
     
-    formData.append('image', imageFile.buffer, {
-      filename: imageFile.originalname || 'image.png',
-      contentType: imageFile.mimetype || 'image/png'
-    });
-    
-    formData.append('mask', maskFile.buffer, {
-      filename: maskFile.originalname || 'mask.png', 
-      contentType: maskFile.mimetype || 'image/png'
-    });
-    
-    formData.append('prompt', prompt);
-    formData.append('negative_prompt', negative_prompt);
-    formData.append('num_inference_steps', num_inference_steps.toString());
-    formData.append('guidance_scale', guidance_scale.toString());
-    formData.append('strength', strength.toString());
+    // Добавляем параметры для лучшего качества
+    formData.append('prompt', req.body.prompt || 'remove object completely, natural background');
+    formData.append('negative_prompt', req.body.negative_prompt || 'artifacts, blurry, seams');
+    formData.append('num_inference_steps', req.body.num_inference_steps || '25');
+    formData.append('guidance_scale', req.body.guidance_scale || '7.5');
+    formData.append('strength', req.body.strength || '1.0');
 
-    console.log(`🚀 Отправляем запрос в SD: ${SD_URL}/inpaint`);
-    console.log(`📊 Финальные параметры для SD:`, {
-      prompt: prompt.substring(0, 50) + '...',
-      negative_prompt: negative_prompt.substring(0, 50) + '...',
-      num_inference_steps,
-      guidance_scale,
-      strength
-    });
-
-    // Отправляем запрос в SD сервис
-    const response = await axios.post(`${SD_URL}/inpaint`, formData, {
+    const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
       headers: {
-        ...formData.getHeaders(),
-        'Accept': 'image/png'
+        'Content-Type': 'multipart/form-data',
       },
       responseType: 'arraybuffer',
-      timeout: 120000, // 2 минуты timeout для генерации
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity
+      timeout: 120000, // 2 минуты
     });
 
-    if (response.status === 200) {
-      console.log('✅ SD обработка завершена успешно');
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('X-Retouch-Status', 'success');
-      res.setHeader('X-Retouch-Service', 'stable-diffusion');
-      return res.send(Buffer.from(response.data));
+    res.set({
+      'Content-Type': 'image/jpeg',
+      'X-Inpaint-Method': response.headers['x-inpaint-method'] || 'lama',
+      'X-Inpaint-Status': response.headers['x-inpaint-status'] || 'success',
+      'X-Processing-Time': response.headers['x-processing-time'] || 'unknown'
+    });
+
+    res.send(response.data);
+    console.log('✅ Inpainting выполнен успешно');
+
+  } catch (error) {
+    console.error('❌ Ошибка inpainting:', error.message);
+    
+    if (error.response) {
+      res.status(error.response.status).json({
+        error: 'Ошибка AI сервиса',
+        details: error.response.data?.detail || error.message
+      });
+    } else if (error.code === 'ECONNREFUSED') {
+      res.status(503).json({
+        error: 'AI сервис недоступен',
+        details: 'Подключение отклонено'
+      });
     } else {
-      throw new Error(`SD service returned ${response.status}`);
+      res.status(500).json({
+        error: 'Внутренняя ошибка сервера',
+        details: error.message
+      });
     }
-    
-  } catch (error) {
-    console.error('❌ Retouch API error:', error);
-    
-    // В случае ошибки пробуем симуляцию удаления объектов
-    const imageFile = req.files && req.files.image && req.files.image[0] ? req.files.image[0] : undefined;
-    const maskFile = req.files && req.files.mask && req.files.mask[0] ? req.files.mask[0] : undefined;
-    
-    if (imageFile && maskFile) {
-      try {
-        console.log('🎨 Попытка симуляции удаления объектов...');
-        
-        // Используем простую версию SD сервиса для симуляции
-        const { spawn } = require('child_process');
-        const fs = require('fs');
-        const path = require('path');
-        
-        // Определяем путь к Python
-        let pythonCmd = 'python3';
-        if (process.platform === 'win32') {
-          const venvPython = path.join(__dirname, '.venv', 'Scripts', 'python.exe');
-          if (fs.existsSync(venvPython)) {
-            pythonCmd = venvPython;
-          } else {
-            pythonCmd = 'python';
-          }
-        }
-        
-        const simpleSDPath = path.join(__dirname, 'sd', 'sd_app_simple.py');
-        
-        if (fs.existsSync(simpleSDPath)) {
-          // Запускаем простую симуляцию ретуши
-          console.log('🔄 Возвращаем результат базовой симуляции...');
-          res.setHeader('Content-Type', imageFile.mimetype || 'image/jpeg');
-          res.setHeader('X-Retouch-Status', 'simulated');
-          res.setHeader('X-Retouch-Message', 'Basic simulation applied');
-          return res.send(imageFile.buffer);
-        } else {
-          console.log('🔄 Возвращаем оригинальное изображение');
-          res.setHeader('Content-Type', imageFile.mimetype || 'image/jpeg');
-          res.setHeader('X-Retouch-Status', 'fallback');
-          res.setHeader('X-Retouch-Message', 'Original image returned');
-          return res.send(imageFile.buffer);
-        }
-        
-      } catch (simError) {
-        console.warn('⚠️ Симуляция также не удалась:', simError.message);
-        res.setHeader('Content-Type', imageFile.mimetype || 'image/jpeg');
-        res.setHeader('X-Retouch-Status', 'fallback');
-        res.setHeader('X-Retouch-Message', 'Fallback to original');
-        return res.send(imageFile.buffer);
+  }
+});
+
+// Backward compatibility endpoint
+app.post('/api/sd-inpaint', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'mask', maxCount: 1 }
+]), async (req, res) => {
+  console.log('🔄 SD compatibility redirect to LaMa');
+  return app._router.handle(Object.assign(req, { url: '/api/inpaint' }), res);
+});
+
+// ==================== User Management (Simplified) ====================
+
+// In-memory user storage (replace with database in production)
+const users = new Map();
+const sessions = new Map();
+
+// Default admin user
+const ADMIN_EMAIL = 'admin@color360.online';
+const ADMIN_PASSWORD = 'Color360Admin2025!';
+const ADMIN_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 10);
+
+users.set(ADMIN_EMAIL, {
+  email: ADMIN_EMAIL,
+  password: ADMIN_HASH,
+  role: 'admin',
+  created: new Date()
+});
+
+// Login endpoint
+app.post('/api/login', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Неверные данные',
+        details: errors.array()
+      });
+    }
+
+    const { email, password } = req.body;
+    const user = users.get(email);
+
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+      return res.status(401).json({
+        error: 'Неверный email или пароль'
+      });
+    }
+
+    const token = jwt.sign(
+      { 
+        email: user.email, 
+        role: user.role 
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      success: true,
+      token: token,
+      user: {
+        email: user.email,
+        role: user.role
       }
-    }
-    
-    return res.status(500).json({ 
-      error: 'Image processing failed', 
-      details: error.message.replace(/[^\x00-\x7F]/g, '') // Убираем не-ASCII символы
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      error: 'Ошибка сервера при входе'
     });
   }
 });
 
-// Upload or update user avatar (expects JSON { dataUrl: 'data:image/png;base64,...' })
-// Используем локальный bodyParser для этого маршрута с увеличенным лимитом (~1MB),
-// чтобы не конфликтовать с глобальным малым лимитом JSON (10kb)
-app.post('/api/user/avatar', bodyParser.json({ limit: '1mb' }), authenticateToken, async (req, res) => {
-  try {
-    const { dataUrl } = req.body || {};
-    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
-      return res.status(400).json({ message: 'Неверный формат данных аватара' });
-    }
+// ==================== Static Routes ====================
 
-    // Parse data URL
-  const matches = dataUrl.match(/^data:(image\/(png|jpeg|jpg));base64,(.+)$/);
-    if (!matches) return res.status(400).json({ message: 'Unsupported image format' });
-
-    const mime = matches[1];
-    const ext = matches[2] === 'jpeg' || matches[2] === 'jpg' ? 'jpg' : 'png';
-    const b64 = matches[3];
-    const buffer = Buffer.from(b64, 'base64');
-
-    // Validate size (limit to 200 KB)
-    const MAX_AVATAR_BYTES = 200 * 1024;
-    if (buffer.length > MAX_AVATAR_BYTES) {
-      return res.status(413).json({ message: 'Файл слишком большой. Максимум 200KB' });
-    }
-
-    const filename = `${encodeURIComponent(req.user.email)}.${ext}`;
-    const filepath = path.join(avatarsDir, filename);
-
-    await fs.promises.writeFile(filepath, buffer);
-
-    const url = `/avatars/${filename}`;
-
-    // Optionally store avatar URL in user profile (in-memory)
-    users[req.user.email] = users[req.user.email] || {};
-    users[req.user.email].avatar = url;
-
-    return res.json({ message: 'ok', url });
-  } catch (error) {
-    console.error('Avatar upload error:', error);
-    return res.status(500).json({ message: 'Ошибка сохранения аватара' });
-  }
-});
-
-// Get current authenticated user profile
-app.get('/api/user/profile', authenticateToken, (req, res) => {
-  try {
-    const email = req.user.email;
-    const user = users[email];
-    if (!user) return res.status(404).json({ message: 'Пользователь не найден' });
-
-    return res.json({
-      name: user.name,
-      email: user.email,
-      isAdmin: !!user.isAdmin,
-      avatar: user.avatar || null
-    });
-  } catch (err) {
-    console.error('Profile error:', err);
-    return res.status(500).json({ message: 'Ошибка сервера' });
-  }
-});
-
-// Get all news
-app.get('/api/news', (req, res) => {
-  return res.json(newsItems);
-});
-
-// Add news (admin only)
-app.post('/api/admin/news', authenticateAdmin, (req, res) => {
-  const { title, date, text, imageDataUrl } = req.body;
-  
-  if (!title || !date || !text) {
-    return res.status(400).json({ message: 'Заголовок, дата и текст обязательны' });
-  }
-  
-  const newNews = {
-    id: newsItems.length > 0 ? Math.max(...newsItems.map(n => n.id)) + 1 : 1,
-    title,
-    date,
-    text
-  };
-
-  // If image data provided, save it
-  if (imageDataUrl && typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:')) {
-    const m = imageDataUrl.match(/^data:(image\/(png|jpeg|jpg));base64,(.+)$/);
-    if (m) {
-      const ext = m[2] === 'jpeg' || m[2] === 'jpg' ? 'jpg' : 'png';
-      const buffer = Buffer.from(m[3], 'base64');
-      // Simple size limit: 500KB
-      if (buffer.length <= (500 * 1024)) {
-        const fname = `news-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-        const fpath = path.join(newsImagesDir, fname);
-        try {
-          fs.writeFileSync(fpath, buffer);
-          newNews.image = `/news_images/${fname}`;
-        } catch (e) {
-
-        }
-      }
-    }
-  }
-  
-  newsItems.push(newNews);
-  
-  return res.status(201).json({ message: 'Новость добавлена', news: newNews });
-});
-
-// Update news (admin only)
-app.put('/api/admin/news/:id', authenticateAdmin, (req, res) => {
-  const id = parseInt(req.params.id);
-  const { title, date, text, imageDataUrl, removeImage } = req.body;
-  
-  if (!title || !date || !text) {
-    return res.status(400).json({ message: 'Заголовок, дата и текст обязательны' });
-  }
-  
-  const newsIndex = newsItems.findIndex(n => n.id === id);
-  
-  if (newsIndex === -1) {
-    return res.status(404).json({ message: 'Новость не найдена' });
-  }
-  
-  // preserve previous image unless changed
-  const prev = newsItems[newsIndex];
-  const updated = { id, title, date, text };
-
-  // Handle image removal
-  if (removeImage && prev && prev.image) {
-    try { fs.unlinkSync(path.join(__dirname, prev.image.replace(/^\//, ''))); } catch (e) {}
-    // ensure removed
-  }
-
-  // If new image provided, save it
-  if (imageDataUrl && typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:')) {
-    const m = imageDataUrl.match(/^data:(image\/(png|jpeg|jpg));base64,(.+)$/);
-    if (m) {
-      const ext = m[2] === 'jpeg' || m[2] === 'jpg' ? 'jpg' : 'png';
-      const buffer = Buffer.from(m[3], 'base64');
-      if (buffer.length <= (500 * 1024)) {
-        const fname = `news-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-        const fpath = path.join(newsImagesDir, fname);
-        try {
-          fs.writeFileSync(fpath, buffer);
-          updated.image = `/news_images/${fname}`;
-        } catch (e) {
-
-        }
-      }
-    }
-  } else if (!removeImage && prev && prev.image) {
-    updated.image = prev.image;
-  }
-
-  newsItems[newsIndex] = updated;
-  
-  return res.json({ message: 'Новость обновлена', news: newsItems[newsIndex] });
-});
-
-// Delete news (admin only)
-app.delete('/api/admin/news/:id', authenticateAdmin, (req, res) => {
-  const id = parseInt(req.params.id);
-  const newsIndex = newsItems.findIndex(n => n.id === id);
-  
-  if (newsIndex === -1) {
-    return res.status(404).json({ message: 'Новость не найдена' });
-  }
-  
-  newsItems.splice(newsIndex, 1);
-  // Also remove image file if exists
-  if (news && news.image) {
-    try { fs.unlinkSync(path.join(__dirname, news.image.replace(/^\//, ''))); } catch (e) {}
-  }
-  
-  return res.json({ message: 'Новость удалена' });
-});
-
-// New endpoints for dashboard functionality
-
-// Get user profile with subscription info
-app.get('/api/profile', authenticateToken, (req, res) => {
-  const user = users[req.user.email];
-  if (!user) {
-    return res.status(404).json({ message: 'Пользователь не найден' });
-  }
-  
-  const subscription = userSubscriptions[req.user.email] || {
-    plan: 'free',
-    status: 'active',
-    startDate: user.registered,
-    endDate: null,
-    maxEditorSessions: 3
-  };
-  
-  return res.json({
-    name: user.name,
-    email: user.email,
-    registered: user.registered,
-    isAdmin: user.isAdmin || false,
-    subscription: subscription
-  });
-});
-
-// Get user editor sessions
-app.get('/api/editor-sessions', authenticateToken, (req, res) => {
-  const userSessions = editorSessions[req.user.email] || [];
-  
-  return res.json(userSessions);
-});
-
-// New: projects API (alias for editor-sessions) - list projects
-app.get('/api/projects', authenticateToken, (req, res) => {
-  const userProjects = editorSessions[req.user.email] || [];
-  return res.json(userProjects);
-});
-
-// Create new editor session
-app.post('/api/editor-sessions', authenticateToken, (req, res) => {
-  const userEmail = req.user.email;
-  const user = users[userEmail];
-  const subscription = userSubscriptions[userEmail] || {
-    plan: 'free',
-    status: 'active',
-    maxEditorSessions: 3
-  };
-  
-  // Check session limit
-  const userSessions = editorSessions[userEmail] || [];
-  if (userSessions.length >= subscription.maxEditorSessions) {
-    return res.status(400).json({ 
-      message: `Достигнут лимит сессий редактора (${subscription.maxEditorSessions})` 
-    });
-  }
-  
-  // Create new session
-  const newSession = {
-    id: Date.now().toString(),
-    name: req.body.name || `Сессия ${userSessions.length + 1}`,
-    created: new Date().toISOString(),
-    lastAccessed: new Date().toISOString(),
-    data: req.body.data || {}
-  };
-  
-  if (!editorSessions[userEmail]) {
-    editorSessions[userEmail] = [];
-  }
-  
-  editorSessions[userEmail].push(newSession);
-  
-  return res.status(201).json({ 
-    message: 'Сессия создана', 
-    session: newSession 
-  });
-});
-
-// New: create project (alias) with limit enforcement
-app.post('/api/projects', authenticateToken, (req, res) => {
-  const userEmail = req.user.email;
-  const subscription = userSubscriptions[userEmail] || { maxEditorSessions: 3 };
-
-  const userProjects = editorSessions[userEmail] || [];
-  const maxProjects = subscription.maxEditorSessions || 3;
-  if (userProjects.length >= maxProjects) {
-    return res.status(400).json({ message: `Достигнут лимит сохранённых проектов (${maxProjects})` });
-  }
-
-  const newProject = {
-    id: Date.now().toString(),
-    name: req.body.name || `Проект ${userProjects.length + 1}`,
-    created: new Date().toISOString(),
-    lastAccessed: new Date().toISOString(),
-    data: req.body.data || {}
-  };
-
-  if (!editorSessions[userEmail]) editorSessions[userEmail] = [];
-  editorSessions[userEmail].push(newProject);
-
-  return res.status(201).json({ message: 'Проект создан', project: newProject });
-});
-
-// New: delete project alias
-app.delete('/api/projects/:id', authenticateToken, (req, res) => {
-  const userEmail = req.user.email;
-  const projectId = req.params.id;
-  const userProjects = editorSessions[userEmail] || [];
-  const idx = userProjects.findIndex(p => p.id === projectId);
-  if (idx === -1) return res.status(404).json({ message: 'Проект не найден' });
-  userProjects.splice(idx, 1);
-  return res.json({ message: 'Проект удалён' });
-});
-
-// Update editor session
-app.put('/api/editor-sessions/:id', authenticateToken, (req, res) => {
-  const userEmail = req.user.email;
-  const sessionId = req.params.id;
-  
-  const userSessions = editorSessions[userEmail] || [];
-  const sessionIndex = userSessions.findIndex(s => s.id === sessionId);
-  
-  if (sessionIndex === -1) {
-    return res.status(404).json({ message: 'Сессия не найдена' });
-  }
-  
-  // Update session
-  userSessions[sessionIndex] = {
-    ...userSessions[sessionIndex],
-    ...req.body,
-    lastAccessed: new Date().toISOString()
-  };
-  
-  return res.json({ 
-    message: 'Сессия обновлена', 
-    session: userSessions[sessionIndex] 
-  });
-});
-
-// Delete editor session
-app.delete('/api/editor-sessions/:id', authenticateToken, (req, res) => {
-  const userEmail = req.user.email;
-  const sessionId = req.params.id;
-  
-  const userSessions = editorSessions[userEmail] || [];
-  const sessionIndex = userSessions.findIndex(s => s.id === sessionId);
-  
-  if (sessionIndex === -1) {
-    return res.status(404).json({ message: 'Сессия не найдена' });
-  }
-  
-  userSessions.splice(sessionIndex, 1);
-  
-  return res.json({ message: 'Сессия удалена' });
-});
-
-// Restore editor session
-app.post('/api/editor-sessions/:id/restore', authenticateToken, (req, res) => {
-  const userEmail = req.user.email;
-  const sessionId = req.params.id;
-  
-  const userSessions = editorSessions[userEmail] || [];
-  const session = userSessions.find(s => s.id === sessionId);
-  
-  if (!session) {
-    return res.status(404).json({ message: 'Сессия не найдена' });
-  }
-  
-  // Update last accessed time
-  session.lastAccessed = new Date().toISOString();
-  
-  return res.json({ 
-    message: 'Сессия восстановлена', 
-    session: session 
-  });
-});
-
-// Get user sessions
-app.get('/api/sessions', authenticateToken, (req, res) => {
-  const userSessions = sessions[req.user.email] || [];
-  
-  // Add current session flag
-  const sessionsWithCurrent = userSessions.map(session => ({
-    ...session,
-    current: session.id === req.user.token
-  }));
-  
-  return res.json(sessionsWithCurrent);
-});
-
-// Terminate a session
-app.post('/api/terminate-session', authenticateToken, (req, res) => {
-  const { sessionId } = req.body;
-  const userEmail = req.user.email;
-  
-  if (!sessionId) {
-    return res.status(400).json({ message: 'ID сессии обязателен' });
-  }
-  
-  // Cannot terminate current session
-  if (sessionId === req.user.token) {
-    return res.status(400).json({ message: 'Нельзя завершить текущую сессию' });
-  }
-  
-  // Find and remove session
-  if (sessions[userEmail]) {
-    sessions[userEmail] = sessions[userEmail].filter(session => session.id !== sessionId);
-    return res.json({ message: 'Сессия завершена' });
-  }
-  
-  return res.status(404).json({ message: 'Сессия не найдена' });
-});
-
-// Change password endpoint with validation
-app.post('/api/change-password', [
-  body('currentPassword').notEmpty().withMessage('Текущий пароль обязателен'),
-  body('newPassword').isLength({ min: 8 }).withMessage('Новый пароль должен содержать минимум 8 символов')
-], authenticateToken, async (req, res) => {
-  // Check validation errors
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  
-  const { currentPassword, newPassword } = req.body;
-  const userEmail = req.user.email;
-  
-  try {
-    const user = users[userEmail];
-    
-    if (!user) {
-      return res.status(404).json({ message: 'Пользователь не найден' });
-    }
-    
-    // Verify current password
-    const validPassword = await bcrypt.compare(currentPassword, user.password);
-    if (!validPassword) {
-      return res.status(400).json({ message: 'Неверный текущий пароль' });
-    }
-    
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
-    // Update password
-    users[userEmail].password = hashedPassword;
-    
-    // Terminate all sessions except current one
-    if (sessions[userEmail]) {
-      sessions[userEmail] = sessions[userEmail].filter(session => session.id === req.user.token);
-    }
-    
-    return res.json({ message: 'Пароль успешно изменен' });
-  } catch (error) {
-    console.error('Change password error:', error);
-    return res.status(500).json({ message: 'Ошибка при изменении пароля' });
-  }
-});
-
-// Delete account with additional security
-app.post('/api/delete-account', authenticateToken, async (req, res) => {
-  const userEmail = req.user.email;
-  
-  try {
-    // Prevent admin deletion via this endpoint
-    if (userEmail === ADMIN_EMAIL) {
-      return res.status(403).json({ message: 'Нельзя удалить аккаунт администратора' });
-    }
-    
-    // Require confirmation password for account deletion
-    const { password } = req.body;
-    if (!password) {
-      return res.status(400).json({ message: 'Для удаления аккаунта требуется подтверждение пароля' });
-    }
-    
-    const user = users[userEmail];
-    if (!user) {
-      return res.status(404).json({ message: 'Пользователь не найден' });
-    }
-    
-    // Verify password
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(403).json({ message: 'Неверный пароль' });
-    }
-    
-    // Remove user
-    delete users[userEmail];
-    
-    // Remove all sessions
-    delete sessions[userEmail];
-    
-    return res.json({ message: 'Аккаунт удален' });
-  } catch (error) {
-    console.error('Delete account error:', error);
-    return res.status(500).json({ message: 'Ошибка при удалении аккаунта' });
-  }
-});
-
-// Get admin stats (admin only)
-app.get('/api/admin/stats', authenticateAdmin, (req, res) => {
-  try {
-    const totalUsers = Object.keys(users).length;
-    let activeSessions = 0;
-    
-    // Count active sessions
-    for (const userEmail in sessions) {
-      if (sessions[userEmail]) {
-        activeSessions += sessions[userEmail].length;
-      }
-    }
-    
-    return res.json({
-      totalUsers,
-      activeSessions,
-      userLimit: MAX_USERS
-    });
-  } catch (error) {
-    console.error('Admin stats error:', error);
-    return res.status(500).json({ message: 'Ошибка при получении статистики' });
-  }
-});
-
-// Get all users (admin only)
-app.get('/api/admin/users', authenticateAdmin, (req, res) => {
-  try {
-    const userList = Object.values(users).map(user => ({
-      name: user.name,
-      email: user.email,
-      registered: user.registered,
-      sessionCount: sessions[user.email] ? sessions[user.email].length : 0
-    }));
-    
-    return res.json(userList);
-  } catch (error) {
-    console.error('Get users error:', error);
-    return res.status(500).json({ message: 'Ошибка при получении списка пользователей' });
-  }
-});
-
-// Get subscription info (admin only)
-app.get('/api/admin/subscriptions', authenticateAdmin, (req, res) => {
-  try {
-    const subscriptionList = Object.keys(userSubscriptions).map(email => ({
-      email: email,
-      user: users[email].name,
-      planName: getPlanName(userSubscriptions[email].plan),
-      statusName: getStatusName(userSubscriptions[email].status),
-      ...userSubscriptions[email]
-    }));
-    
-    return res.json(subscriptionList);
-  } catch (error) {
-    console.error('Get subscriptions error:', error);
-    return res.status(500).json({ message: 'Ошибка при получении информации о подписках' });
-  }
-});
-
-// Update user subscription (admin only)
-app.post('/api/admin/subscriptions', authenticateAdmin, (req, res) => {
-  const { email, plan, status, maxEditorSessions } = req.body;
-  
-  if (!email) {
-    return res.status(400).json({ message: 'Email обязателен' });
-  }
-  
-  if (!users[email]) {
-    return res.status(404).json({ message: 'Пользователь не найден' });
-  }
-  
-  // Create or update subscription
-  userSubscriptions[email] = {
-    plan: plan || 'free',
-    status: status || 'active',
-  startDate: (userSubscriptions[email] && userSubscriptions[email].startDate) ? userSubscriptions[email].startDate : new Date().toISOString(),
-    endDate: null,
-    maxEditorSessions: plan === 'business' ? Infinity : (maxEditorSessions || 3)
-  };
-  
-  return res.json({ 
-    message: 'Подписка обновлена', 
-    subscription: userSubscriptions[email] 
-  });
-});
-
-// Reset user password (admin only)
-app.post('/api/admin/reset-password', authenticateAdmin, async (req, res) => {
-  const { email } = req.body;
-  
-  if (!email) {
-    return res.status(400).json({ message: 'Email обязателен' });
-  }
-  
-  try {
-    const user = users[email];
-    if (!user) {
-      return res.status(404).json({ message: 'Пользователь не найден' });
-    }
-    
-    // Generate a random password
-    const newPassword = Math.random().toString(36).slice(-8);
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
-    // Update password
-    users[email].password = hashedPassword;
-    
-    // Terminate all sessions for this user
-    if (sessions[email]) {
-      delete sessions[email];
-    }
-    
-    // In a real application, you would send the new password to the user's email
-    // For this demo, we'll just return it in the response
-    return res.json({ 
-      message: 'Пароль сброшен', 
-      newPassword: newPassword,
-      note: 'В реальном приложении новый пароль был бы отправлен на email пользователя'
-    });
-  } catch (error) {
-    console.error('Reset password error:', error);
-    return res.status(500).json({ message: 'Ошибка при сбросе пароля' });
-  }
-});
-
-// Delete user (admin only)
-app.post('/api/admin/delete-user', authenticateAdmin, async (req, res) => {
-  const { email } = req.body;
-  
-  if (!email) {
-    return res.status(400).json({ message: 'Email обязателен' });
-  }
-  
-  try {
-    // Prevent admin deletion
-    if (email === ADMIN_EMAIL) {
-      return res.status(403).json({ message: 'Нельзя удалить аккаунт администратора' });
-    }
-    
-    const user = users[email];
-    if (!user) {
-      return res.status(404).json({ message: 'Пользователь не найден' });
-    }
-    
-    // Remove user
-    delete users[email];
-    
-    // Remove all sessions
-    delete sessions[email];
-    
-    return res.json({ message: 'Пользователь удален' });
-  } catch (error) {
-    console.error('Delete user error:', error);
-    return res.status(500).json({ message: 'Ошибка при удалении пользователя' });
-  }
-});
-
-// For serving the main page
 app.get('/', (req, res) => {
-  // Более гибкая CSP, которая позволяет загружать изображения и видео с внешних источников
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin-dashboard.html'));
+});
+
+app.get('/main', (req, res) => {
   res.sendFile(path.join(__dirname, 'main.html'));
 });
 
-// Middleware for dashboard protection
-function requireAuth(req, res, next) {
-  const token = (req.cookies && req.cookies.auth_token) ? req.cookies.auth_token : (req.headers['authorization'] ? req.headers['authorization'].split(' ')[1] : undefined);
-  
-  if (!token) {
-    return res.redirect('/');
-  }
-  
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-  if (err || !decoded || !decoded.email) {
-      // Удаляем неверную cookie, если она есть
-      res.clearCookie('auth_token');
-      return res.redirect('/');
-    }
-    
-    const user = users[decoded.email];
-    if (!user) {
-      // Удаляем неверную cookie, если она есть
-      res.clearCookie('auth_token');
-      return res.redirect('/');
-    }
-    
-    // Добавляем информацию о пользователе в запрос
-    req.user = user;
-    req.userEmail = decoded.email;
-    next();
-  });
-}
-
-// Middleware for admin protection
-function requireAdmin(req, res, next) {
-  const token = (req.cookies && req.cookies.auth_token) ? req.cookies.auth_token : (req.headers['authorization'] ? req.headers['authorization'].split(' ')[1] : undefined);
-  
-  if (!token) {
-    return res.redirect('/');
-  }
-  
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-  if (err || !decoded || !decoded.email) {
-      // Удаляем неверную cookie, если она есть
-      res.clearCookie('auth_token');
-      return res.redirect('/');
-    }
-    
-    const user = users[decoded.email];
-    if (!user || !user.isAdmin) {
-      return res.redirect('./dashboard');
-    }
-    
-    // Добавляем информацию о пользователе в запрос
-    req.user = user;
-    req.userEmail = decoded.email;
-    next();
-  });
-}
-
-// For serving the dashboard page (protected)
-app.get('/dashboard', requireAuth, (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
-  res.sendFile(path.join(__dirname, 'admin-dashboard.html'));
+app.get('/profile', (req, res) => {
+  res.sendFile(path.join(__dirname, 'profile.html'));
 });
 
-// For serving the admin dashboard page (protected)
-app.get('/admin', requireAdmin, (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http:; media-src 'self';");
-  res.sendFile(path.join(__dirname, 'admin-dashboard.html'));
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'privacy.html'));
 });
 
-// Serve the pano application
-app.get('/pano', (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
-  res.sendFile(path.join(__dirname, 'pano', 'index.html'));
+// ==================== Server Startup ====================
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`
+🚀 Color360 с LaMa AI запущен!
+📍 URL: http://localhost:${PORT}
+🎯 LaMa Service: ${LAMA_ENABLED ? `${LAMA_URL}` : 'отключён'}
+🔧 Environment: ${process.env.NODE_ENV || 'development'}
+📊 Память: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB
+
+✨ Готов к профессиональному удалению объектов!
+  `);
 });
 
-// Serve the pano application for any sub-routes
-app.get('/pano/*', (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://images.unsplash.com data: https: http: blob:; media-src 'self';");
-  res.sendFile(path.join(__dirname, 'pano', 'index.html'));
-});
-
-// Temporary files management for CSP compliance
-const tempDir = path.join(__dirname, 'temp');
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
-}
-
-// Store temporary file with unique ID
-app.post('/api/temp-file', upload.single('file'), (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Файл не найден' });
-    }
-
-    const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    const fileExt = path.extname(req.file.originalname) || '.png';
-    const fileName = fileId + fileExt;
-    const filePath = path.join(tempDir, fileName);
-
-    fs.writeFileSync(filePath, req.file.buffer);
-
-    // Clean up old temp files (older than 1 hour)
-    setTimeout(() => {
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+// Graceful shutdown
+const gracefulShutdown = (signal) => {
+  console.log(`\n🛑 Получен сигнал ${signal}, завершение работы...`);
+  
+  server.close(() => {
+    console.log('🔴 HTTP сервер остановлен');
+    
+    if (lamaProcess && !lamaProcess.killed) {
+      console.log('🛑 Остановка LaMa сервиса...');
+      lamaProcess.kill('SIGTERM');
+      setTimeout(() => {
+        if (!lamaProcess.killed) {
+          lamaProcess.kill('SIGKILL');
         }
-      } catch (err) {
-        console.error('❌ Ошибка удаления временного файла:', err);
-      }
-    }, 60 * 60 * 1000); // 1 hour
-
-    res.json({ fileId, url: `/api/temp-file/${fileId}${fileExt}` });
-  } catch (err) {
-    console.error('❌ Ошибка сохранения временного файла:', err);
-    res.status(500).json({ error: 'Ошибка сохранения файла' });
-  }
-});
-
-// Store temporary file from data URL
-app.post('/api/temp-file-from-data', tempFileBodyParser, (req, res) => {
-  try {
-    const { dataUrl, ext = '.png' } = req.body;
-    if (!dataUrl) {
-      return res.status(400).json({ error: 'dataUrl не найден' });
+      }, 5000);
     }
+    
+    console.log('✅ Завершение работы завершено');
+    process.exit(0);
+  });
+};
 
-    // Extract base64 data from data URL
-    const base64Data = dataUrl.split(',')[1];
-    if (!base64Data) {
-      return res.status(400).json({ error: 'Неверный формат dataUrl' });
-    }
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-    const buffer = Buffer.from(base64Data, 'base64');
-    const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    const fileName = fileId + ext;
-    const filePath = path.join(tempDir, fileName);
-
-    fs.writeFileSync(filePath, buffer);
-
-    // Clean up old temp files (older than 1 hour)
-    setTimeout(() => {
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      } catch (err) {
-        console.error('❌ Ошибка удаления временного файла:', err);
-      }
-    }, 60 * 60 * 1000); // 1 hour
-
-    res.json({ fileId, url: `/api/temp-file/${fileId}${ext}` });
-  } catch (err) {
-    console.error('❌ Ошибка сохранения временного файла из dataUrl:', err);
-    res.status(500).json({ error: 'Ошибка сохранения файла' });
-  }
-});
-
-// Serve temporary files
-app.get('/api/temp-file/:filename', (req, res) => {
-  try {
-    const filename = req.params.filename;
-    const filePath = path.join(tempDir, filename);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Файл не найден' });
-    }
-
-    // Determine content type based on extension
-    const ext = path.extname(filename).toLowerCase();
-    let contentType = 'application/octet-stream';
-    if (ext === '.png') contentType = 'image/png';
-    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-    else if (ext === '.webp') contentType = 'image/webp';
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Отключаем кэш для temp-файлов
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.sendFile(filePath);
-  } catch (err) {
-    console.error('❌ Ошибка получения временного файла:', err);
-    res.status(500).json({ error: 'Ошибка получения файла' });
-  }
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// For any other routes, serve the main page (for client-side routing)
-app.get('*', (req, res) => {
-  res.status(404).send('Страница не найдена');
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Server error:', err.stack);
-  res.status(500).json({ message: 'Внутренняя ошибка сервера' });
-});
-
-app.listen(PORT, () => {
-  console.log(`Сервер запущен на порту ${PORT}`);
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`Доступен по адресу: http://localhost:${PORT}`);
-  }
-});
+module.exports = app;
