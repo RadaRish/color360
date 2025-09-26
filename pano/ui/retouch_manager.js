@@ -216,7 +216,7 @@ export default class RetouchManager {
     
     console.log('🎨 Debug RetouchManager: временный canvas размер:', tmp.width, 'x', tmp.height);
     
-    const ctx = tmp.getContext('2d');
+  const ctx = tmp.getContext('2d', { willReadFrequently: true });
     ctx.scale(dpr, dpr);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, rect.width, rect.height);
@@ -394,66 +394,49 @@ export default class RetouchManager {
   const canvas = renderer && renderer.domElement ? renderer.domElement : undefined;
       if (!camera || !renderer || !canvas) return null;
 
-      // 🔧 КРИТИЧЕСКИ ВАЖНО: сбрасываем камеру в исходное положение для стабильных координат
       const originalRotation = camera.rotation.clone();
       const originalPosition = camera.position.clone();
-      console.log('🎯 Debug RetouchManager: сохранили исходную ориентацию камеры:', 
-        `rotation: x:${originalRotation.x.toFixed(3)}, y:${originalRotation.y.toFixed(3)}, z:${originalRotation.z.toFixed(3)}`,
+      const toDeg = (rad) => (THREE && THREE.MathUtils && typeof THREE.MathUtils.radToDeg === 'function')
+        ? THREE.MathUtils.radToDeg(rad)
+        : (rad * 180) / Math.PI;
+      console.log('🎯 Debug RetouchManager: текущая ориентация камеры (deg):',
+        `rotation: pitch:${toDeg(originalRotation.x).toFixed(2)}, yaw:${toDeg(originalRotation.y).toFixed(2)}, roll:${toDeg(originalRotation.z).toFixed(2)}`,
         `position: x:${originalPosition.x.toFixed(3)}, y:${originalPosition.y.toFixed(3)}, z:${originalPosition.z.toFixed(3)}`);
-      
-      // Полный сброс камеры
-      camera.position.set(0, 0, 0);
-      camera.rotation.set(0, 0, 0);
-      camera.updateMatrix();
-      camera.updateMatrixWorld(true);
-      
-      // Принудительно обновляем проекционную матрицу
+
+      if (typeof camera.updateWorldMatrix === 'function') {
+        camera.updateWorldMatrix(true, true);
+      } else {
+        camera.updateMatrix();
+        camera.updateMatrixWorld(true);
+      }
       if (camera.updateProjectionMatrix) {
         camera.updateProjectionMatrix();
       }
-      
-      console.log('🎯 Debug RetouchManager: камера полностью сброшена в исходное состояние');
 
   const sphereRadius = (this.viewerManager && this.viewerManager.coordinateManager && this.viewerManager.coordinateManager.sphereRadius) ? this.viewerManager.coordinateManager.sphereRadius : 10;
+      const sceneRect = canvas.getBoundingClientRect();
+
+      const mappingCamera = camera;
+      const raycaster = new THREE.Raycaster();
+      const ndc = new THREE.Vector2();
+      const sphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), sphereRadius);
+      const intersectionPoint = new THREE.Vector3();
+      const normalVector = new THREE.Vector3();
 
       const screenToUV = (localX, localY) => {
-        const rect = canvas.getBoundingClientRect();
-        // Нормализуем координаты экрана в NDC [-1, 1]
-        const nx = (localX / rect.width) * 2 - 1;
-        const ny = -(localY / rect.height) * 2 + 1;
-        
-        // 🎯 КРИТИЧЕСКИ ВАЖНО: создаем НЕЗАВИСИМУЮ камеру для стабильного маппинга
-        const cleanCamera = new THREE.PerspectiveCamera(80, rect.width / rect.height, 0.1, 1000);
-        cleanCamera.position.set(0, 0, 0);
-        cleanCamera.rotation.set(0, 0, 0);
-        cleanCamera.updateMatrix();
-        cleanCamera.updateMatrixWorld(true);
-        cleanCamera.updateProjectionMatrix();
-        
-        // Создаем луч от независимой камеры
-        const ray = new THREE.Raycaster();
-        ray.setFromCamera(new THREE.Vector2(nx, ny), cleanCamera);
-        
-        // Находим пересечение луча со сферой
-        const intersectionPoint = new THREE.Vector3();
-        const sphere = new THREE.Sphere(new THREE.Vector3(0,0,0), sphereRadius);
-        const ok = ray.ray.intersectSphere(sphere, intersectionPoint);
+        const nx = (localX / sceneRect.width) * 2 - 1;
+        const ny = -(localY / sceneRect.height) * 2 + 1;
+
+        ndc.set(nx, ny);
+        raycaster.setFromCamera(ndc, mappingCamera);
+
+        const ok = raycaster.ray.intersectSphere(sphere, intersectionPoint);
         if (!ok) return null;
-        
-        // Преобразуем 3D точку в UV координаты эквиректангулярной проекции
-        const n = intersectionPoint.clone().normalize();
-        
-        // Правильные формулы для сферической панорамы в A-Frame
-        // В A-Frame: Y вверх, Z к зрителю, X вправо
-        // Для эквиректангулярной проекции нужно учесть начальную ориентацию камеры
-        
-        // Упрощенное преобразование без учета поворота камеры для стабильности
-        // Используем стандартную сферическую проекцию без корректировок
-        
-        // Стандартные сферические координаты
-        const theta = Math.atan2(n.x, -n.z); // Azimuth angle (longitude)
-        const phi = Math.acos(-n.y); // Polar angle from -Y axis (colatitude)
-        
+
+        normalVector.copy(intersectionPoint).normalize();
+        const theta = Math.atan2(normalVector.x, -normalVector.z);
+        const phi = Math.acos(Math.max(-1, Math.min(1, -normalVector.y)));
+
         // Преобразуем в UV координаты эквиректангулярной проекции
         let u = (theta + Math.PI) / (2 * Math.PI); // theta [-π,π] -> u [0,1]
         let v = phi / Math.PI; // phi [0,π] -> v [0,1]
@@ -466,16 +449,15 @@ export default class RetouchManager {
       };
 
       // Целевая эквирект-маска, которую отправим в AI
-      const mask = document.createElement('canvas');
-      mask.width = targetWidth;
-      mask.height = targetHeight;
-      const mctx = mask.getContext('2d');
+  const mask = document.createElement('canvas');
+  mask.width = targetWidth;
+  mask.height = targetHeight;
+  const mctx = mask.getContext('2d', { willReadFrequently: true });
       mctx.fillStyle = '#000';
       mctx.fillRect(0, 0, targetWidth, targetHeight);
       mctx.fillStyle = '#fff';
 
       // 🎯 КРИТИЧЕСКИ ВАЖНО: получаем точные координаты renderer canvas
-      const sceneRect = canvas.getBoundingClientRect();
       const ov = this._overlayRect || sceneRect;
       
       // Проверяем совпадение overlay и renderer canvas
@@ -491,9 +473,9 @@ export default class RetouchManager {
       // 1) Построим экранную маску (в координатах renderer canvas) из сохранённых полигонов
       const scrW = Math.max(1, Math.round(sceneRect.width));
       const scrH = Math.max(1, Math.round(sceneRect.height));
-      const scr = document.createElement('canvas');
-      scr.width = scrW; scr.height = scrH;
-      const scrCtx = scr.getContext('2d');
+  const scr = document.createElement('canvas');
+  scr.width = scrW; scr.height = scrH;
+  const scrCtx = scr.getContext('2d', { willReadFrequently: true });
       scrCtx.fillStyle = '#000'; scrCtx.fillRect(0,0,scrW,scrH);
       scrCtx.fillStyle = '#fff';
       scrCtx.beginPath();

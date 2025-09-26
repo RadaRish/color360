@@ -2,6 +2,20 @@
 
 ## Быстрое обновление
 
+### Уже склонированный репозиторий (скрипт из `scripts/`)
+
+```bash
+cd /var/www/color360    # путь до проекта
+chmod +x scripts/vps-update-from-github.sh
+./scripts/vps-update-from-github.sh
+```
+
+*Опционально:* можно переопределять параметры через переменные окружения или флаги, например:
+
+```bash
+APP_USER=www-data PROJECT_DIR=/opt/color360 ./scripts/vps-update-from-github.sh --skip-backup
+```
+
 ### Linux VPS (Ubuntu/CentOS)
 
 ```bash

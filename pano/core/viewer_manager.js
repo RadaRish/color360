@@ -7173,9 +7173,27 @@ export default class ViewerManager {
       const position = camera.getAttribute('position');
       const rotation = camera.getAttribute('rotation');
 
-      // Нормализуем до числовых значений
-      const toNum = (v) => ({ x: parseFloat(v.x) || 0, y: parseFloat(v.y) || 0, z: parseFloat(v.z) || 0 });
-      return { position: toNum(position || { x: 0, y: 0, z: 0 }), rotation: toNum(rotation || { x: 0, y: 0, z: 0 }) };
+      const toNum = (v) => {
+        const px = parseFloat(v.x);
+        const py = parseFloat(v.y);
+        const pz = parseFloat(v.z);
+        return {
+          x: Number.isFinite(px) ? px : 0,
+          y: Number.isFinite(py) ? py : 0,
+          z: Number.isFinite(pz) ? pz : 0
+        };
+      };
+
+      const numericPos = toNum(position || { x: 0, y: 0, z: 0 });
+      const numericRot = toNum(rotation || { x: 0, y: 0, z: 0 });
+
+      // A-Frame look-controls не поддерживает roll, поэтому обнуляем z, чтобы избежать наклона камеры
+      if (Math.abs(numericRot.z) > 0.001) {
+        console.log('🎯 ViewerManager: нормализуем roll камеры (z) c', numericRot.z, 'до 0');
+      }
+      numericRot.z = 0;
+
+      return { position: numericPos, rotation: numericRot };
     } catch (error) {
       console.error('❌ Ошибка получения позиции камеры:', error);
       return null;
@@ -7213,36 +7231,57 @@ export default class ViewerManager {
       }
 
       if (cameraData.rotation) {
-        const r = cameraData.rotation;
-        const rotationString = `${r.x || 0} ${r.y || 0} ${r.z || 0}`;
+        const sanitizeAngle = (val) => {
+          const num = Number(val);
+          if (!Number.isFinite(num)) return 0;
+          let normalized = num % 360;
+          if (normalized > 180) normalized -= 360;
+          if (normalized < -180) normalized += 360;
+          return normalized;
+        };
+
+        const inp = cameraData.rotation;
+        const rotX = sanitizeAngle(inp.x || 0);
+        const rotY = sanitizeAngle(inp.y || 0);
+        const rotationString = `${rotX} ${rotY} 0`;
+
         camera.setAttribute('rotation', rotationString);
-        
-        // Также обновляем object3D напрямую для более точного позиционирования
+
         if (camera.object3D) {
-          const deg2rad = Math.PI / 180;
-          camera.object3D.rotation.set(
-            (r.x || 0) * deg2rad,
-            (r.y || 0) * deg2rad,
-            (r.z || 0) * deg2rad,
-            'XYZ'
-          );
+          camera.object3D.rotation.set(0, 0, 0, 'XYZ');
+          camera.object3D.updateMatrixWorld(true);
         }
-        
-        console.log('🎯 ViewerManager: установлена ориентация:', rotationString);
-        
-        // 🔧 ОСТОРОЖНО сбрасываем внутреннее состояние look-controls только если доступно
+
         const lookControls = camera.components && camera.components['look-controls'];
         if (lookControls && lookControls.pitchObject && lookControls.yawObject) {
           try {
-            // Аккуратно устанавливаем углы без нарушения оси Z
-            lookControls.pitchObject.rotation.x = (r.x || 0) * Math.PI / 180;
-            lookControls.yawObject.rotation.y = (r.y || 0) * Math.PI / 180;
-            // Z ось НЕ трогаем - это может нарушить управление
-            console.log('🎯 ViewerManager: аккуратно обновлено состояние look-controls');
+            const deg2rad = Math.PI / 180;
+            lookControls.pitchObject.rotation.set(rotX * deg2rad, 0, 0, 'XYZ');
+            lookControls.yawObject.rotation.set(0, rotY * deg2rad, 0, 'YXZ');
+            // Полностью сбрасываем паразитные углы для исключения roll/наклона
+            lookControls.pitchObject.rotation.y = 0;
+            lookControls.pitchObject.rotation.z = 0;
+            lookControls.yawObject.rotation.x = 0;
+            lookControls.yawObject.rotation.z = 0;
+
+            if (lookControls.el && lookControls.el.object3D) {
+              lookControls.el.object3D.rotation.set(0, 0, 0);
+              lookControls.el.object3D.updateMatrixWorld(true);
+            }
+
+            if (typeof lookControls.updateOrientation === 'function') {
+              lookControls.updateOrientation();
+            } else if (typeof lookControls.update === 'function') {
+              lookControls.update();
+            }
+
+            console.log('🎯 ViewerManager: ориентация look-controls синхронизирована:', rotationString);
           } catch (e) {
             console.warn('🎯 ViewerManager: не удалось обновить look-controls:', e.message);
           }
         }
+
+        console.log('🎯 ViewerManager: установлена ориентация:', rotationString);
       }
 
       return true;
