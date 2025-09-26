@@ -68,11 +68,11 @@ if (isProduction) {
         connectSrc: ["'self'", "ws:", "wss:", "https:", "http:", "https://aframe.io", "https://cdnjs.cloudflare.com"],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
-        baseUri: ["'self'"]
+        baseUri: ["'self'"],
+        upgradeInsecureRequests: []  // Включаем upgrade-insecure-requests для HTTPS
       }
     },
-    crossOriginEmbedderPolicy: false,
-    hsts: false  // Отключаем HSTS до настройки TLS
+    crossOriginEmbedderPolicy: false
   }));
 } else {
   app.use(helmet({
