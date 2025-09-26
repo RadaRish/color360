@@ -56,15 +56,15 @@ read -p "Введите номер (1-3): " choice
 case $choice in
     1)
         echo ""
-        echo -e "${GREEN}🎨 Запуск полной установки...${NC}"
+        echo -e "${GREEN}🎨 Запуск полной рабочей установки...${NC}"
         echo ""
-        curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-fresh-vps.sh | bash
+        curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-working-vps.sh | bash
         ;;
     2)
         echo ""
-        echo -e "${BLUE}⚡ Запуск быстрой установки...${NC}"
+        echo -e "${BLUE}⚡ Запуск быстрой рабочей установки...${NC}"
         echo ""
-        curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-minimal.sh | bash
+        curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-simple-working.sh | bash
         ;;
     3)
         echo ""

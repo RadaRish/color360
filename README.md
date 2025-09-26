@@ -26,17 +26,17 @@ This repository contains a minimal prototype for the main landing page of Color3
 
 ### 🚀 Установка на VPS
 
-#### 🎯 Полная установка с нуля (для color360.ru)
+#### 🎯 Рабочая установка с нуля (для color360.ru)
 ```bash
-# Интерактивный установщик с выбором типа установки
+# Интерактивный установщик (рекомендуется)
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-color360.sh | sudo bash
 
-# Или прямые команды:
-# Полная установка (с AI)
-curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-fresh-vps.sh | sudo bash
+# Прямые команды:
+# Полная рабочая установка (с LaMa AI)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-working-vps.sh | sudo bash
 
-# Минимальная установка (без AI)
-curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-minimal.sh | sudo bash
+# Быстрая рабочая установка (без AI)
+curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/install-simple-working.sh | sudo bash
 ```
 
 #### 🔄 Обновление существующей установки
