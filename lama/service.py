@@ -92,12 +92,39 @@ def init_lama_model():
         return False
 
 def lama_inpainting(image: Image.Image, mask: Image.Image) -> Image.Image:
-    """Профессиональный inpainting через LaMa"""
+    """Профессиональный inpainting через LaMa для панорам"""
     if not LAMA_AVAILABLE or LAMA_MODEL is None:
         raise Exception("LaMa модель недоступна")
     
     try:
-        from lama_cleaner.schema import Config
+        from lama_cleaner.schema import Config, HDStrategy, LDMSampler
+        
+        # Оптимизированная конфигурация для панорам
+        config = Config(
+            # Стратегия обработки высокого разрешения
+            hd_strategy=HDStrategy.CROP,
+            hd_strategy_crop_margin=64,
+            hd_strategy_crop_trigger_size=1024,
+            hd_strategy_resize_limit=2048,
+            
+            # Настройки качества для панорам
+            ldm_steps=30,  # Больше шагов для лучшего качества
+            ldm_sampler=LDMSampler.ddim,
+            zits_wireframe=True,
+            
+            # Оптимизация производительности
+            cpu_offload=True,
+            disable_nsfw=True,
+            
+            # Настройки для панорамных изображений
+            sd_mask_blur=4,  # Размытие маски для плавных переходов
+            sd_strength=0.99,  # Высокая сила для полного удаления
+            sd_steps=25,  # Достаточно шагов для качества
+            
+            # Экспериментальные улучшения
+            cv2_flag="INPAINT_TELEA",  # Лучший алгоритм CV2 как fallback
+            cv2_radius=5,
+        )
         
         # Конвертация в RGB
         if image.mode != 'RGB':
