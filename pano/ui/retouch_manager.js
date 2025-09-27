@@ -424,24 +424,36 @@ export default class RetouchManager {
       const normalVector = new THREE.Vector3();
 
       const screenToUV = (localX, localY) => {
+        // Нормализуем координаты экрана в NDC (Normalized Device Coordinates)
         const nx = (localX / sceneRect.width) * 2 - 1;
         const ny = -(localY / sceneRect.height) * 2 + 1;
 
         ndc.set(nx, ny);
         raycaster.setFromCamera(ndc, mappingCamera);
 
+        // Проверяем пересечение луча со сферой
         const ok = raycaster.ray.intersectSphere(sphere, intersectionPoint);
         if (!ok) return null;
 
+        // Получаем нормализованный вектор точки на сфере
         normalVector.copy(intersectionPoint).normalize();
-        const theta = Math.atan2(normalVector.x, -normalVector.z);
-        const phi = Math.acos(Math.max(-1, Math.min(1, -normalVector.y)));
-
-        // Преобразуем в UV координаты эквиректангулярной проекции
-        let u = (theta + Math.PI) / (2 * Math.PI); // theta [-π,π] -> u [0,1]
-        let v = phi / Math.PI; // phi [0,π] -> v [0,1]
         
-        // Нормализуем U в диапазон [0,1] с учетом wrap-around
+        // 🎯 ИСПРАВЛЕННАЯ СФЕРИЧЕСКАЯ ТРАНСФОРМАЦИЯ
+        // Для эквиректангулярной проекции:
+        // theta - горизонтальный угол (азимут), phi - вертикальный угол (высота)
+        
+        // Правильное вычисление углов для панорамы
+        const theta = Math.atan2(normalVector.x, normalVector.z); // Азимут [-π, π]
+        const phi = Math.asin(Math.max(-1, Math.min(1, normalVector.y))); // Высота [-π/2, π/2]
+        
+        // Преобразуем углы в UV координаты эквиректангулярной проекции
+        // U (горизонталь): theta [-π,π] -> [0,1], при этом 0 соответствует центру спереди
+        let u = 0.5 + theta / (2 * Math.PI);
+        
+        // V (вертикаль): phi [-π/2,π/2] -> [0,1], при этом 0 - верх, 1 - низ
+        let v = 0.5 - phi / Math.PI;
+        
+        // Нормализация и коррекция для wrap-around
         u = ((u % 1) + 1) % 1;
         v = Math.max(0, Math.min(1, v));
         
@@ -512,23 +524,65 @@ export default class RetouchManager {
       const optInvertU = !!(options && options.invertU);
       const mapWithSplat = (splat, invertU=false) => {
         mctx.clearRect(0, 0, targetWidth, targetHeight);
-        mctx.fillStyle = '#000'; mctx.fillRect(0, 0, targetWidth, targetHeight);
-        mctx.fillStyle = '#fff';
+        mctx.fillStyle = '#000'; 
+        mctx.fillRect(0, 0, targetWidth, targetHeight);
+        
         let mappedCount = 0;
+        
+        // 🎨 УЛУЧШЕННЫЙ АЛГОРИТМ: Создаем круглую кисть для лучшего качества
+        const createCircularBrush = (radius) => {
+          const size = radius * 2 + 1;
+          const brush = new Array(size * size);
+          const center = radius;
+          
+          for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+              const dx = x - center;
+              const dy = y - center;
+              const distance = Math.sqrt(dx*dx + dy*dy);
+              
+              if (distance <= radius) {
+                // Антиалиасинг: плавный переход от центра к краю
+                const alpha = Math.max(0, 1 - distance / radius);
+                brush[y * size + x] = Math.floor(alpha * 255);
+              } else {
+                brush[y * size + x] = 0;
+              }
+            }
+          }
+          return { data: brush, size, center };
+        };
+        
+        const brush = createCircularBrush(Math.max(1, splat));
+        
         for (let y=0; y<scrH; y+=step) {
           for (let x=0; x<scrW; x+=step) {
             const off = (y*scrW + x) * 4;
             if (scrData[off] < 200 || scrData[off+1] < 200 || scrData[off+2] < 200) continue;
+            
             const uv = screenToUV(x, y);
             if (!uv) continue;
+            
             const uu = (invertU || optInvertU) ? (1 - uv.u) : uv.u;
             const px = Math.floor(uu * targetWidth);
             const py = Math.floor(uv.v * targetHeight);
-            const x0 = Math.max(0, px - splat);
-            const y0 = Math.max(0, py - splat);
-            const x1 = Math.min(targetWidth, px + splat + 1);
-            const y1 = Math.min(targetHeight, py + splat + 1);
-            mctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+            
+            // Применяем круглую кисть
+            for (let by = 0; by < brush.size; by++) {
+              for (let bx = 0; bx < brush.size; bx++) {
+                const brushValue = brush.data[by * brush.size + bx];
+                if (brushValue === 0) continue;
+                
+                const drawX = px - brush.center + bx;
+                const drawY = py - brush.center + by;
+                
+                if (drawX >= 0 && drawX < targetWidth && drawY >= 0 && drawY < targetHeight) {
+                  mctx.fillStyle = `rgb(${brushValue},${brushValue},${brushValue})`;
+                  mctx.fillRect(drawX, drawY, 1, 1);
+                }
+              }
+            }
+            
             mappedCount++;
           }
         }
@@ -672,16 +726,22 @@ export default class RetouchManager {
 
       // Добавляем улучшенные настройки AI для высококачественной ретуши панорам
       try {
-        // Специальные параметры для панорамных изображений
-        fd.append('prompt', 'remove object completely, seamless inpainting, natural background restoration, photorealistic result, high quality, detailed texture, preserve architectural details, maintain perspective');
-        fd.append('negative_prompt', 'object visible, incomplete removal, artifacts, blurry, low quality, distorted, seams, borders, unnatural, cartoon, painting, sketch, watermark, text, logo');
-        fd.append('guidance_scale', '12.0'); // Снижен для более естественного результата
-        fd.append('num_inference_steps', '50'); // Увеличен для лучшего качества
-        fd.append('strength', '0.95'); // Немного снижен для сохранения деталей
+        // 🎨 УЛУЧШЕННЫЕ ПАРАМЕТРЫ для панорамных изображений
+        fd.append('prompt', 'remove object completely and seamlessly, fill with natural background texture, photorealistic inpainting, preserve architectural details and perspective, high resolution, detailed restoration, perfect integration');
+        fd.append('negative_prompt', 'object remains visible, incomplete removal, artifacts, seams, blurry edges, spherical distortion, warping, unnatural texture, low quality, pixelated, cartoon, painting, watermark, text, borders');
         
-        // Дополнительные параметры для LaMa-cleaner если поддерживаются
-        fd.append('model', 'lama'); // Явно указываем модель
-        fd.append('device', 'auto'); // Автовыбор устройства
+        // Параметры оптимизированные для архитектурных панорам
+        fd.append('guidance_scale', '15.0'); // Повышен для лучшего следования prompt'у
+        fd.append('num_inference_steps', '75'); // Увеличен для максимального качества  
+        fd.append('strength', '1.0'); // Максимальная сила для полного удаления
+        
+        // LaMa-specific параметры для лучшего качества
+        fd.append('model', 'lama'); // Явно указываем LaMa модель
+        fd.append('device', 'cpu'); // Принудительно CPU для стабильности
+        fd.append('hd_strategy', 'Resize'); // Стратегия для высокого разрешения
+        fd.append('hd_strategy_resize_limit', '4096'); // Лимит для HD обработки
+        fd.append('ldm_steps', '75'); // LDM steps для лучшего качества
+        fd.append('ldm_sampler', 'ddim'); // Лучший сэмплер для архитектуры
         
         // Переопределяем пользовательскими настройками если есть
         if (typeof window.getAISettings === 'function') {

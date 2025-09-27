@@ -782,6 +782,38 @@ export default class ViewerManager {
       }
     });
     
+    // Добавляем перехватчик mouse/touch событий для предотвращения roll
+    this.aframeCamera.addEventListener('loaded', () => {
+      const lookControls = this.aframeCamera.components['look-controls'];
+      if (lookControls) {
+        // Перехватываем методы look-controls для принудительного обнуления roll
+        const originalUpdate = lookControls.update;
+        if (originalUpdate) {
+          lookControls.update = function(dt) {
+            const result = originalUpdate.call(this, dt);
+            // Принудительно обнуляем roll после каждого обновления
+            if (this.el && this.el.object3D) {
+              this.el.object3D.rotation.z = 0;
+            }
+            return result;
+          };
+        }
+        
+        // Также перехватываем onMouseMove если есть
+        if (lookControls.onMouseMove) {
+          const originalMouseMove = lookControls.onMouseMove;
+          lookControls.onMouseMove = function(event) {
+            const result = originalMouseMove.call(this, event);
+            // Принудительно обнуляем roll после движения мыши
+            if (this.el && this.el.object3D) {
+              this.el.object3D.rotation.z = 0;
+            }
+            return result;
+          };
+        }
+      }
+    });
+    
     this.aframeCamera.setAttribute('wasd-controls', 'enabled: false');
     this.aframeCamera.id = 'camera';
     this.aframeScene.appendChild(this.aframeCamera);
