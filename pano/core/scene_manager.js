@@ -1,14 +1,42 @@
 // Управление сценами с поддержкой A-Frame
+import { integrateSmoothCameraControl } from './smooth_camera_controller.js';
+
 export default class SceneManager {
   constructor(viewerManager) {
     this.viewerManager = viewerManager;
     this.scenes = [];
     this.currentScene = null;
     this.hotspotManager = null; // Будет установлено позже
+    
+    // Интегрируем систему плавного управления камерой
+    this.initializeSmoothCameraControl();
   }
 
   setHotspotManager(hotspotManager) {
     this.hotspotManager = hotspotManager;
+  }
+
+  /**
+   * Инициализация системы плавного управления камерой
+   */
+  initializeSmoothCameraControl() {
+    try {
+      // Ждем инициализации ViewerManager
+      const initWhenReady = () => {
+        if (this.viewerManager && this.viewerManager.aframeCamera) {
+          integrateSmoothCameraControl(this.viewerManager);
+          console.log('🎯 SceneManager: система плавного управления камерой инициализирована');
+        } else {
+          // Повторяем через 100мс если ViewerManager еще не готов
+          setTimeout(initWhenReady, 100);
+        }
+      };
+      
+      // Запускаем инициализацию
+      setTimeout(initWhenReady, 50);
+    } catch (error) {
+      console.error('🎯 SceneManager: ошибка инициализации плавного управления:', error);
+    }
   }
 
   async addScene(scene) {
@@ -239,44 +267,41 @@ export default class SceneManager {
       // Устанавливаем вид камеры для сцены, если он сохранен
       if (scene.cameraPosition) {
 
-        // 🎯 ИСПРАВЛЕНИЕ: Стабильное управление камерой без резких скачков
-        const applyCameraPosition = async () => {
+        // 🎯 НОВАЯ СИСТЕМА: Плавное переключение без блокировки управления
+        const applyCameraPositionSmooth = async () => {
           try {
-            const camera = this.viewerManager.aframeCamera;
-            if (!camera) return;
-            
-            const lookControls = camera.components && camera.components['look-controls'];
             console.log('🎯 SceneManager: устанавливаем дефолтный вид камеры для сцены', scene.name);
             
-            // 🔧 КРИТИЧЕСКИ ВАЖНО: отключаем look-controls на ДОЛЬШЕ для предотвращения конфликтов
-            if (lookControls && lookControls.pause) {
-              lookControls.pause();
-              console.log('🎯 SceneManager: look-controls отключены для установки дефолтного вида');
-            }
-            
-            // Устанавливаем позицию за один раз без повторных попыток
-            const applied = this.viewerManager.setCameraPosition(scene.cameraPosition);
-            
-            if (applied) {
-              console.log('🎯 SceneManager: дефолтная позиция камеры установлена:', scene.cameraPosition);
+            // Проверяем есть ли новая система плавного управления
+            if (this.viewerManager.setCameraPositionSmooth) {
+              console.log('🎯 SceneManager: используем плавную систему переключения');
+              const success = await this.viewerManager.setCameraPositionSmooth(scene.cameraPosition, scene.name);
               
-              // 🔧 УВЕЛИЧИВАЕМ задержку до 2 секунд для полной стабилизации
-              setTimeout(() => {
-                if (lookControls && lookControls.play) {
-                  lookControls.play();
-                  console.log('🎯 SceneManager: look-controls включены после 2сек стабилизации');
-                }
-              }, 2000); // Увеличили до 2 секунд для предотвращения возврата к предыдущей позиции
+              if (success) {
+                console.log('🎯 SceneManager: позиция установлена через плавную систему');
+              }
+            } else {
+              // Фолбек на старую систему с минимальной блокировкой
+              console.log('🎯 SceneManager: используем быструю систему (фолбек)');
+              const camera = this.viewerManager.aframeCamera;
+              if (!camera) return;
+              
+              // Устанавливаем позицию немедленно
+              const applied = this.viewerManager.setCameraPosition(scene.cameraPosition);
+              
+              if (applied) {
+                console.log('🎯 SceneManager: позиция установлена мгновенно:', scene.cameraPosition);
+              }
             }
           } catch (error) {
             console.error('🎯 SceneManager: ошибка установки позиции камеры:', error);
           }
         };
 
-        // Применяем позицию камеры сразу после загрузки панорамы
+        // Применяем позицию камеры быстро после загрузки панорамы
         setTimeout(() => {
-          applyCameraPosition();
-        }, 300); // Ждем полной загрузки панорамы
+          applyCameraPositionSmooth();
+        }, 100); // Сократили с 300мс до 100мс для быстрого отклика
       }
 
       return true;
