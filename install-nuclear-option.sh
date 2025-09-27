@@ -203,18 +203,54 @@ if [ -f "lama/requirements.txt" ]; then
     log_info "🐍 Настройка LaMa AI..."
     cd "$WORK_DIR/lama"
     
+    # Проверяем что Python 3 установлен
+    if ! command -v python3 >/dev/null 2>&1; then
+        log_error "Python 3 не найден!"
+        exit 1
+    fi
+    
+    # Создаем виртуальное окружение
+    log_info "Создание Python виртуального окружения..."
     python3 -m venv lama_env || {
         log_error "Ошибка создания Python окружения"
         exit 1
     }
     
+    # Активируем и устанавливаем зависимости
+    log_info "Установка LaMa зависимостей..."
     source lama_env/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    deactivate
     
-    log_success "LaMa AI настроен"
+    # Обновляем pip и setuptools
+    pip install --upgrade pip setuptools wheel
+    
+    # Устанавливаем зависимости с повторными попытками
+    for attempt in 1 2 3; do
+        log_info "Попытка $attempt установки LaMa зависимостей..."
+        if pip install -r requirements.txt --timeout=300; then
+            log_success "LaMa зависимости установлены"
+            break
+        else
+            log_warning "Попытка $attempt неудачна, повторяем..."
+            if [ $attempt -eq 3 ]; then
+                log_error "Не удалось установить LaMa зависимости после 3 попыток"
+                exit 1
+            fi
+            sleep 10
+        fi
+    done
+    
+    # Проверяем установку
+    if python -c "import lama_cleaner; print('LaMa Cleaner OK')" 2>/dev/null; then
+        log_success "LaMa Cleaner успешно установлен"
+    else
+        log_warning "LaMa Cleaner может работать некорректно"
+    fi
+    
+    deactivate
+    log_success "LaMa AI настроен и готов"
     cd "$WORK_DIR"
+else
+    log_warning "Файл lama/requirements.txt не найден - LaMa AI не будет установлен"
 fi
 
 # SYSTEMD СЕРВИСЫ
