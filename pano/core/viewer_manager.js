@@ -762,6 +762,9 @@ export default class ViewerManager {
       pointerLockEnabled: false,
       magicWindowTrackingEnabled: false
     });
+
+    // Добавляем периодическую нормализацию камеры для предотвращения roll
+    this.startCameraNormalization();
     this.aframeCamera.setAttribute('wasd-controls', 'enabled: false');
     this.aframeCamera.id = 'camera';
     this.aframeScene.appendChild(this.aframeCamera);
@@ -820,6 +823,9 @@ export default class ViewerManager {
   }
 
   removeLAFrame() {
+    // Останавливаем нормализацию камеры
+    this.stopCameraNormalization();
+    
     // Удаляем все элементы загрузчика A-Frame
     const loader = document.querySelector('.a-loader');
     if (loader) {
@@ -4672,6 +4678,64 @@ export default class ViewerManager {
   }
 
   /**
+   * Запускает периодическую нормализацию камеры для предотвращения roll
+   */
+  startCameraNormalization() {
+    if (this._cameraRollCheckInterval) {
+      clearInterval(this._cameraRollCheckInterval);
+    }
+
+    this._cameraRollCheckInterval = setInterval(() => {
+      if (!this.aframeCamera) return;
+
+      try {
+        const rotation = this.aframeCamera.getAttribute('rotation');
+        if (!rotation) return;
+
+        // Проверяем roll (z) компонент
+        const rotZ = parseFloat(rotation.z) || 0;
+        if (Math.abs(rotZ) > 0.001) {
+          console.log('🎯 ViewerManager: обнаружен roll камеры', rotZ, '- исправляем');
+          
+          // Принудительно обнуляем roll
+          const newRotation = `${rotation.x || 0} ${rotation.y || 0} 0`;
+          this.aframeCamera.setAttribute('rotation', newRotation);
+
+          // Также исправляем в look-controls если есть
+          const lookControls = this.aframeCamera.components && this.aframeCamera.components['look-controls'];
+          if (lookControls && lookControls.pitchObject && lookControls.yawObject) {
+            lookControls.pitchObject.rotation.z = 0;
+            lookControls.yawObject.rotation.z = 0;
+            lookControls.pitchObject.rotation.y = 0;
+            lookControls.yawObject.rotation.x = 0;
+          }
+        }
+
+        // Проверяем THREE.js камеру
+        if (this.aframeCamera.object3D && this.aframeCamera.object3D.rotation) {
+          const threeRotZ = this.aframeCamera.object3D.rotation.z;
+          if (Math.abs(threeRotZ) > 0.001) {
+            console.log('🎯 ViewerManager: обнаружен roll в THREE.js камере', threeRotZ, '- исправляем');
+            this.aframeCamera.object3D.rotation.z = 0;
+          }
+        }
+      } catch (error) {
+        console.warn('🎯 ViewerManager: ошибка нормализации камеры:', error.message);
+      }
+    }, 100); // Проверяем каждые 100мс
+  }
+
+  /**
+   * Останавливает периодическую нормализацию камеры
+   */
+  stopCameraNormalization() {
+    if (this._cameraRollCheckInterval) {
+      clearInterval(this._cameraRollCheckInterval);
+      this._cameraRollCheckInterval = null;
+    }
+  }
+
+  /**
    * УЛУЧШЕННАЯ система очистки контекстных меню с удалением обработчиков
    */
   cleanupAutoCloseHandlers() {
@@ -7241,9 +7305,17 @@ export default class ViewerManager {
         };
 
         const inp = cameraData.rotation;
-        const rotX = sanitizeAngle(inp.x || 0);
-        const rotY = sanitizeAngle(inp.y || 0);
-        const rotationString = `${rotX} ${rotY} 0`;
+        let rotX = sanitizeAngle(inp.x || 0); // pitch (up/down) 
+        let rotY = sanitizeAngle(inp.y || 0); // yaw (left/right)
+        let rotZ = sanitizeAngle(inp.z || 0); // roll (tilt) - должен быть 0 для панорам
+        
+        // Принудительно обнуляем roll для предотвращения наклона камеры
+        rotZ = 0;
+        
+        // Ограничиваем pitch для предотвращения переворота камеры
+        rotX = Math.max(-90, Math.min(90, rotX));
+        
+        const rotationString = `${rotX} ${rotY} ${rotZ}`;
 
         camera.setAttribute('rotation', rotationString);
 

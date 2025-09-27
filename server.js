@@ -585,6 +585,8 @@ app.post('/api/retouch', upload.fields([
     formData.append('guidance_scale', req.body.guidance_scale || '15.0');
     formData.append('strength', req.body.strength || '1.0');
 
+    console.log(`🔗 Отправляем запрос на LaMa: ${LAMA_URL}/inpaint`);
+    
     const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
       headers: {
         ...formData.getHeaders(),
@@ -609,6 +611,62 @@ app.post('/api/retouch', upload.fields([
   } catch (error) {
     console.error('❌ Ошибка ретуши панорамы:', error.message);
     
+    // Пробуем fallback на базовое LaMa API
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      console.log('🔄 Пробуем fallback на базовое LaMa API...');
+      
+      try {
+        const FormDataNode = require('form-data');
+        const fallbackFormData = new FormDataNode();
+        
+        fallbackFormData.append('image', req.files.image[0].buffer, {
+          filename: 'panorama.jpg',
+          contentType: req.files.image[0].mimetype
+        });
+        
+        fallbackFormData.append('mask', req.files.mask[0].buffer, {
+          filename: 'mask.png',
+          contentType: req.files.mask[0].mimetype
+        });
+
+        // Пробуем разные endpoints
+        const fallbackUrls = [
+          `${LAMA_URL}/lama/inpaint`,
+          `${LAMA_URL}/api/lama/inpaint`,
+          `http://localhost:5002/inpaint`,
+          `http://127.0.0.1:5002/inpaint`
+        ];
+        
+        for (const url of fallbackUrls) {
+          try {
+            console.log(`🔗 Пробуем fallback URL: ${url}`);
+            const fallbackResponse = await axios.post(url, fallbackFormData, {
+              headers: fallbackFormData.getHeaders(),
+              responseType: 'arraybuffer',
+              timeout: 180000, // 3 минуты
+              maxContentLength: 200 * 1024 * 1024,
+              maxBodyLength: 200 * 1024 * 1024
+            });
+
+            res.set({
+              'Content-Type': 'image/jpeg',
+              'X-Retouch-Method': 'lama-fallback',
+              'X-Retouch-Status': 'success-fallback'
+            });
+
+            res.send(fallbackResponse.data);
+            console.log('✅ Ретушь выполнена через fallback');
+            return;
+          } catch (fallbackError) {
+            console.log(`❌ Fallback URL ${url} не работает:`, fallbackError.message);
+            continue;
+          }
+        }
+      } catch (fallbackError) {
+        console.error('❌ Все fallback методы не сработали:', fallbackError.message);
+      }
+    }
+    
     if (error.response) {
       res.status(error.response.status).json({
         error: 'Ошибка AI сервиса при ретуши',
@@ -617,7 +675,7 @@ app.post('/api/retouch', upload.fields([
     } else if (error.code === 'ECONNREFUSED') {
       res.status(503).json({
         error: 'AI сервис недоступен для ретуши',
-        details: 'Подключение отклонено'
+        details: 'LaMa сервис не запущен. Проверьте systemctl status color360-lama'
       });
     } else if (error.code === 'EMSGSIZE' || error.message.includes('too large')) {
       res.status(413).json({

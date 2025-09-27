@@ -712,7 +712,11 @@ export default class RetouchManager {
       // Отправка на backend, который проксирует в AI
       console.log('🎨 Debug RetouchManager: отправляем запрос на /api/retouch');
       
-      const resp = await fetch('/api/retouch', { method: 'POST', body: fd });
+      const resp = await fetch('/api/retouch', { 
+        method: 'POST', 
+        body: fd,
+        timeout: 300000 // 5 минут
+      });
       console.log('🎨 Debug RetouchManager: получен ответ:', resp.status, resp.statusText);
       
       if (!resp.ok) {
