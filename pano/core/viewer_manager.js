@@ -765,6 +765,23 @@ export default class ViewerManager {
 
     // Добавляем периодическую нормализацию камеры для предотвращения roll
     this.startCameraNormalization();
+    
+    // Добавляем обработчики для предотвращения roll при движении
+    this.aframeCamera.addEventListener('componentchanged', (event) => {
+      if (event.detail.name === 'rotation') {
+        const rotation = event.detail.newData;
+        if (rotation && Math.abs(rotation.z) > 0.0001) {
+          // Немедленно исправляем roll
+          setTimeout(() => {
+            if (this.aframeCamera && this.aframeCamera.object3D) {
+              this.aframeCamera.object3D.rotation.z = 0;
+              this.aframeCamera.object3D.updateMatrixWorld(true);
+            }
+          }, 0);
+        }
+      }
+    });
+    
     this.aframeCamera.setAttribute('wasd-controls', 'enabled: false');
     this.aframeCamera.id = 'camera';
     this.aframeScene.appendChild(this.aframeCamera);
@@ -4689,40 +4706,74 @@ export default class ViewerManager {
       if (!this.aframeCamera) return;
 
       try {
+        // 1. Проверяем A-Frame rotation attribute
         const rotation = this.aframeCamera.getAttribute('rotation');
-        if (!rotation) return;
-
-        // Проверяем roll (z) компонент
-        const rotZ = parseFloat(rotation.z) || 0;
-        if (Math.abs(rotZ) > 0.001) {
-          console.log('🎯 ViewerManager: обнаружен roll камеры', rotZ, '- исправляем');
-          
-          // Принудительно обнуляем roll
-          const newRotation = `${rotation.x || 0} ${rotation.y || 0} 0`;
-          this.aframeCamera.setAttribute('rotation', newRotation);
-
-          // Также исправляем в look-controls если есть
-          const lookControls = this.aframeCamera.components && this.aframeCamera.components['look-controls'];
-          if (lookControls && lookControls.pitchObject && lookControls.yawObject) {
-            lookControls.pitchObject.rotation.z = 0;
-            lookControls.yawObject.rotation.z = 0;
-            lookControls.pitchObject.rotation.y = 0;
-            lookControls.yawObject.rotation.x = 0;
+        if (rotation) {
+          const rotZ = parseFloat(rotation.z) || 0;
+          if (Math.abs(rotZ) > 0.0001) {
+            console.log('🎯 ViewerManager: обнаружен roll в rotation attr', rotZ, '- исправляем');
+            const newRotation = `${rotation.x || 0} ${rotation.y || 0} 0`;
+            this.aframeCamera.setAttribute('rotation', newRotation);
           }
         }
 
-        // Проверяем THREE.js камеру
+        // 2. Проверяем THREE.js object3D (самое важное!)
         if (this.aframeCamera.object3D && this.aframeCamera.object3D.rotation) {
-          const threeRotZ = this.aframeCamera.object3D.rotation.z;
-          if (Math.abs(threeRotZ) > 0.001) {
-            console.log('🎯 ViewerManager: обнаружен roll в THREE.js камере', threeRotZ, '- исправляем');
-            this.aframeCamera.object3D.rotation.z = 0;
+          const obj3D = this.aframeCamera.object3D;
+          if (Math.abs(obj3D.rotation.z) > 0.0001) {
+            console.log('🎯 ViewerManager: обнаружен roll в object3D', obj3D.rotation.z, '- исправляем');
+            obj3D.rotation.z = 0;
+            obj3D.updateMatrixWorld(true);
+          }
+          
+          // Также проверяем quaternion
+          if (obj3D.quaternion) {
+            const euler = new THREE.Euler().setFromQuaternion(obj3D.quaternion, 'YXZ');
+            if (Math.abs(euler.z) > 0.0001) {
+              console.log('🎯 ViewerManager: обнаружен roll в quaternion', euler.z, '- исправляем');
+              euler.z = 0;
+              obj3D.quaternion.setFromEuler(euler);
+              obj3D.updateMatrixWorld(true);
+            }
+          }
+        }
+
+        // 3. Исправляем look-controls компонент
+        const lookControls = this.aframeCamera.components && this.aframeCamera.components['look-controls'];
+        if (lookControls) {
+          // Исправляем pitch и yaw объекты
+          if (lookControls.pitchObject && lookControls.pitchObject.rotation) {
+            if (Math.abs(lookControls.pitchObject.rotation.z) > 0.0001) {
+              lookControls.pitchObject.rotation.z = 0;
+            }
+            // Ограничиваем pitch только по X оси
+            if (Math.abs(lookControls.pitchObject.rotation.y) > 0.0001) {
+              lookControls.pitchObject.rotation.y = 0;
+            }
+          }
+          
+          if (lookControls.yawObject && lookControls.yawObject.rotation) {
+            if (Math.abs(lookControls.yawObject.rotation.z) > 0.0001) {
+              lookControls.yawObject.rotation.z = 0;
+            }
+            // Ограничиваем yaw только по Y оси
+            if (Math.abs(lookControls.yawObject.rotation.x) > 0.0001) {
+              lookControls.yawObject.rotation.x = 0;
+            }
+          }
+          
+          // Исправляем внутреннее состояние look-controls
+          if (lookControls.el && lookControls.el.object3D) {
+            if (Math.abs(lookControls.el.object3D.rotation.z) > 0.0001) {
+              lookControls.el.object3D.rotation.z = 0;
+              lookControls.el.object3D.updateMatrixWorld(true);
+            }
           }
         }
       } catch (error) {
         console.warn('🎯 ViewerManager: ошибка нормализации камеры:', error.message);
       }
-    }, 100); // Проверяем каждые 100мс
+    }, 50); // Увеличиваем частоту проверки до 50мс
   }
 
   /**

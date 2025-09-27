@@ -22,7 +22,7 @@ app.set('trust proxy', 1);
 const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-key-2025';
 
 // LaMa Inpainting Service Configuration
-const LAMA_PORT = process.env.LAMA_PORT || 5002;
+const LAMA_PORT = process.env.LAMA_PORT || 8080;
 const LAMA_HOST = process.env.LAMA_HOST || '127.0.0.1';
 const LAMA_URL = `http://${LAMA_HOST}:${LAMA_PORT}`;
 const LAMA_ENABLED = process.env.LAMA_ENABLED !== 'false';
@@ -631,10 +631,13 @@ app.post('/api/retouch', upload.fields([
 
         // Пробуем разные endpoints
         const fallbackUrls = [
-          `${LAMA_URL}/lama/inpaint`,
-          `${LAMA_URL}/api/lama/inpaint`,
+          `${LAMA_URL}/inpaint`,
+          `http://localhost:8080/inpaint`,
+          `http://127.0.0.1:8080/inpaint`,
           `http://localhost:5002/inpaint`,
-          `http://127.0.0.1:5002/inpaint`
+          `http://127.0.0.1:5002/inpaint`,
+          `${LAMA_URL}/lama/inpaint`,
+          `${LAMA_URL}/api/lama/inpaint`
         ];
         
         for (const url of fallbackUrls) {
