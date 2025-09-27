@@ -1,5 +1,6 @@
 import CoordinateManager from './coordinate_manager.js';
 import ModernMarkerGenerator from './modern_marker_generator.js';
+import { integrateCameraRollProtection } from './camera_roll_protection.js';
 
 export default class ViewerManager {
   constructor(containerId, hotspotManager) {
@@ -764,14 +765,16 @@ export default class ViewerManager {
     });
 
     // Добавляем периодическую нормализацию камеры для предотвращения roll
-    this.startCameraNormalization();
+    // this.startCameraNormalization(); // ОТКЛЮЧЕНО - используем новую агрессивную систему защиты
     
     // Добавляем обработчики для предотвращения roll при движении
+    // ОТКЛЮЧЕНО - используем новую агрессивную систему защиты
+    /*
     this.aframeCamera.addEventListener('componentchanged', (event) => {
       if (event.detail.name === 'rotation') {
         const rotation = event.detail.newData;
         if (rotation && Math.abs(rotation.z) > 0.0001) {
-          // Немедленно исправляем roll
+          // Немедлено исправляем roll
           setTimeout(() => {
             if (this.aframeCamera && this.aframeCamera.object3D) {
               this.aframeCamera.object3D.rotation.z = 0;
@@ -781,8 +784,11 @@ export default class ViewerManager {
         }
       }
     });
+    */
     
     // Добавляем перехватчик mouse/touch событий для предотвращения roll
+    // ОТКЛЮЧЕНО - используем новую агрессивную систему защиты
+    /*
     this.aframeCamera.addEventListener('loaded', () => {
       const lookControls = this.aframeCamera.components['look-controls'];
       if (lookControls) {
@@ -813,6 +819,7 @@ export default class ViewerManager {
         }
       }
     });
+    */
     
     this.aframeCamera.setAttribute('wasd-controls', 'enabled: false');
     this.aframeCamera.id = 'camera';
@@ -868,6 +875,12 @@ export default class ViewerManager {
         }
       } catch (e) { console.warn('Не удалось зарегистрировать debug toggle:', e); }
     }, 500);
+
+    // Запускаем агрессивную защиту от camera roll
+    setTimeout(() => {
+      integrateCameraRollProtection(this);
+      console.log('🎯 ViewerManager: Агрессивная защита от camera roll интегрирована');
+    }, 200);
 
   }
 
