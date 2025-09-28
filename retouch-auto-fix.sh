@@ -38,6 +38,10 @@ FORCE_PM2_SETUP="${FORCE_PM2_SETUP:-0}"
 BACKEND_PORT="${BACKEND_PORT:-3001}"
 LAMA_PORT="${LAMA_PORT:-5000}"
 DOMAIN="${DOMAIN:-}"
+# Если пользователь оставил плейсхолдер — считаем, что домен не задан и пытаемся автоопределить
+if [[ "$DOMAIN" =~ ^(your-domain\.tld|example\.com)$ ]]; then
+  DOMAIN=""
+fi
 DRY_RUN="${DRY_RUN:-0}"
 
 SUMMARY=()
@@ -132,7 +136,7 @@ fi
 section "4. Проверка LaMa"
 LAMA_HEALTH=0
 # Проверка через известные порты
-for LP in "$LAMA_PORT" 5000 5002; do
+for LP in "$LAMA_PORT" 8080 5000 5002; do
   if curl -s -m 3 http://127.0.0.1:${LP}/inpaint >/dev/null 2>&1; then LAMA_HEALTH=1; LAMA_PORT_ACTUAL=$LP; break; fi
   if [[ $DOCKER_AVAILABLE -eq 1 && $DOCKER_HAS_LAMA -eq 1 ]]; then
     if docker exec -i $(docker ps --filter 'name=lama' --format '{{.ID}}' | head -n1) bash -lc "curl -s -m 3 http://127.0.0.1:${LP}/inpaint >/dev/null"; then LAMA_HEALTH=2; LAMA_PORT_ACTUAL=$LP; break; fi
@@ -190,7 +194,13 @@ fi
 section "6. Сетевые тесты HTTP через домен"
 for ep in /api/retouch /api/retouch-json; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 http://$DOMAIN$ep || true)
-  echo "$ep -> HTTP $code"
+  followNote=""
+  if [[ "$code" == "301" || "$code" == "308" ]]; then
+    code_tls=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 https://$DOMAIN$ep || true)
+    followNote=" (redirect->$code_tls via https)"
+    if [[ -n "$code_tls" ]]; then code=$code_tls; fi
+  fi
+  echo "$ep -> HTTP $code$followNote"
   [[ "$code" == "000" ]] && warn "$ep: соединение не установлено" && add_summary "$ep HTTP=000" || add_summary "$ep HTTP=$code"
   if [[ "$code" == "404" ]]; then warn "$ep: 404 (маршрутизация не исправлена)"; fi
   if [[ "$code" == "405" ]]; then warn "$ep: 405 (возможно не тот upstream)"; fi
@@ -201,23 +211,32 @@ section "7. JSON fallback POST тест"
 IMG_B64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9YV7tV0AAAAASUVORK5CYII='
 JSON_PAYLOAD="{ \"imageData\": \"data:image/png;base64,$IMG_B64\", \"maskData\": \"data:image/png;base64,$IMG_B64\", \"prompt\": \"diag\" }"
 JF_CODE=$(curl -s -o /tmp/retouch_json_fullfix.out -w "%{http_code}" -H 'Content-Type: application/json' -X POST --max-time 25 http://$DOMAIN/api/retouch-json -d "$JSON_PAYLOAD" || true)
-echo "POST /api/retouch-json -> HTTP $JF_CODE"
+if [[ "$JF_CODE" == "301" || "$JF_CODE" == "308" ]]; then
+  JF_CODE=$(curl -s -o /tmp/retouch_json_fullfix.out -w "%{http_code}" -H 'Content-Type: application/json' -X POST --max-time 25 https://$DOMAIN/api/retouch-json -d "$JSON_PAYLOAD" || true)
+  echo "POST /api/retouch-json (follow https) -> HTTP $JF_CODE"
+else
+  echo "POST /api/retouch-json -> HTTP $JF_CODE"
+fi
 add_summary "JSON fallback POST: $JF_CODE"
 
 # -------------------------------------------------------------
 section "8. Проверка retouch_manager.js версии"
 # Пытаемся скачать файл напрямую
-RTM_URL="http://$DOMAIN/pano/ui/retouch_manager.js"
-HTTP_RTM=$(curl -s -o /tmp/retouch_manager_remote.js -w "%{http_code}" --max-time 15 "$RTM_URL" || true)
+RTM_URL_BASE="http://$DOMAIN/pano/ui/retouch_manager.js"
+HTTP_RTM=$(curl -s -o /tmp/retouch_manager_remote.js -w "%{http_code}" --max-time 15 "$RTM_URL_BASE" || true)
+if [[ "$HTTP_RTM" == "301" || "$HTTP_RTM" == "308" ]]; then
+  RTM_URL_BASE="https://$DOMAIN/pano/ui/retouch_manager.js"
+  HTTP_RTM=$(curl -s -o /tmp/retouch_manager_remote.js -w "%{http_code}" --max-time 15 "$RTM_URL_BASE" || true)
+fi
 if [[ "$HTTP_RTM" != "200" ]]; then
-  warn "Не удалось получить retouch_manager.js по HTTP (код=$HTTP_RTM)"
+  warn "Не удалось получить retouch_manager.js (код=$HTTP_RTM)"
   add_summary "retouch_manager.js fetch: $HTTP_RTM"
 else
   if grep -q "_exportMaskEquirect" /tmp/retouch_manager_remote.js && ! grep -q "resp.status" /tmp/retouch_manager_remote.js; then
     ok "retouch_manager.js версия выглядит корректно"
     add_summary "retouch_manager.js: OK"
   else
-    warn "Подозрительная версия retouch_manager.js (возможно старая)"
+    warn "Подозрительная версия retouch_manager.js (возможно старая/кэш)"
     add_summary "retouch_manager.js: SUSPECT"
   fi
 fi
@@ -226,8 +245,9 @@ fi
 section "9. PM2 состояние (если установлен)"
 if command -v pm2 >/dev/null 2>&1; then
   pm2 jlist > /tmp/pm2_jlist.json 2>/dev/null || true
-  BACKEND_PM2=$(grep -i '"name": *"backend"' /tmp/pm2_jlist.json || true)
-  if [[ -n "$BACKEND_PM2" ]]; then ok "PM2 backend процесс найден"; add_summary "PM2 backend: PRESENT"; else warn "PM2 backend процесс не найден"; add_summary "PM2 backend: MISSING"; fi
+  BACKEND_PM2=$(grep -Ei '"name"\s*:\s*"(backend|color360-app)"' /tmp/pm2_jlist.json || true)
+  if [[ -z "$BACKEND_PM2" ]]; then BACKEND_PM2=$(grep -Ei '"script"\s*:\s*"server\.js"' /tmp/pm2_jlist.json || true); fi
+  if [[ -n "$BACKEND_PM2" ]]; then ok "PM2 backend процесс(ы) обнаружены"; add_summary "PM2 backend: PRESENT"; else warn "PM2 backend процесс не найден"; add_summary "PM2 backend: MISSING"; fi
 else
   warn "PM2 не установлен"
   add_summary "PM2: NOT INSTALLED"
@@ -250,12 +270,14 @@ cat <<'EOT'
 1) Если /api/retouch-json даёт 404 / 000 — проверьте:
    - Правка Nginx внутри нужного окружения (docker vs host)
    - Правильный upstream color360_backend
+  - При 301/308: добавьте блоки и в HTTPS server { listen 443 ssl; }
 2) Если backend порт не слушает — поднять через PM2 или docker compose.
 3) Если JSON POST => 500 — смотреть pm2 logs backend (причина в Node/LaMa).
 4) Если LaMa недоступна — проверить сервис lama / контейнер, переменные LAMA_URL.
 5) Если retouch_manager.js подозрителен — очистить кэш браузера / CDN.
 6) Повторить тесты после исправлений:
    DOMAIN=your-domain AUTO_FIX=1 bash retouch-auto-fix.sh
+7) Если nginx пишет "location directive is not allowed here" — вставьте блоки внутрь server { } (а не в http{} или вне блока).
 EOT
 
 ok "Готово. Итог: /tmp/retouch_auto_fix_summary.txt"
