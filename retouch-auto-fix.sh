@@ -189,7 +189,7 @@ if [[ -z "$HAS_RETOUCH" || -z "$HAS_JSON" ]]; then
     fi
 
     INSERT_PAYLOAD() {
-      cat <<EOF
+      cat <<'EOF'
     # >>> AUTO RETOUCH ROUTING >>>
     location = /api/retouch {
         proxy_pass ${PROXY_TARGET_RETOUCH};
@@ -268,7 +268,11 @@ EOF
 
     # Создаём файл с меткой блока (stderr от awk выше)
     # В случае сложности используем простую вставку: ищем строку server_name с доменом и ближайшую закрывающую }
-    INSERT_TMP_ESCAPED=$(INSERT_PAYLOAD | sed 's/\\/\\\\/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+  RAW_INSERT=$(INSERT_PAYLOAD)
+  # Подставляем цели proxy_pass (т.к. внутри <<'EOF' переменные не разворачиваются)
+  RAW_INSERT=${RAW_INSERT//\$\{PROXY_TARGET_RETOUCH\}/${PROXY_TARGET_RETOUCH}}
+  RAW_INSERT=${RAW_INSERT//\$\{PROXY_TARGET_JSON\}/${PROXY_TARGET_JSON}}
+  INSERT_TMP_ESCAPED=$(printf '%s' "$RAW_INSERT" | sed 's/\\/\\\\/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
     if grep -q "$DOMAIN" "$WORK_FILE"; then
       # Вставка по домену
