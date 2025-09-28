@@ -872,7 +872,38 @@ export default class RetouchManager {
         } else if (resp.status === 400) {
           let details = '';
           try { details = await resp.text(); } catch(_){}
-          throw new Error('Некорректный запрос (400). Сервер не принял image/mask. Подробности: ' + (details || 'нет деталей'));
+          console.warn('⚠️ RetouchManager: 400 от /api/retouch, пробуем JSON fallback /api/retouch-json');
+          try {
+            const jsonFallbackBody = JSON.stringify({
+              imageData: this._lastPanoramaDataUrl || null,
+              maskData: maskDataUrlEq || this._maskDataUrl || null,
+              prompt: fd.get('prompt'),
+              negative_prompt: fd.get('negative_prompt'),
+              num_inference_steps: fd.get('num_inference_steps'),
+              guidance_scale: fd.get('guidance_scale'),
+              strength: fd.get('strength')
+            });
+            const jfResp = await fetch('/api/retouch-json', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: jsonFallbackBody,
+              timeout: 300000
+            });
+            console.log('🧪 RetouchManager JSON fallback статус:', jfResp.status);
+            if (jfResp.ok) {
+              // Получим blob и применим как панораму
+              const outBlob = await jfResp.blob();
+              const outUrl = URL.createObjectURL(outBlob);
+              console.log('🧪 RetouchManager: JSON fallback успех, применяем результат');
+              await this._applyResultTexture(outUrl, scene);
+              this._applying = false; this._maskDataUrl = null; return { applied: true, method: 'json-fallback' };
+            } else {
+              let jfTxt = await jfResp.text().catch(()=> '');
+              throw new Error('JSON fallback не сработал ('+jfResp.status+'): '+jfTxt);
+            }
+          } catch(jsonFbErr) {
+            throw new Error('Некорректный multipart (400) и JSON fallback провалился: '+ jsonFbErr.message +' | details: '+ (details || 'нет деталей'));
+          }
         } else {
           throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }

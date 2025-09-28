@@ -1448,6 +1448,15 @@ export default class ViewerManager {
 
   async setPanorama(imageSrc) {
     console.log('🖼️ setPanorama() вызвана с imageSrc:', imageSrc ? imageSrc.slice(0, 100) + '...' : 'null');
+    // Сохраняем последний data URL панорамы для JSON fallback ретуши
+    try {
+      if (typeof imageSrc === 'string' && imageSrc.startsWith('data:image/')) {
+        window.__LAST_PANO_DATA_URL = imageSrc;
+        if (window.app && window.app.retouchManager) {
+          window.app.retouchManager._lastPanoramaDataUrl = imageSrc;
+        }
+      }
+    } catch(_){}
     
     if (!this.aframeSky) {
       console.error('A-Frame sky элемент не найден');

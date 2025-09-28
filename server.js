@@ -541,6 +541,12 @@ app.post('/api/retouch', upload.fields([
   { name: 'mask', maxCount: 1 }
 ]), async (req, res) => {
   try {
+    // 🔍 Расширенная диагностика начала запроса
+    try {
+      console.log('🧪 [retouch] headers.content-type=', req.headers['content-type']);
+      console.log('🧪 [retouch] body field names (keys):', req.body ? Object.keys(req.body) : []);
+      console.log('🧪 [retouch] files present?:', !!req.files, 'image?:', !!(req.files && req.files.image), 'mask?:', !!(req.files && req.files.mask));
+    } catch(_e) {}
     if (!req.files || !req.files.image || !req.files.mask) {
       return res.status(400).json({
         error: 'Требуются файлы image и mask для ретуши'
@@ -691,6 +697,46 @@ app.post('/api/retouch', upload.fields([
         details: error.message
       });
     }
+  }
+});
+
+// Fallback JSON endpoint (если multipart ломается через прокси). Принимает {imageData:"data:...", maskData:"data:...", ...}
+app.post('/api/retouch-json', express.json({limit:'220mb'}), async (req, res) => {
+  try {
+    const { imageData, maskData, prompt, negative_prompt, num_inference_steps, guidance_scale, strength } = req.body || {};
+    if (!imageData || !maskData || !/^data:image\//.test(imageData) || !/^data:image\//.test(maskData)) {
+      return res.status(400).json({ error: 'Неверный формат, нужны dataURL поля imageData и maskData' });
+    }
+    function dataUrlToBuffer(dataUrl) {
+      const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!m) throw new Error('Bad data URL');
+      return { mime: m[1], buf: Buffer.from(m[2], 'base64') };
+    }
+    const img = dataUrlToBuffer(imageData);
+    const msk = dataUrlToBuffer(maskData);
+    console.log('🧪 [retouch-json] sizes:', Math.round(img.buf.length/1024/1024)+'MB', Math.round(msk.buf.length/1024)+'KB');
+    const FormDataNode = require('form-data');
+    const formData = new FormDataNode();
+    formData.append('image', img.buf, { filename: 'panorama.' + (img.mime.includes('png')?'png':'jpg'), contentType: img.mime });
+    formData.append('mask', msk.buf, { filename: 'mask.' + (msk.mime.includes('png')?'png':'jpg'), contentType: msk.mime });
+    formData.append('prompt', prompt || 'remove object completely, seamless background restoration');
+    formData.append('negative_prompt', negative_prompt || 'object remains, artifacts');
+    formData.append('num_inference_steps', num_inference_steps || '50');
+    formData.append('guidance_scale', guidance_scale || '15');
+    formData.append('strength', strength || '1.0');
+    console.log(`🔗 [retouch-json] POST ${LAMA_URL}/inpaint`);
+    const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
+      headers: formData.getHeaders(),
+      responseType: 'arraybuffer',
+      timeout: 300000,
+      maxContentLength: 200 * 1024 * 1024,
+      maxBodyLength: 200 * 1024 * 1024
+    });
+    res.set({ 'Content-Type': 'image/jpeg', 'X-Retouch-Status': 'success', 'X-Retouch-Method': 'lama-json' });
+    res.send(response.data);
+  } catch(err) {
+    console.error('❌ [retouch-json] error:', err.message);
+    res.status(500).json({ error: 'retouch-json failed', details: err.message });
   }
 });
 
