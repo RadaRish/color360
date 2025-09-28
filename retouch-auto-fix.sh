@@ -161,28 +161,131 @@ if [[ -z "$HAS_RETOUCH" || -z "$HAS_JSON" ]]; then
   add_summary "Nginx retouch locations: MISSING"
   if [[ $AUTO_FIX -eq 1 && $DRY_RUN -eq 0 ]]; then
     NGX_EDIT=1
-    log "Попытка вставки блоков"
-    TARGET_CONF="/etc/nginx/nginx.conf"
-    # Если docker — попробуем найти conf.d файл
-    if [[ $DOCKER_HAS_NGINX -eq 1 ]]; then
-      # Пробуем default.conf
-      if docker exec -i "$NGINX_CONTAINER_ID" test -f /etc/nginx/conf.d/default.conf; then
-        TARGET_CONF="/etc/nginx/conf.d/default.conf"
-      fi
+    log "Попытка безопасной вставки внутрь server{}"
+
+    # Определяем proxy_pass цель: пытаемся найти upstream color360_backend
+    UPSTREAM_NAME="color360_backend"
+    if ! grep -q "upstream[[:space:]]\+$UPSTREAM_NAME" "$TMP_NGX_DUMP2" 2>/dev/null; then
+      # fallback на прямой localhost:BACKEND_PORT
+      PROXY_TARGET_RETOUCH="http://127.0.0.1:${BACKEND_PORT}/api/retouch"
+      PROXY_TARGET_JSON="http://127.0.0.1:${BACKEND_PORT}/api/retouch-json"
     else
-      # Если есть conf.d/color360.conf — предпочтём его
-      if [[ -f /etc/nginx/conf.d/color360.conf ]]; then TARGET_CONF="/etc/nginx/conf.d/color360.conf"; fi
+      PROXY_TARGET_RETOUCH="http://${UPSTREAM_NAME}/api/retouch"
+      PROXY_TARGET_JSON="http://${UPSTREAM_NAME}/api/retouch-json"
     fi
-    BACKUP_NAME="${TARGET_CONF}.$(date +%Y%m%d_%H%M%S).bak"
-    INSERT_BLOCK=$'\n    # >>> AUTO RETOUCH ROUTING >>>\n    location = /api/retouch {\n        proxy_pass http://color360_backend/api/retouch;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n    location = /api/retouch-json {\n        proxy_pass http://color360_backend/api/retouch-json;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n    # <<< AUTO RETOUCH ROUTING <<<'
+
+    INSERT_PAYLOAD() {
+      cat <<EOF
+    # >>> AUTO RETOUCH ROUTING >>>
+    location = /api/retouch {
+        proxy_pass ${PROXY_TARGET_RETOUCH};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 250M;
+    }
+    location = /api/retouch-json {
+        proxy_pass ${PROXY_TARGET_JSON};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 250M;
+    }
+    # <<< AUTO RETOUCH ROUTING <<<
+EOF
+    }
+
+    # Функция поиска server{} содержащего server_name с доменом или listen 80/443
+    select_server_block() {
+      local file="$1" domain_pat="$2"; awk -v dom="$domain_pat" '
+        BEGIN{in_srv=0;lvl=0;keep=0;buf=""}
+        function flush(){if(keep){print buf}; buf=""; keep=0}
+        /server\s*{/ { if(!in_srv){in_srv=1;lvl=0}; }
+        { if(in_srv){ buf = buf $0 ORS } }
+        /{/ { if(in_srv){ lvl++ } }
+        /}/ { if(in_srv){ lvl--; if(lvl==0){
+              # Решение о выборе
+              if(buf ~ /server_name/ && buf ~ dom){ keep=1 }
+              else if(!keep && dom=="FALLBACK" && buf ~ /listen[^;]*80/){ keep=1 }
+              if(keep){ print buf > "/dev/stderr"; print "__SELECTED__"; };
+              in_srv=0; buf=""; keep=0;
+            }} }
+      ' "$file" 2>"$file.selected.tmp" | grep -q '__SELECTED__'; local rc=$?; if [[ $rc -eq 0 ]]; then echo "$file.selected.tmp"; else rm -f "$file.selected.tmp"; return 1; fi
+    }
+
+    # Собираем кандидаты файлов
+    CANDIDATES=(/etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf 2>/dev/null)
+    TARGET_FILE=""
+    for f in /etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf; do
+      [[ -f "$f" ]] || continue
+      if grep -q "server_name" "$f"; then
+        if grep -q "$DOMAIN" "$f"; then TARGET_FILE="$f"; break; fi
+      fi
+    done
+    if [[ -z "$TARGET_FILE" ]]; then
+      # fallback берём nginx.conf
+      TARGET_FILE="/etc/nginx/nginx.conf"
+    fi
+
+    BACKUP_NAME="${TARGET_FILE}.$(date +%Y%m%d_%H%M%S).bak"
+    log "Выбран файл для модификации: $TARGET_FILE (backup: $BACKUP_NAME)"
+
+    # Определим файл во вложении контейнера или хоста
     if [[ $DOCKER_HAS_NGINX -eq 1 ]]; then
-      docker exec -i "$NGINX_CONTAINER_ID" cp "$TARGET_CONF" "$BACKUP_NAME" || warn "Не удалось сделать backup внутри контейнера"
-      docker exec -i "$NGINX_CONTAINER_ID" /bin/sh -c "printf '%s' \"$INSERT_BLOCK\" >> $TARGET_CONF" || err "Не удалось вставить блоки"
-      docker exec -i "$NGINX_CONTAINER_ID" nginx -t && docker exec -i "$NGINX_CONTAINER_ID" nginx -s reload && ok "Nginx reloaded (docker)" || warn "Проблема reload"
+      docker exec -i "$NGINX_CONTAINER_ID" cp "$TARGET_FILE" "$BACKUP_NAME" || warn "Не удалось backup внутри контейнера"
+      # Извлекаем файл локально
+      docker cp "$NGINX_CONTAINER_ID:$TARGET_FILE" /tmp/ngx_target_work.$$ || { err "Не удалось извлечь $TARGET_FILE"; }
+      WORK_FILE="/tmp/ngx_target_work.$$"
     else
-      cp "$TARGET_CONF" "$BACKUP_NAME" || warn "Не удалось сделать backup"
-      printf '%s' "${INSERT_BLOCK}" >> "$TARGET_CONF" || err "Не удалось изменить $TARGET_CONF"
-      nginx -t && nginx -s reload && ok "Nginx reloaded" || warn "Проблема reload"
+      cp "$TARGET_FILE" "$BACKUP_NAME" || warn "Не удалось сделать backup"
+      WORK_FILE="$TARGET_FILE"
+    fi
+
+    # Пытаемся найти серверный блок для домена
+    if ! grep -q "server_name" "$WORK_FILE"; then
+      warn "В файле нет server_name — вставка будет сделана в конец первого server{}"
+    fi
+
+    # Используем awk для вставки перед завершающей скобкой выбранного блока
+    DOMAIN_REGEX="$DOMAIN"
+    [[ "$DOMAIN" == "127.0.0.1" || "$DOMAIN" == "localhost" ]] && DOMAIN_REGEX="FALLBACK"
+
+    # Создаём файл с меткой блока (stderr от awk выше)
+    # В случае сложности используем простую вставку: ищем строку server_name с доменом и ближайшую закрывающую }
+    if grep -q "$DOMAIN" "$WORK_FILE"; then
+      # Вставка по домену
+      awk -v dom="$DOMAIN" -v insert="$(INSERT_PAYLOAD | sed 's/\\/\\\\/g' | sed ':a;N;$!ba;s/\n/\\n/g')" '
+        BEGIN{srv=0;lvl=0}
+        /server[[:space:]]*{/ { if(!srv){srv=1;lvl=0} }
+        { if(srv){ if($0 ~ dom){mark=1} } }
+        /{/ { if(srv){lvl++} }
+        /}/ { if(srv){lvl--; if(lvl==0){ if(mark){ print insert } srv=0; mark=0 } } }
+        { print $0 }
+      ' "$WORK_FILE" > "$WORK_FILE.new" && mv "$WORK_FILE.new" "$WORK_FILE"
+    else
+      # fallback: первая server{} со слушающим 80
+      awk -v insert="$(INSERT_PAYLOAD | sed 's/\\/\\\\/g' | sed ':a;N;$!ba;s/\n/\\n/g')" '
+        BEGIN{srv=0;lvl=0;done=0}
+        /server[[:space:]]*{/ { if(!srv){srv=1;lvl=0} }
+        /listen[^;]*80/ { if(srv){cand=1} }
+        /{/ { if(srv){lvl++} }
+        /}/ { if(srv){lvl--; if(lvl==0){ if(cand && !done){ print insert; done=1 } srv=0; cand=0 } } }
+        { print $0 }
+      ' "$WORK_FILE" > "$WORK_FILE.new" && mv "$WORK_FILE.new" "$WORK_FILE"
+    fi
+
+    # Возвращаем файл в контейнер (если docker)
+    if [[ $DOCKER_HAS_NGINX -eq 1 ]]; then
+      docker cp "$WORK_FILE" "$NGINX_CONTAINER_ID:$TARGET_FILE" || err "Не удалось вернуть изменённый файл"
+    fi
+
+    # Тест и reload
+    if [[ $DOCKER_HAS_NGINX -eq 1 ]]; then
+      docker exec -i "$NGINX_CONTAINER_ID" nginx -t && docker exec -i "$NGINX_CONTAINER_ID" nginx -s reload && ok "Nginx reloaded (safe insert)" || warn "Reload провалился (docker)"
+    else
+      nginx -t && nginx -s reload && ok "Nginx reloaded (safe insert)" || warn "Reload провалился"
     fi
   fi
 else
