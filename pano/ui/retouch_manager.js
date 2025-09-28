@@ -729,6 +729,11 @@ export default class RetouchManager {
   async applyRetouch(scene) {
     console.log('🎨 Debug RetouchManager: applyRetouch вызван');
     console.log('🎨 Debug RetouchManager: _maskDataUrl:', !!this._maskDataUrl);
+    if (this._applying) {
+      console.warn('⛔ RetouchManager: попытка повторного apply пока предыдущий не завершён');
+      return { applied: false, reason: 'already-applying' };
+    }
+    this._applying = true;
     
     // Пользователь мог нажать "Отмена"
     if (!this._maskDataUrl) {
@@ -1000,6 +1005,7 @@ export default class RetouchManager {
       this._maskDataUrl = null; // Очищаем при ошибке
       throw error;
     } finally {
+      this._applying = false;
       // Сбросим оверлей в любом случае (но не маску - она уже очищена выше)
       if (this.overlay) {
         if (this.overlay._cleanup) this.overlay._cleanup();

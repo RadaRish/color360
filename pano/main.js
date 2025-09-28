@@ -6,6 +6,7 @@ import ViewerManager from './core/viewer_manager.js';
 import HotspotEditor from './ui/hotspot-editor.js';
 import SceneList from './ui/scene_list.js';
 import RetouchManager from './ui/retouch_manager.js';
+import './ui/retouch_watchdog.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const viewerContainer = document.getElementById('viewer-container');
@@ -84,8 +85,17 @@ document.addEventListener('DOMContentLoaded', () => {
       sceneList.render();
 
   // Инициализация ретуши (маска на канвасе + undo)
-  const retouchManager = new RetouchManager(viewerManager, sceneManager);
-  window.app.retouchManager = retouchManager;
+  if (!window.app.retouchManager) {
+    const retouchManager = new RetouchManager(viewerManager, sceneManager);
+    window.app.retouchManager = retouchManager;
+    // Дублируем глобально для сторонних скриптов
+    window.retouchManager = retouchManager;
+    window._retouchManager = retouchManager;
+    try { window.dispatchEvent(new CustomEvent('retouch-manager-ready')); } catch(e){}
+    console.log('🛡 main.js: RetouchManager инициализирован и событие retouch-manager-ready отправлено');
+  } else {
+    console.log('🛡 main.js: повторная попытка создать RetouchManager проигнорирована (уже существует)');
+  }
 
       // Глобальные функции для редактирования и удаления, вызываемые из A-Frame компонентов
       window.editMarker = async (hotspotId) => {
