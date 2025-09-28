@@ -87,6 +87,13 @@ if [[ ! -s "$TMP_NGX_DUMP" ]]; then
   nginx -T > "$TMP_NGX_DUMP" 2>/dev/null || true
 fi
 SERVER_NAME_CANDIDATES=$(grep -E "server_name" "$TMP_NGX_DUMP" | sed -E 's/.*server_name\s+([^;]+);.*/\1/' | tr ' ' '\n' | tr -d '\r' | grep -v '^_$' || true)
+# Попытка достать домен из сертификата, если server_name не найден
+if [[ -z "$SERVER_NAME_CANDIDATES" ]]; then
+  CERT_DOMAIN=$(grep -E "ssl_certificate " "$TMP_NGX_DUMP" | sed -E 's/.*live\/([^/]+)\/fullchain.pem.*/\1/' | head -n1 || true)
+  if [[ -n "$CERT_DOMAIN" && "$CERT_DOMAIN" =~ \.[a-zA-Z]{2,}$ ]]; then
+    SERVER_NAME_CANDIDATES="$CERT_DOMAIN"
+  fi
+fi
 if [[ -z "$DOMAIN" ]]; then
   DOMAIN=$(echo "$SERVER_NAME_CANDIDATES" | grep -E '\.' | head -n1 || true)
 fi
@@ -223,9 +230,8 @@ EOF
     }
 
     # Собираем кандидаты файлов
-    CANDIDATES=(/etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf 2>/dev/null)
     TARGET_FILE=""
-    for f in /etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf; do
+    for f in /etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf /etc/nginx/sites-enabled/*.conf; do
       [[ -f "$f" ]] || continue
       if grep -q "server_name" "$f"; then
         if grep -q "$DOMAIN" "$f"; then TARGET_FILE="$f"; break; fi
@@ -235,6 +241,7 @@ EOF
       # fallback берём nginx.conf
       TARGET_FILE="/etc/nginx/nginx.conf"
     fi
+    log "Файлы-конфиги проверены (pattern: nginx.conf conf.d/*.conf sites-enabled/*.conf). Итоговый выбор: $TARGET_FILE"
 
     BACKUP_NAME="${TARGET_FILE}.$(date +%Y%m%d_%H%M%S).bak"
     log "Выбран файл для модификации: $TARGET_FILE (backup: $BACKUP_NAME)"
