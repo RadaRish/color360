@@ -821,8 +821,9 @@ export default class RetouchManager {
       }
 
       // Отправка на backend, который проксирует в AI
-      const preferredEndpoint = (window && window.__RETOUCH_ENDPOINT) ? window.__RETOUCH_ENDPOINT : '/api/lama/inpaint';
-      const fallbackEndpoint = '/api/retouch';
+  // Первичным делаем /api/retouch (Node proxy), т.к. в проде отсутствует /api/lama/inpaint → 405
+  const preferredEndpoint = (window && window.__RETOUCH_ENDPOINT) ? window.__RETOUCH_ENDPOINT : '/api/retouch';
+  const fallbackEndpoint = '/api/lama/inpaint';
       let endpointUsed = preferredEndpoint;
       // 🔐 Автокоррекция схемы: если страница по HTTPS, а endpoint http:// — переписываем во избежание Mixed Content
       try {
@@ -835,6 +836,13 @@ export default class RetouchManager {
       console.log('🎨 Debug RetouchManager: отправляем запрос на', endpointUsed, '(fallback:', fallbackEndpoint, ')');
       
       const applyStartTs = performance.now();
+      try {
+        console.log('🧪 RetouchManager Diagnostics: FormData keys перед отправкой:', Array.from(fd.keys()));
+        const imgField = fd.get('image');
+        const maskField = fd.get('mask');
+        console.log('🧪 RetouchManager Diagnostics: image exists:', !!imgField, 'mask exists:', !!maskField,
+          'image size ~bytes:', imgField && imgField.size, 'mask size ~bytes:', maskField && maskField.size);
+      } catch(diagErr) { console.warn('🧪 RetouchManager Diagnostics: ошибка чтения FormData', diagErr); }
       let stallTimer = setTimeout(()=>{
         console.warn('⏱️ Warning RetouchManager: fetch ещё не вернулся спустя 30s, возможно зависание backend. endpoint=', endpointUsed);
       }, 30000);
@@ -861,6 +869,10 @@ export default class RetouchManager {
         } else if (resp.status === 500) {
           const errorText = await resp.text().catch(() => 'Unknown server error');
           throw new Error(`Внутренняя ошибка сервера: ${errorText}`);
+        } else if (resp.status === 400) {
+          let details = '';
+          try { details = await resp.text(); } catch(_){}
+          throw new Error('Некорректный запрос (400). Сервер не принял image/mask. Подробности: ' + (details || 'нет деталей'));
         } else {
           throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }
