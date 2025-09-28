@@ -216,7 +216,7 @@ export default class RetouchManager {
     
     console.log('🎨 Debug RetouchManager: временный canvas размер:', tmp.width, 'x', tmp.height);
     
-  const ctx = tmp.getContext('2d', { willReadFrequently: true });
+    const ctx = tmp.getContext('2d');
     ctx.scale(dpr, dpr);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, rect.width, rect.height);
@@ -366,14 +366,17 @@ export default class RetouchManager {
     try {
       const url = URL.createObjectURL(blob);
       const img = new Image();
-      const loaded = new Promise((res) => { img.onload = () => res(true); });
+      const loaded = new Promise((res, rej) => {
+        img.onload = () => res(true);
+        img.onerror = (e) => rej(e);
+      });
       img.src = url;
       await loaded;
       const size = { width: img.naturalWidth || img.width, height: img.naturalHeight || img.height };
       URL.revokeObjectURL(url);
       return size;
     } catch (e) {
-      console.warn('🎨 Warning RetouchManager: не удалось определить размер изображения:', e && e.message);
+  console.warn('🎨 Warning RetouchManager: не удалось определить размер изображения маски:', e && e.message);
       return null;
     }
   }
@@ -383,74 +386,79 @@ export default class RetouchManager {
     try {
       if (!this._savedPolygons || !this._savedPolygons.length) return null;
       const aScene = document.querySelector('a-scene');
-      const cameraEl = aScene && typeof aScene.querySelector === 'function' ? aScene.querySelector('[camera]') : undefined;
+  const cameraEl = aScene && typeof aScene.querySelector === 'function' ? aScene.querySelector('[camera]') : undefined;
       if (!aScene || !cameraEl || typeof THREE === 'undefined') return null;
 
       const camera = cameraEl.getObject3D('camera');
       const renderer = aScene.renderer;
-      const canvas = renderer && renderer.domElement;
-      if (!camera || !renderer || !canvas) return null;
+  const canvas = renderer && renderer.domElement ? renderer.domElement : undefined;
       if (!camera || !renderer || !canvas) return null;
 
-          console.warn(`⚠️ RetouchManager: статус ${resp.status} (original=${originalRespStatus}) от ${endpointUsed}, пробуем JSON fallback /api/retouch-json`);
+      // 🔧 КРИТИЧЕСКИ ВАЖНО: сбрасываем камеру в исходное положение для стабильных координат
+      const originalRotation = camera.rotation.clone();
       const originalPosition = camera.position.clone();
-      const toDeg = (rad) => (THREE && THREE.MathUtils && typeof THREE.MathUtils.radToDeg === 'function')
-        ? THREE.MathUtils.radToDeg(rad)
-        : (rad * 180) / Math.PI;
-      console.log('🎯 Debug RetouchManager: текущая ориентация камеры (deg):',
-        `rotation: pitch:${toDeg(originalRotation.x).toFixed(2)}, yaw:${toDeg(originalRotation.y).toFixed(2)}, roll:${toDeg(originalRotation.z).toFixed(2)}`,
+      console.log('🎯 Debug RetouchManager: сохранили исходную ориентацию камеры:', 
+        `rotation: x:${originalRotation.x.toFixed(3)}, y:${originalRotation.y.toFixed(3)}, z:${originalRotation.z.toFixed(3)}`,
         `position: x:${originalPosition.x.toFixed(3)}, y:${originalPosition.y.toFixed(3)}, z:${originalPosition.z.toFixed(3)}`);
-
-      if (typeof camera.updateWorldMatrix === 'function') {
-        camera.updateWorldMatrix(true, true);
-      } else {
-        camera.updateMatrix();
-        camera.updateMatrixWorld(true);
-      }
+      
+      // Полный сброс камеры
+      camera.position.set(0, 0, 0);
+      camera.rotation.set(0, 0, 0);
+      camera.updateMatrix();
+      camera.updateMatrixWorld(true);
+      
+      // Принудительно обновляем проекционную матрицу
       if (camera.updateProjectionMatrix) {
         camera.updateProjectionMatrix();
       }
+      
+      console.log('🎯 Debug RetouchManager: камера полностью сброшена в исходное состояние');
 
   const sphereRadius = (this.viewerManager && this.viewerManager.coordinateManager && this.viewerManager.coordinateManager.sphereRadius) ? this.viewerManager.coordinateManager.sphereRadius : 10;
-      const sceneRect = canvas.getBoundingClientRect();
-
-      const mappingCamera = camera;
-      const raycaster = new THREE.Raycaster();
-      const ndc = new THREE.Vector2();
-      const sphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), sphereRadius);
-      const intersectionPoint = new THREE.Vector3();
-      const normalVector = new THREE.Vector3();
 
       const screenToUV = (localX, localY) => {
-        // Нормализуем координаты экрана в NDC (Normalized Device Coordinates)
-        const nx = (localX / sceneRect.width) * 2 - 1;
-        const ny = -(localY / sceneRect.height) * 2 + 1;
-
-        ndc.set(nx, ny);
-        raycaster.setFromCamera(ndc, mappingCamera);
-
-        // Проверяем пересечение луча со сферой
-        const ok = raycaster.ray.intersectSphere(sphere, intersectionPoint);
+        const rect = canvas.getBoundingClientRect();
+        // Нормализуем координаты экрана в NDC [-1, 1]
+        const nx = (localX / rect.width) * 2 - 1;
+        const ny = -(localY / rect.height) * 2 + 1;
+        
+        // 🎯 КРИТИЧЕСКИ ВАЖНО: создаем НЕЗАВИСИМУЮ камеру для стабильного маппинга
+        const cleanCamera = new THREE.PerspectiveCamera(80, rect.width / rect.height, 0.1, 1000);
+        cleanCamera.position.set(0, 0, 0);
+        cleanCamera.rotation.set(0, 0, 0);
+        cleanCamera.updateMatrix();
+        cleanCamera.updateMatrixWorld(true);
+        cleanCamera.updateProjectionMatrix();
+        
+        // Создаем луч от независимой камеры
+        const ray = new THREE.Raycaster();
+        ray.setFromCamera(new THREE.Vector2(nx, ny), cleanCamera);
+        
+        // Находим пересечение луча со сферой
+        const intersectionPoint = new THREE.Vector3();
+        const sphere = new THREE.Sphere(new THREE.Vector3(0,0,0), sphereRadius);
+        const ok = ray.ray.intersectSphere(sphere, intersectionPoint);
         if (!ok) return null;
-
-        // Получаем нормализованный вектор точки на сфере
-          const loaded = new Promise((res) => { img.onload = () => res(true); });
-        // 🎯 ИСПРАВЛЕННАЯ СФЕРИЧЕСКАЯ ТРАНСФОРМАЦИЯ
-        // Для эквиректангулярной проекции:
-        // theta - горизонтальный угол (азимут), phi - вертикальный угол (высота)
         
-        // Правильное вычисление углов для панорамы
-        const theta = Math.atan2(normalVector.x, normalVector.z); // Азимут [-π, π]
-        const phi = Math.asin(Math.max(-1, Math.min(1, normalVector.y))); // Высота [-π/2, π/2]
+        // Преобразуем 3D точку в UV координаты эквиректангулярной проекции
+        const n = intersectionPoint.clone().normalize();
         
-        // Преобразуем углы в UV координаты эквиректангулярной проекции
-        // U (горизонталь): theta [-π,π] -> [0,1], при этом 0 соответствует центру спереди
-        let u = 0.5 + theta / (2 * Math.PI);
+        // Правильные формулы для сферической панорамы в A-Frame
+        // В A-Frame: Y вверх, Z к зрителю, X вправо
+        // Для эквиректангулярной проекции нужно учесть начальную ориентацию камеры
         
-        // V (вертикаль): phi [-π/2,π/2] -> [0,1], при этом 0 - верх, 1 - низ
-        let v = 0.5 - phi / Math.PI;
+        // Упрощенное преобразование без учета поворота камеры для стабильности
+        // Используем стандартную сферическую проекцию без корректировок
         
-        // Нормализация и коррекция для wrap-around
+        // Стандартные сферические координаты
+        const theta = Math.atan2(n.x, -n.z); // Azimuth angle (longitude)
+        const phi = Math.acos(-n.y); // Polar angle from -Y axis (colatitude)
+        
+        // Преобразуем в UV координаты эквиректангулярной проекции
+        let u = (theta + Math.PI) / (2 * Math.PI); // theta [-π,π] -> u [0,1]
+        let v = phi / Math.PI; // phi [0,π] -> v [0,1]
+        
+        // Нормализуем U в диапазон [0,1] с учетом wrap-around
         u = ((u % 1) + 1) % 1;
         v = Math.max(0, Math.min(1, v));
         
@@ -458,88 +466,37 @@ export default class RetouchManager {
       };
 
       // Целевая эквирект-маска, которую отправим в AI
-  const mask = document.createElement('canvas');
-  mask.width = targetWidth;
-  mask.height = targetHeight;
-  const mctx = mask.getContext('2d', { willReadFrequently: true });
+      const mask = document.createElement('canvas');
+      mask.width = targetWidth;
+      mask.height = targetHeight;
+      const mctx = mask.getContext('2d');
       mctx.fillStyle = '#000';
       mctx.fillRect(0, 0, targetWidth, targetHeight);
       mctx.fillStyle = '#fff';
 
-      // 🎯 КРИТИЧЕСКИ ВАЖНО: получаем точные координаты renderer canvas
+      // Сцена и сохранённая геометрия overlay
+      const sceneRect = canvas.getBoundingClientRect();
       const ov = this._overlayRect || sceneRect;
-      
-      // Проверяем совпадение overlay и renderer canvas
-      const overlayOffsetX = (ov.left || 0) - (sceneRect.left || 0);
-      const overlayOffsetY = (ov.top || 0) - (sceneRect.top || 0);
-      
       const scaleX = sceneRect.width > 0 && ov.width > 0 ? (sceneRect.width / ov.width) : 1;
       const scaleY = sceneRect.height > 0 && ov.height > 0 ? (sceneRect.height / ov.height) : 1;
-      
       console.log('🎨 Debug RetouchManager: sceneRect=', sceneRect, ' overlayRect=', ov, ' scale=', scaleX.toFixed(4), scaleY.toFixed(4));
-      console.log('🎯 Debug RetouchManager: overlay offset=', overlayOffsetX.toFixed(2), overlayOffsetY.toFixed(2));
-
-      // ================= FAST / SAFE FALLBACK =================
-      // Частая причина зависания: тяжёлый перебор пикселей + getImageData на огромных canvas (6K панорамы).
-      // Для устранения подвисаний вводим быстрый путь: просто масштабируем экранную (screen-space) маску
-      // до размера панорамы без сферического перерасчёта. Даёт достаточную точность для вырезания LaMa,
-      // но в разы быстрее. При необходимости можно отключить: window.__DISABLE_SIMPLE_EQUIRECT = true
-      const simpleEnabled = !(window && window.__DISABLE_SIMPLE_EQUIRECT);
-      if (simpleEnabled) {
-        console.log('⚡ FastMask: используем упрощённую генерацию маски (масштабирование screen -> equirect)');
-        // 1) Построим экранную маску (scr) — код ниже уже это делает, поэтому копируем минимально нужную часть.
-        const scrW = Math.max(1, Math.round(sceneRect.width));
-        const scrH = Math.max(1, Math.round(sceneRect.height));
-        const scr = document.createElement('canvas');
-        scr.width = scrW; scr.height = scrH;
-        const scrCtx = scr.getContext('2d', { willReadFrequently: true });
-        scrCtx.fillStyle = '#000'; scrCtx.fillRect(0,0,scrW,scrH);
-        scrCtx.fillStyle = '#fff';
-        scrCtx.beginPath();
-        let drewAnyFast = false;
-        for (const poly of this._savedPolygons) {
-          if (!poly || poly.length < 3) continue;
-          const sx0 = (poly[0].x - overlayOffsetX);
-          const sy0 = (poly[0].y - overlayOffsetY);
-          scrCtx.moveTo(sx0, sy0);
-          for (let i=1; i<poly.length; i++) {
-            scrCtx.lineTo((poly[i].x - overlayOffsetX), (poly[i].y - overlayOffsetY));
-          }
-          scrCtx.closePath();
-          drewAnyFast = true;
-        }
-        if (drewAnyFast) scrCtx.fill();
-
-        // 2) Масштабируем в целевой размер (без сглаживания, чтобы не размывать края)
-        const mask = document.createElement('canvas');
-        mask.width = targetWidth; mask.height = targetHeight;
-        const mctx = mask.getContext('2d', { willReadFrequently: true });
-        mctx.fillStyle = '#000'; mctx.fillRect(0,0,targetWidth,targetHeight);
-        mctx.imageSmoothingEnabled = false;
-        mctx.drawImage(scr, 0, 0, targetWidth, targetHeight);
-        const fastResult = mask.toDataURL('image/png');
-        console.log('⚡ FastMask: готово (screenMaskScaled) size=', targetWidth+'x'+targetHeight, 'dataUrlLen=', fastResult.length);
-        return fastResult;
-      }
-      // ================= /FAST / SAFE FALLBACK =================
 
       // 1) Построим экранную маску (в координатах renderer canvas) из сохранённых полигонов
       const scrW = Math.max(1, Math.round(sceneRect.width));
       const scrH = Math.max(1, Math.round(sceneRect.height));
-  const scr = document.createElement('canvas');
-  scr.width = scrW; scr.height = scrH;
-  const scrCtx = scr.getContext('2d', { willReadFrequently: true });
+      const scr = document.createElement('canvas');
+      scr.width = scrW; scr.height = scrH;
+      const scrCtx = scr.getContext('2d');
       scrCtx.fillStyle = '#000'; scrCtx.fillRect(0,0,scrW,scrH);
       scrCtx.fillStyle = '#fff';
       scrCtx.beginPath();
       let drewAny = false;
       for (const poly of this._savedPolygons) {
         if (!poly || poly.length < 3) continue;
-        // 🎯 Учитываем offset overlay относительно renderer canvas
-        const sx0 = (poly[0].x - overlayOffsetX) * scaleX, sy0 = (poly[0].y - overlayOffsetY) * scaleY;
+        const sx0 = poly[0].x * scaleX, sy0 = poly[0].y * scaleY;
         scrCtx.moveTo(sx0, sy0);
         for (let i=1; i<poly.length; i++) {
-          scrCtx.lineTo((poly[i].x - overlayOffsetX) * scaleX, (poly[i].y - overlayOffsetY) * scaleY);
+          scrCtx.lineTo(poly[i].x * scaleX, poly[i].y * scaleY);
         }
         scrCtx.closePath();
         drewAny = true;
@@ -547,7 +504,6 @@ export default class RetouchManager {
       if (drewAny) scrCtx.fill();
 
       // 2) Отобразим каждый белый пиксель экранной маски в эквирект с адаптивным сплэтом
-  console.log('⏳ HeavyMask: старт вычисления spherical mapping (может быть тяжело)');
       const scrImg = scrCtx.getImageData(0,0,scrW,scrH);
       const scrData = scrImg.data;
       // Подсчитаем площадь белой маски на экране
@@ -560,71 +516,29 @@ export default class RetouchManager {
       const scaleVF = targetHeight / Math.max(1, sceneRect.height);
       const baseSplat = Math.ceil(Math.min(80, Math.max(8, Math.max(scaleUF, scaleVF) * 1.5))); // Увеличили покрытие
       // Адаптивная дискретизация по бюджету пикселей (не более ~600k рейкастов)
-  const pixelBudget = 150000; // уменьшено для снижения нагрузки
+      const pixelBudget = 600000;
       const step = Math.max(1, Math.floor(Math.sqrt((scrW * scrH) / pixelBudget)));
 
       const optInvertU = !!(options && options.invertU);
       const mapWithSplat = (splat, invertU=false) => {
         mctx.clearRect(0, 0, targetWidth, targetHeight);
-        mctx.fillStyle = '#000'; 
-        mctx.fillRect(0, 0, targetWidth, targetHeight);
-        
+        mctx.fillStyle = '#000'; mctx.fillRect(0, 0, targetWidth, targetHeight);
+        mctx.fillStyle = '#fff';
         let mappedCount = 0;
-        
-        // 🎨 УЛУЧШЕННЫЙ АЛГОРИТМ: Создаем круглую кисть для лучшего качества
-        const createCircularBrush = (radius) => {
-          const size = radius * 2 + 1;
-          const brush = new Array(size * size);
-          const center = radius;
-          
-          for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-              const dx = x - center;
-              const dy = y - center;
-              const distance = Math.sqrt(dx*dx + dy*dy);
-              
-              if (distance <= radius) {
-                // Антиалиасинг: плавный переход от центра к краю
-                const alpha = Math.max(0, 1 - distance / radius);
-                brush[y * size + x] = Math.floor(alpha * 255);
-              } else {
-                brush[y * size + x] = 0;
-              }
-            }
-          }
-          return { data: brush, size, center };
-        };
-        
-        const brush = createCircularBrush(Math.max(1, splat));
-        
         for (let y=0; y<scrH; y+=step) {
           for (let x=0; x<scrW; x+=step) {
             const off = (y*scrW + x) * 4;
             if (scrData[off] < 200 || scrData[off+1] < 200 || scrData[off+2] < 200) continue;
-            
             const uv = screenToUV(x, y);
             if (!uv) continue;
-            
             const uu = (invertU || optInvertU) ? (1 - uv.u) : uv.u;
             const px = Math.floor(uu * targetWidth);
             const py = Math.floor(uv.v * targetHeight);
-            
-            // Применяем круглую кисть
-            for (let by = 0; by < brush.size; by++) {
-              for (let bx = 0; bx < brush.size; bx++) {
-                const brushValue = brush.data[by * brush.size + bx];
-                if (brushValue === 0) continue;
-                
-                const drawX = px - brush.center + bx;
-                const drawY = py - brush.center + by;
-                
-                if (drawX >= 0 && drawX < targetWidth && drawY >= 0 && drawY < targetHeight) {
-                  mctx.fillStyle = `rgb(${brushValue},${brushValue},${brushValue})`;
-                  mctx.fillRect(drawX, drawY, 1, 1);
-                }
-              }
-            }
-            
+            const x0 = Math.max(0, px - splat);
+            const y0 = Math.max(0, py - splat);
+            const x1 = Math.min(targetWidth, px + splat + 1);
+            const y1 = Math.min(targetHeight, py + splat + 1);
+            mctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
             mappedCount++;
           }
         }
@@ -700,7 +614,6 @@ export default class RetouchManager {
         camera.updateProjectionMatrix();
       }
       console.log('🎯 Debug RetouchManager: восстановлена исходная позиция и ориентация камеры');
-  console.log('✅ HeavyMask: вычисление завершено успешно');
 
       return mask.toDataURL('image/png');
     } catch (e) {
@@ -725,19 +638,7 @@ export default class RetouchManager {
 
   async applyRetouch(scene) {
     console.log('🎨 Debug RetouchManager: applyRetouch вызван');
-    if (!this.__versionLogged) {
-      try {
-        const buildMeta = document.querySelector('meta[name="x-build-version"]');
-        console.log('🧾 RetouchManager Build Version:', buildMeta ? buildMeta.getAttribute('content') : 'unknown');
-      } catch(_){}
-      this.__versionLogged = true;
-    }
     console.log('🎨 Debug RetouchManager: _maskDataUrl:', !!this._maskDataUrl);
-    if (this._applying) {
-      console.warn('⛔ RetouchManager: попытка повторного apply пока предыдущий не завершён');
-      return { applied: false, reason: 'already-applying' };
-    }
-    this._applying = true;
     
     // Пользователь мог нажать "Отмена"
     if (!this._maskDataUrl) {
@@ -781,22 +682,16 @@ export default class RetouchManager {
 
       // Добавляем улучшенные настройки AI для высококачественной ретуши панорам
       try {
-        // 🎨 УЛУЧШЕННЫЕ ПАРАМЕТРЫ для панорамных изображений
-        fd.append('prompt', 'remove object completely and seamlessly, fill with natural background texture, photorealistic inpainting, preserve architectural details and perspective, high resolution, detailed restoration, perfect integration');
-        fd.append('negative_prompt', 'object remains visible, incomplete removal, artifacts, seams, blurry edges, spherical distortion, warping, unnatural texture, low quality, pixelated, cartoon, painting, watermark, text, borders');
+        // Специальные параметры для панорамных изображений
+        fd.append('prompt', 'remove object completely, seamless inpainting, natural background restoration, photorealistic result, high quality, detailed texture, preserve architectural details, maintain perspective');
+        fd.append('negative_prompt', 'object visible, incomplete removal, artifacts, blurry, low quality, distorted, seams, borders, unnatural, cartoon, painting, sketch, watermark, text, logo');
+        fd.append('guidance_scale', '12.0'); // Снижен для более естественного результата
+        fd.append('num_inference_steps', '50'); // Увеличен для лучшего качества
+        fd.append('strength', '0.95'); // Немного снижен для сохранения деталей
         
-        // Параметры оптимизированные для архитектурных панорам
-        fd.append('guidance_scale', '15.0'); // Повышен для лучшего следования prompt'у
-        fd.append('num_inference_steps', '75'); // Увеличен для максимального качества  
-        fd.append('strength', '1.0'); // Максимальная сила для полного удаления
-        
-        // LaMa-specific параметры для лучшего качества
-        fd.append('model', 'lama'); // Явно указываем LaMa модель
-        fd.append('device', 'cpu'); // Принудительно CPU для стабильности
-        fd.append('hd_strategy', 'Resize'); // Стратегия для высокого разрешения
-        fd.append('hd_strategy_resize_limit', '4096'); // Лимит для HD обработки
-        fd.append('ldm_steps', '75'); // LDM steps для лучшего качества
-        fd.append('ldm_sampler', 'ddim'); // Лучший сэмплер для архитектуры
+        // Дополнительные параметры для LaMa-cleaner если поддерживаются
+        fd.append('model', 'lama'); // Явно указываем модель
+        fd.append('device', 'auto'); // Автовыбор устройства
         
         // Переопределяем пользовательскими настройками если есть
         if (typeof window.getAISettings === 'function') {
@@ -825,42 +720,10 @@ export default class RetouchManager {
       }
 
       // Отправка на backend, который проксирует в AI
-  // Первичным делаем /api/retouch (Node proxy), т.к. в проде отсутствует /api/lama/inpaint → 405
-  const preferredEndpoint = (window && window.__RETOUCH_ENDPOINT) ? window.__RETOUCH_ENDPOINT : '/api/retouch';
-  const fallbackEndpoint = '/api/lama/inpaint';
-      let endpointUsed = preferredEndpoint;
-      // 🔐 Автокоррекция схемы: если страница по HTTPS, а endpoint http:// — переписываем во избежание Mixed Content
-      try {
-        if (window.location && window.location.protocol === 'https:' && /^http:\/\//i.test(endpointUsed)) {
-          const httpsEndpoint = endpointUsed.replace(/^http:\/\//i,'https://');
-          console.warn('🔐 RetouchManager: endpoint имел небезопасную схему, переписываем', endpointUsed, '→', httpsEndpoint);
-          endpointUsed = httpsEndpoint;
-        }
-      } catch(_){}
-      console.log('🎨 Debug RetouchManager: отправляем запрос на', endpointUsed, '(fallback:', fallbackEndpoint, ')');
+      console.log('🎨 Debug RetouchManager: отправляем запрос на /api/retouch');
       
-      const applyStartTs = performance.now();
-      try {
-        console.log('🧪 RetouchManager Diagnostics: FormData keys перед отправкой:', Array.from(fd.keys()));
-        const imgField = fd.get('image');
-        const maskField = fd.get('mask');
-        console.log('🧪 RetouchManager Diagnostics: image exists:', !!imgField, 'mask exists:', !!maskField,
-          'image size ~bytes:', imgField && imgField.size, 'mask size ~bytes:', maskField && maskField.size);
-      } catch(diagErr) { console.warn('🧪 RetouchManager Diagnostics: ошибка чтения FormData', diagErr); }
-      let stallTimer = setTimeout(()=>{
-        console.warn('⏱️ Warning RetouchManager: fetch ещё не вернулся спустя 30s, возможно зависание backend. endpoint=', endpointUsed);
-      }, 30000);
-      let originalRespStatus = null;
-      let resp = await fetch(endpointUsed, { method: 'POST', body: fd, timeout: 300000 });
-      originalRespStatus = resp.status;
-      if (!resp.ok && endpointUsed !== fallbackEndpoint) {
-        console.warn('🎨 Warning RetouchManager: основной endpoint вернул', resp.status, '- пробуем fallback', fallbackEndpoint);
-        endpointUsed = fallbackEndpoint;
-        resp = await fetch(endpointUsed, { method: 'POST', body: fd, timeout:300000 });
-      }
+      const resp = await fetch('/api/retouch', { method: 'POST', body: fd });
       console.log('🎨 Debug RetouchManager: получен ответ:', resp.status, resp.statusText);
-      clearTimeout(stallTimer);
-      console.log('⏱️ Timing RetouchManager: total fetch duration ms=', Math.round(performance.now()-applyStartTs));
       
       if (!resp.ok) {
         // Обработка специфичных ошибок
@@ -871,41 +734,6 @@ export default class RetouchManager {
         } else if (resp.status === 500) {
           const errorText = await resp.text().catch(() => 'Unknown server error');
           throw new Error(`Внутренняя ошибка сервера: ${errorText}`);
-        } else if (resp.status === 400 || resp.status === 404 || resp.status === 405 || (originalRespStatus === 400 && !resp.ok)) {
-          let details = '';
-          try { details = await resp.text(); } catch(_){}
-          console.warn(`⚠️ RetouchManager: статус ${resp.status} (original=${originalRespStatus}) - пробуем JSON fallback /api/retouch-json`);
-          try {
-            const jsonFallbackBody = JSON.stringify({
-              imageData: this._lastPanoramaDataUrl || null,
-              maskData: maskDataUrlEq || this._maskDataUrl || null,
-              prompt: fd.get('prompt'),
-              negative_prompt: fd.get('negative_prompt'),
-              num_inference_steps: fd.get('num_inference_steps'),
-              guidance_scale: fd.get('guidance_scale'),
-              strength: fd.get('strength')
-            });
-            const jfResp = await fetch('/api/retouch-json', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: jsonFallbackBody,
-              timeout: 300000
-            });
-            console.log('🧪 RetouchManager JSON fallback статус:', jfResp.status);
-            if (jfResp.ok) {
-              // Получим blob и применим как панораму
-              const outBlob = await jfResp.blob();
-              const outUrl = URL.createObjectURL(outBlob);
-              console.log('🧪 RetouchManager: JSON fallback успех, применяем результат');
-              await this._applyResultTexture(outUrl, scene);
-              this._applying = false; this._maskDataUrl = null; return { applied: true, method: 'json-fallback' };
-            } else {
-              let jfTxt = await jfResp.text().catch(()=> '');
-              throw new Error('JSON fallback не сработал ('+jfResp.status+'): '+jfTxt);
-            }
-          } catch(jsonFbErr) {
-            throw new Error('Некорректный multipart (400) и JSON fallback провалился: '+ jsonFbErr.message +' | details: '+ (details || 'нет деталей'));
-          }
         } else {
           throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }
@@ -1058,7 +886,6 @@ export default class RetouchManager {
       this._maskDataUrl = null; // Очищаем при ошибке
       throw error;
     } finally {
-      this._applying = false;
       // Сбросим оверлей в любом случае (но не маску - она уже очищена выше)
       if (this.overlay) {
         if (this.overlay._cleanup) this.overlay._cleanup();
