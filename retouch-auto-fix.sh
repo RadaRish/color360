@@ -86,13 +86,20 @@ fi
 if [[ ! -s "$TMP_NGX_DUMP" ]]; then
   nginx -T > "$TMP_NGX_DUMP" 2>/dev/null || true
 fi
+SERVER_NAME_CANDIDATES=$(grep -E "server_name" "$TMP_NGX_DUMP" | sed -E 's/.*server_name\s+([^;]+);.*/\1/' | tr ' ' '\n' | tr -d '\r' | grep -v '^_$' || true)
 if [[ -z "$DOMAIN" ]]; then
-  # выбираем первый осмысленный server_name не '_'
-  DOMAIN=$(grep -E "server_name" "$TMP_NGX_DUMP" | sed -E 's/.*server_name\s+([^;]+);.*/\1/' | tr ' ' '\n' | grep -v '^_$' | grep -E '\.' | head -n1 || true)
+  DOMAIN=$(echo "$SERVER_NAME_CANDIDATES" | grep -E '\.' | head -n1 || true)
 fi
-[[ -z "$DOMAIN" ]] && DOMAIN="127.0.0.1"
+if [[ -z "$DOMAIN" ]]; then
+  warn "Автоопределение домена не удалось (нет server_name с точкой). Fallback 127.0.0.1"; DOMAIN="127.0.0.1";
+fi
 ok "Используем DOMAIN=$DOMAIN"
 add_summary "DOMAIN=$DOMAIN"
+if [[ -n "$SERVER_NAME_CANDIDATES" ]]; then
+  echo "[diag] server_name кандидаты: $(echo $SERVER_NAME_CANDIDATES | tr '\n' ' ')" | sed 's/  */ /g'
+else
+  echo "[diag] server_name кандидаты: (пусто)"
+fi
 
 # -------------------------------------------------------------
 section "3. Проверка backend процесса"
@@ -248,15 +255,17 @@ EOF
       warn "В файле нет server_name — вставка будет сделана в конец первого server{}"
     fi
 
-    # Используем awk для вставки перед завершающей скобкой выбранного блока
+  # Используем awk для вставки перед завершающей скобкой выбранного блока
     DOMAIN_REGEX="$DOMAIN"
     [[ "$DOMAIN" == "127.0.0.1" || "$DOMAIN" == "localhost" ]] && DOMAIN_REGEX="FALLBACK"
 
     # Создаём файл с меткой блока (stderr от awk выше)
     # В случае сложности используем простую вставку: ищем строку server_name с доменом и ближайшую закрывающую }
+    INSERT_TMP_ESCAPED=$(INSERT_PAYLOAD | sed 's/\\/\\\\/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+
     if grep -q "$DOMAIN" "$WORK_FILE"; then
       # Вставка по домену
-      awk -v dom="$DOMAIN" -v insert="$(INSERT_PAYLOAD | sed 's/\\/\\\\/g' | sed ':a;N;$!ba;s/\n/\\n/g')" '
+      awk -v dom="$DOMAIN" -v insert="$INSERT_TMP_ESCAPED" '
         BEGIN{srv=0;lvl=0}
         /server[[:space:]]*{/ { if(!srv){srv=1;lvl=0} }
         { if(srv){ if($0 ~ dom){mark=1} } }
@@ -266,7 +275,7 @@ EOF
       ' "$WORK_FILE" > "$WORK_FILE.new" && mv "$WORK_FILE.new" "$WORK_FILE"
     else
       # fallback: первая server{} со слушающим 80
-      awk -v insert="$(INSERT_PAYLOAD | sed 's/\\/\\\\/g' | sed ':a;N;$!ba;s/\n/\\n/g')" '
+      awk -v insert="$INSERT_TMP_ESCAPED" '
         BEGIN{srv=0;lvl=0;done=0}
         /server[[:space:]]*{/ { if(!srv){srv=1;lvl=0} }
         /listen[^;]*80/ { if(srv){cand=1} }
@@ -274,6 +283,22 @@ EOF
         /}/ { if(srv){lvl--; if(lvl==0){ if(cand && !done){ print insert; done=1 } srv=0; cand=0 } } }
         { print $0 }
       ' "$WORK_FILE" > "$WORK_FILE.new" && mv "$WORK_FILE.new" "$WORK_FILE"
+    fi
+
+    # Быстрая проверка: убедимся что каждая вставленная location внутри server{}
+    if grep -n "AUTO RETOUCH ROUTING" "$WORK_FILE" >/dev/null 2>&1; then
+      LOC_LINE=$(grep -n "AUTO RETOUCH ROUTING" "$WORK_FILE" | head -n1 | cut -d: -f1)
+      # Считаем количество 'server' до строки и баланс фигурных скобок
+      if [[ -n "$LOC_LINE" ]]; then
+        # Проверяем, что между началом файла и строкой вставки есть хотя бы одно 'server {' и что количество '{' превышает '}' (внутри блока)
+        BEFORE_CONTENT=$(sed -n "1,${LOC_LINE}p" "$WORK_FILE")
+        OPEN_COUNT=$(echo "$BEFORE_CONTENT" | grep -o '{' | wc -l | tr -d ' ')
+        CLOSE_COUNT=$(echo "$BEFORE_CONTENT" | grep -o '}' | wc -l | tr -d ' ')
+        if (( OPEN_COUNT <= CLOSE_COUNT )); then
+          warn "Детектор: вставка может быть вне server{} (OPEN=$OPEN_COUNT CLOSE=$CLOSE_COUNT). Откатываем изменения."
+          if [[ -f "$BACKUP_NAME" ]]; then cp "$BACKUP_NAME" "$WORK_FILE"; fi
+        fi
+      fi
     fi
 
     # Возвращаем файл в контейнер (если docker)
