@@ -482,6 +482,50 @@ export default class RetouchManager {
       console.log('🎨 Debug RetouchManager: sceneRect=', sceneRect, ' overlayRect=', ov, ' scale=', scaleX.toFixed(4), scaleY.toFixed(4));
       console.log('🎯 Debug RetouchManager: overlay offset=', overlayOffsetX.toFixed(2), overlayOffsetY.toFixed(2));
 
+      // ================= FAST / SAFE FALLBACK =================
+      // Частая причина зависания: тяжёлый перебор пикселей + getImageData на огромных canvas (6K панорамы).
+      // Для устранения подвисаний вводим быстрый путь: просто масштабируем экранную (screen-space) маску
+      // до размера панорамы без сферического перерасчёта. Даёт достаточную точность для вырезания LaMa,
+      // но в разы быстрее. При необходимости можно отключить: window.__DISABLE_SIMPLE_EQUIRECT = true
+      const simpleEnabled = !(window && window.__DISABLE_SIMPLE_EQUIRECT);
+      if (simpleEnabled) {
+        console.log('⚡ FastMask: используем упрощённую генерацию маски (масштабирование screen -> equirect)');
+        // 1) Построим экранную маску (scr) — код ниже уже это делает, поэтому копируем минимально нужную часть.
+        const scrW = Math.max(1, Math.round(sceneRect.width));
+        const scrH = Math.max(1, Math.round(sceneRect.height));
+        const scr = document.createElement('canvas');
+        scr.width = scrW; scr.height = scrH;
+        const scrCtx = scr.getContext('2d', { willReadFrequently: true });
+        scrCtx.fillStyle = '#000'; scrCtx.fillRect(0,0,scrW,scrH);
+        scrCtx.fillStyle = '#fff';
+        scrCtx.beginPath();
+        let drewAnyFast = false;
+        for (const poly of this._savedPolygons) {
+          if (!poly || poly.length < 3) continue;
+          const sx0 = (poly[0].x - overlayOffsetX);
+          const sy0 = (poly[0].y - overlayOffsetY);
+          scrCtx.moveTo(sx0, sy0);
+          for (let i=1; i<poly.length; i++) {
+            scrCtx.lineTo((poly[i].x - overlayOffsetX), (poly[i].y - overlayOffsetY));
+          }
+          scrCtx.closePath();
+          drewAnyFast = true;
+        }
+        if (drewAnyFast) scrCtx.fill();
+
+        // 2) Масштабируем в целевой размер (без сглаживания, чтобы не размывать края)
+        const mask = document.createElement('canvas');
+        mask.width = targetWidth; mask.height = targetHeight;
+        const mctx = mask.getContext('2d', { willReadFrequently: true });
+        mctx.fillStyle = '#000'; mctx.fillRect(0,0,targetWidth,targetHeight);
+        mctx.imageSmoothingEnabled = false;
+        mctx.drawImage(scr, 0, 0, targetWidth, targetHeight);
+        const fastResult = mask.toDataURL('image/png');
+        console.log('⚡ FastMask: готово (screenMaskScaled) size=', targetWidth+'x'+targetHeight, 'dataUrlLen=', fastResult.length);
+        return fastResult;
+      }
+      // ================= /FAST / SAFE FALLBACK =================
+
       // 1) Построим экранную маску (в координатах renderer canvas) из сохранённых полигонов
       const scrW = Math.max(1, Math.round(sceneRect.width));
       const scrH = Math.max(1, Math.round(sceneRect.height));
@@ -506,6 +550,7 @@ export default class RetouchManager {
       if (drewAny) scrCtx.fill();
 
       // 2) Отобразим каждый белый пиксель экранной маски в эквирект с адаптивным сплэтом
+  console.log('⏳ HeavyMask: старт вычисления spherical mapping (может быть тяжело)');
       const scrImg = scrCtx.getImageData(0,0,scrW,scrH);
       const scrData = scrImg.data;
       // Подсчитаем площадь белой маски на экране
@@ -518,7 +563,7 @@ export default class RetouchManager {
       const scaleVF = targetHeight / Math.max(1, sceneRect.height);
       const baseSplat = Math.ceil(Math.min(80, Math.max(8, Math.max(scaleUF, scaleVF) * 1.5))); // Увеличили покрытие
       // Адаптивная дискретизация по бюджету пикселей (не более ~600k рейкастов)
-      const pixelBudget = 600000;
+  const pixelBudget = 150000; // уменьшено для снижения нагрузки
       const step = Math.max(1, Math.floor(Math.sqrt((scrW * scrH) / pixelBudget)));
 
       const optInvertU = !!(options && options.invertU);
@@ -658,6 +703,7 @@ export default class RetouchManager {
         camera.updateProjectionMatrix();
       }
       console.log('🎯 Debug RetouchManager: восстановлена исходная позиция и ориентация камеры');
+  console.log('✅ HeavyMask: вычисление завершено успешно');
 
       return mask.toDataURL('image/png');
     } catch (e) {
@@ -770,14 +816,28 @@ export default class RetouchManager {
       }
 
       // Отправка на backend, который проксирует в AI
-      console.log('🎨 Debug RetouchManager: отправляем запрос на /api/retouch');
+      const preferredEndpoint = (window && window.__RETOUCH_ENDPOINT) ? window.__RETOUCH_ENDPOINT : '/api/lama/inpaint';
+      const fallbackEndpoint = '/api/retouch';
+      let endpointUsed = preferredEndpoint;
+      console.log('🎨 Debug RetouchManager: отправляем запрос на', endpointUsed, '(fallback:', fallbackEndpoint, ')');
       
-      const resp = await fetch('/api/retouch', { 
+      const applyStartTs = performance.now();
+      let stallTimer = setTimeout(()=>{
+        console.warn('⏱️ Warning RetouchManager: fetch ещё не вернулся спустя 30s, возможно зависание backend. endpoint=', endpointUsed);
+      }, 30000);
+      let resp = await fetch(endpointUsed, { 
         method: 'POST', 
         body: fd,
         timeout: 300000 // 5 минут
       });
+      if (!resp.ok && endpointUsed !== fallbackEndpoint) {
+        console.warn('🎨 Warning RetouchManager: основной endpoint вернул', resp.status, '- пробуем fallback', fallbackEndpoint);
+        endpointUsed = fallbackEndpoint;
+        resp = await fetch(endpointUsed, { method: 'POST', body: fd, timeout:300000 });
+      }
       console.log('🎨 Debug RetouchManager: получен ответ:', resp.status, resp.statusText);
+      clearTimeout(stallTimer);
+      console.log('⏱️ Timing RetouchManager: total fetch duration ms=', Math.round(performance.now()-applyStartTs));
       
       if (!resp.ok) {
         // Обработка специфичных ошибок
