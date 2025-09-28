@@ -170,9 +170,9 @@ if [[ -z "$HAS_RETOUCH" || -z "$HAS_JSON" ]]; then
       if [[ -f /etc/nginx/conf.d/color360.conf ]]; then TARGET_CONF="/etc/nginx/conf.d/color360.conf"; fi
     fi
     BACKUP_NAME="${TARGET_CONF}.$(date +%Y%m%d_%H%M%S).bak"
+    INSERT_BLOCK=$'\n    # >>> AUTO RETOUCH ROUTING >>>\n    location = /api/retouch {\n        proxy_pass http://color360_backend/api/retouch;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n    location = /api/retouch-json {\n        proxy_pass http://color360_backend/api/retouch-json;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n    # <<< AUTO RETOUCH ROUTING <<<'
     if [[ $DOCKER_HAS_NGINX -eq 1 ]]; then
       docker exec -i "$NGINX_CONTAINER_ID" cp "$TARGET_CONF" "$BACKUP_NAME" || warn "Не удалось сделать backup внутри контейнера"
-      INSERT_BLOCK=$'\n    # >>> AUTO RETOUCH ROUTING >>>\n    location = /api/retouch {\n        proxy_pass http://color360_backend/api/retouch;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n    location = /api/retouch-json {\n        proxy_pass http://color360_backend/api/retouch-json;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n    # <<< AUTO RETOUCH ROUTING <<<'
       docker exec -i "$NGINX_CONTAINER_ID" /bin/sh -c "printf '%s' \"$INSERT_BLOCK\" >> $TARGET_CONF" || err "Не удалось вставить блоки"
       docker exec -i "$NGINX_CONTAINER_ID" nginx -t && docker exec -i "$NGINX_CONTAINER_ID" nginx -s reload && ok "Nginx reloaded (docker)" || warn "Проблема reload"
     else
