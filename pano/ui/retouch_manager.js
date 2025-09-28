@@ -728,6 +728,13 @@ export default class RetouchManager {
 
   async applyRetouch(scene) {
     console.log('🎨 Debug RetouchManager: applyRetouch вызван');
+    if (!this.__versionLogged) {
+      try {
+        const buildMeta = document.querySelector('meta[name="x-build-version"]');
+        console.log('🧾 RetouchManager Build Version:', buildMeta ? buildMeta.getAttribute('content') : 'unknown');
+      } catch(_){}
+      this.__versionLogged = true;
+    }
     console.log('🎨 Debug RetouchManager: _maskDataUrl:', !!this._maskDataUrl);
     if (this._applying) {
       console.warn('⛔ RetouchManager: попытка повторного apply пока предыдущий не завершён');

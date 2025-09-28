@@ -5,7 +5,8 @@ import SceneManager from './core/scene_manager.js';
 import ViewerManager from './core/viewer_manager.js';
 import HotspotEditor from './ui/hotspot-editor.js';
 import SceneList from './ui/scene_list.js';
-import RetouchManager from './ui/retouch_manager.js';
+// Добавлено версионирование для принудительного сброса кеша при обновлениях ретуши
+import RetouchManager from './ui/retouch_manager.js?v=cbbd8db-jsonfb1';
 import './ui/retouch_watchdog.js';
 
 document.addEventListener('DOMContentLoaded', () => {
