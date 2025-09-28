@@ -2651,7 +2651,9 @@
 
     <!-- Подключение модулей -->
   <!-- debug overlay removed -->
-    <script type="module" src="main.js"></script>
+  <!-- URL normalizer (переписывает http→https при необходимости до загрузки основного кода) -->
+  <script src="ui/url_normalizer.js"></script>
+  <script type="module" src="main.js"></script>
     <!-- Стилизованный выпадающий список -->
     <script src="scripts/styled-select.js"></script>
 

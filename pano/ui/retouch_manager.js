@@ -824,6 +824,14 @@ export default class RetouchManager {
       const preferredEndpoint = (window && window.__RETOUCH_ENDPOINT) ? window.__RETOUCH_ENDPOINT : '/api/lama/inpaint';
       const fallbackEndpoint = '/api/retouch';
       let endpointUsed = preferredEndpoint;
+      // 🔐 Автокоррекция схемы: если страница по HTTPS, а endpoint http:// — переписываем во избежание Mixed Content
+      try {
+        if (window.location && window.location.protocol === 'https:' && /^http:\/\//i.test(endpointUsed)) {
+          const httpsEndpoint = endpointUsed.replace(/^http:\/\//i,'https://');
+          console.warn('🔐 RetouchManager: endpoint имел небезопасную схему, переписываем', endpointUsed, '→', httpsEndpoint);
+          endpointUsed = httpsEndpoint;
+        }
+      } catch(_){}
       console.log('🎨 Debug RetouchManager: отправляем запрос на', endpointUsed, '(fallback:', fallbackEndpoint, ')');
       
       const applyStartTs = performance.now();

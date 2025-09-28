@@ -22,6 +22,13 @@ This repository contains a minimal prototype for the main landing page of Color3
    ```
 3. Open http://localhost:3000 in your browser.
 
+### HTTPS / Mixed Content
+
+Если вы запускаете редактор за обратным прокси с включённым HTTPS, убедитесь, что:
+1. Все внешние API вызываются через относительные пути (`/api/...`) или через `https://`.
+2. В `pano/ui/url_normalizer.js` включена автоматическая переконвертация `http://` → `https://` для защиты от Mixed Content.
+3. При необходимости можно задать `window.__API_ORIGIN` до загрузки `main.js`, чтобы форсировать конкретный backend origin.
+
 ## Deploy to VPS
 
 ### 🚀 Установка на VPS
