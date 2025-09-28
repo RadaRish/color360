@@ -390,9 +390,8 @@ export default class RetouchManager {
       const renderer = aScene.renderer;
       const canvas = renderer && renderer.domElement;
       if (!camera || !renderer || !canvas) return null;
-      if (!camera || !renderer || !canvas) return null;
-
-          console.warn(`⚠️ RetouchManager: статус ${resp.status} (original=${originalRespStatus}) от ${endpointUsed}, пробуем JSON fallback /api/retouch-json`);
+      // Сохраняем исходную ориентацию/позицию камеры (на всякий случай - сейчас мы её не меняем, но оставляем для будущих улучшений)
+      const originalRotation = camera.rotation.clone();
       const originalPosition = camera.position.clone();
       const toDeg = (rad) => (THREE && THREE.MathUtils && typeof THREE.MathUtils.radToDeg === 'function')
         ? THREE.MathUtils.radToDeg(rad)
@@ -422,38 +421,19 @@ export default class RetouchManager {
       const normalVector = new THREE.Vector3();
 
       const screenToUV = (localX, localY) => {
-        // Нормализуем координаты экрана в NDC (Normalized Device Coordinates)
-        const nx = (localX / sceneRect.width) * 2 - 1;
-        const ny = -(localY / sceneRect.height) * 2 + 1;
-
+        const nx = (localX / sceneRect.width) * 2 - 1; // [0..w] -> [-1..1]
+        const ny = -(localY / sceneRect.height) * 2 + 1; // [0..h] -> [-1..1] и инвертируем Y
         ndc.set(nx, ny);
         raycaster.setFromCamera(ndc, mappingCamera);
-
-        // Проверяем пересечение луча со сферой
-        const ok = raycaster.ray.intersectSphere(sphere, intersectionPoint);
-        if (!ok) return null;
-
-        // Получаем нормализованный вектор точки на сфере
-          const loaded = new Promise((res) => { img.onload = () => res(true); });
-        // 🎯 ИСПРАВЛЕННАЯ СФЕРИЧЕСКАЯ ТРАНСФОРМАЦИЯ
-        // Для эквиректангулярной проекции:
-        // theta - горизонтальный угол (азимут), phi - вертикальный угол (высота)
-        
-        // Правильное вычисление углов для панорамы
-        const theta = Math.atan2(normalVector.x, normalVector.z); // Азимут [-π, π]
-        const phi = Math.asin(Math.max(-1, Math.min(1, normalVector.y))); // Высота [-π/2, π/2]
-        
-        // Преобразуем углы в UV координаты эквиректангулярной проекции
-        // U (горизонталь): theta [-π,π] -> [0,1], при этом 0 соответствует центру спереди
+        const hit = raycaster.ray.intersectSphere(sphere, intersectionPoint);
+        if (!hit) return null;
+        normalVector.copy(intersectionPoint).normalize();
+        const theta = Math.atan2(normalVector.x, normalVector.z); // горизонт
+        const phi = Math.asin(Math.max(-1, Math.min(1, normalVector.y))); // вертикаль
         let u = 0.5 + theta / (2 * Math.PI);
-        
-        // V (вертикаль): phi [-π/2,π/2] -> [0,1], при этом 0 - верх, 1 - низ
         let v = 0.5 - phi / Math.PI;
-        
-        // Нормализация и коррекция для wrap-around
-        u = ((u % 1) + 1) % 1;
+        u = ((u % 1) + 1) % 1; // wrap
         v = Math.max(0, Math.min(1, v));
-        
         return { u, v };
       };
 
@@ -692,14 +672,15 @@ export default class RetouchManager {
   } catch (e) { console.warn('🎨 Warning RetouchManager: не удалось оценить/исправить площадь маски:', e && e.message); }
 
       // 🔧 Восстанавливаем исходную позицию и ориентацию камеры
-      camera.position.copy(originalPosition);
-      camera.rotation.copy(originalRotation);
-      camera.updateMatrix();
-      camera.updateMatrixWorld(true);
-      if (camera.updateProjectionMatrix) {
-        camera.updateProjectionMatrix();
-      }
-      console.log('🎯 Debug RetouchManager: восстановлена исходная позиция и ориентация камеры');
+      // Камеру мы не меняли (оставили реальную), но на всякий случай откатываем
+      try {
+        camera.position.copy(originalPosition);
+        camera.rotation.copy(originalRotation);
+        camera.updateMatrix();
+        camera.updateMatrixWorld(true);
+        if (camera.updateProjectionMatrix) camera.updateProjectionMatrix();
+        console.log('🎯 Debug RetouchManager: восстановлена исходная позиция и ориентация камеры');
+      } catch(_){ }
   console.log('✅ HeavyMask: вычисление завершено успешно');
 
       return mask.toDataURL('image/png');
@@ -707,17 +688,7 @@ export default class RetouchManager {
   console.warn('🎨 Warning RetouchManager: _exportMaskEquirect failed:', e && e.message);
       
       // 🔧 Восстанавливаем камеру даже в случае ошибки
-      if (typeof originalRotation !== 'undefined' && typeof originalPosition !== 'undefined' && camera) {
-        try {
-          camera.position.copy(originalPosition);
-          camera.rotation.copy(originalRotation);
-          camera.updateMatrix();
-          camera.updateMatrixWorld(true);
-          if (camera.updateProjectionMatrix) {
-            camera.updateProjectionMatrix();
-          }
-        } catch (restoreErr) { /* игнорируем ошибки восстановления */ }
-      }
+      // camera восстановление не критично (мы её не модифицировали), но оставляем блок для совместимости
       
       return null;
     }
