@@ -378,6 +378,33 @@ export default class RetouchManager {
 
   // Пересчёт экранных координат полигона в эквирект-UV и отрисовка маски указанного размера
   async _exportMaskEquirect(targetWidth, targetHeight, options) {
+      // === DEBUG: Визуализация контрольных точек overlay на эквирект-маске ===
+      // Центр overlay
+      const debugPoints = [
+        {x: sceneRect.width/2, y: sceneRect.height/2, color: 'red', label: 'center'},
+        {x: 0, y: 0, color: 'lime', label: 'top-left'},
+        {x: sceneRect.width-1, y: 0, color: 'blue', label: 'top-right'},
+        {x: 0, y: sceneRect.height-1, color: 'yellow', label: 'bottom-left'},
+        {x: sceneRect.width-1, y: sceneRect.height-1, color: 'cyan', label: 'bottom-right'}
+      ];
+      for (const pt of debugPoints) {
+        const uv = screenToUV(pt.x, pt.y);
+        if (uv) {
+          const px = Math.floor(uv.u * targetWidth);
+          const py = Math.floor(uv.v * targetHeight);
+          mctx.save();
+          mctx.beginPath();
+          mctx.arc(px, py, 18, 0, 2 * Math.PI);
+          mctx.fillStyle = pt.color;
+          mctx.globalAlpha = 0.7;
+          mctx.fill();
+          mctx.globalAlpha = 1.0;
+          mctx.font = 'bold 32px sans-serif';
+          mctx.fillStyle = pt.color;
+          mctx.fillText(pt.label, px+20, py+10);
+          mctx.restore();
+        }
+      }
     try {
       if (!this._savedPolygons || !this._savedPolygons.length) return null;
       const aScene = document.querySelector('a-scene');
