@@ -462,43 +462,7 @@ export default class RetouchManager {
       // Для устранения подвисаний вводим быстрый путь: просто масштабируем экранную (screen-space) маску
       // до размера панорамы без сферического перерасчёта. Даёт достаточную точность для вырезания LaMa,
       // но в разы быстрее. При необходимости можно отключить: window.__DISABLE_SIMPLE_EQUIRECT = true
-      const simpleEnabled = !(window && window.__DISABLE_SIMPLE_EQUIRECT);
-      if (simpleEnabled) {
-        console.log('⚡ FastMask: используем упрощённую генерацию маски (масштабирование screen -> equirect)');
-        // 1) Построим экранную маску (scr) — код ниже уже это делает, поэтому копируем минимально нужную часть.
-        const scrW = Math.max(1, Math.round(sceneRect.width));
-        const scrH = Math.max(1, Math.round(sceneRect.height));
-        const scr = document.createElement('canvas');
-        scr.width = scrW; scr.height = scrH;
-        const scrCtx = scr.getContext('2d', { willReadFrequently: true });
-        scrCtx.fillStyle = '#000'; scrCtx.fillRect(0,0,scrW,scrH);
-        scrCtx.fillStyle = '#fff';
-        scrCtx.beginPath();
-        let drewAnyFast = false;
-        for (const poly of this._savedPolygons) {
-          if (!poly || poly.length < 3) continue;
-          const sx0 = (poly[0].x - overlayOffsetX);
-          const sy0 = (poly[0].y - overlayOffsetY);
-          scrCtx.moveTo(sx0, sy0);
-          for (let i=1; i<poly.length; i++) {
-            scrCtx.lineTo((poly[i].x - overlayOffsetX), (poly[i].y - overlayOffsetY));
-          }
-          scrCtx.closePath();
-          drewAnyFast = true;
-        }
-        if (drewAnyFast) scrCtx.fill();
-
-        // 2) Масштабируем в целевой размер (без сглаживания, чтобы не размывать края)
-        const mask = document.createElement('canvas');
-        mask.width = targetWidth; mask.height = targetHeight;
-        const mctx = mask.getContext('2d', { willReadFrequently: true });
-        mctx.fillStyle = '#000'; mctx.fillRect(0,0,targetWidth,targetHeight);
-        mctx.imageSmoothingEnabled = false;
-        mctx.drawImage(scr, 0, 0, targetWidth, targetHeight);
-        const fastResult = mask.toDataURL('image/png');
-        console.log('⚡ FastMask: готово (screenMaskScaled) size=', targetWidth+'x'+targetHeight, 'dataUrlLen=', fastResult.length);
-        return fastResult;
-      }
+      const simpleEnabled = false; // FastMask отключён, всегда используем HeavyMask
       // ================= /FAST / SAFE FALLBACK =================
 
       // 1) Построим экранную маску (в координатах renderer canvas) из сохранённых полигонов
