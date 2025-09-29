@@ -1,5 +1,7 @@
 // Ретушь в редакторе: рисование маски поверх текущей панорамы,
 // отправка изображения+маски на /api/retouch, замена текстуры и undo.
+const DEBUG = false; // production flag: отключаем подробный лог
+
 export default class RetouchManager {
   constructor(viewerManager, sceneManager) {
     this.viewerManager = viewerManager;
@@ -91,7 +93,7 @@ export default class RetouchManager {
     };
     const onDown = (e) => { 
       e.preventDefault(); 
-      console.log('🎨 Debug RetouchManager: mousedown/touchstart'); 
+  if (DEBUG) console.log('RetouchManager: mousedown/touchstart'); 
       this._drawing = true; 
       this._points.push([]); 
       const p=toLocal(e); 
@@ -108,7 +110,7 @@ export default class RetouchManager {
     };
     const onUp = (e) => { 
       if (!this._drawing) return; 
-      console.log('🎨 Debug RetouchManager: mouseup/touchend'); 
+  if (DEBUG) console.log('RetouchManager: mouseup/touchend'); 
       this._drawing = false; 
       this._last = null; 
       this._redraw(); 
@@ -135,8 +137,7 @@ export default class RetouchManager {
 
     // Кнопки
     overlay.querySelector('#retouch-apply').addEventListener('click', (e) => {
-      console.log('🎨 Debug RetouchManager: Нажато "Готово"');
-      console.log('🎨 Debug RetouchManager: _points:', this._points);
+  if (DEBUG) console.log('RetouchManager: click APPLY, points:', this._points?.length);
       
       // Предотвращаем всплытие события и рисование на canvas
       e.preventDefault();
@@ -144,7 +145,7 @@ export default class RetouchManager {
       
       // Если пользователь ничего не нарисовал, создаем тестовую маску в центре
       if (this._points.length === 0 || this._points.every(poly => !poly || poly.length < 2)) {
-        console.log('🎨 Debug RetouchManager: Создаем тестовую маску');
+  if (DEBUG) console.log('RetouchManager: creating test mask');
         const rect = this.canvas.getBoundingClientRect();
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
@@ -161,16 +162,15 @@ export default class RetouchManager {
         }
         this._points = [circle];
         this._redraw();
-        console.log('🎨 Debug RetouchManager: Тестовая маска создана с', circle.length, 'точками');
+  if (DEBUG) console.log('RetouchManager: test mask created');
       }
       
       this._maskDataUrl = this._exportMask();
-      console.log('🎨 Debug RetouchManager: _maskDataUrl установлен:', !!this._maskDataUrl);
-      console.log('🎨 Debug RetouchManager: _maskDataUrl длина:', this._maskDataUrl ? this._maskDataUrl.length : 'null');
+  if (DEBUG) console.log('RetouchManager: mask data prepared');
       this._resolveFinish(true);
     });
     overlay.querySelector('#retouch-cancel').addEventListener('click', (e) => {
-      console.log('🎨 Debug RetouchManager: Нажато "Отмена"');
+  if (DEBUG) console.log('RetouchManager: click CANCEL');
       
       // Предотвращаем всплытие события и рисование на canvas
       e.preventDefault();
@@ -198,9 +198,7 @@ export default class RetouchManager {
   }
 
   _exportMask() {
-    console.log('🎨 Debug RetouchManager: _exportMask вызван');
-    console.log('🎨 Debug RetouchManager: canvas:', !!this.canvas);
-    console.log('🎨 Debug RetouchManager: _points количество:', this._points.length);
+  if (DEBUG) console.log('RetouchManager: _exportMask run');
     
     if (!this.canvas) {
       console.log('🎨 Debug RetouchManager: canvas отсутствует, возвращаем null');
@@ -214,7 +212,7 @@ export default class RetouchManager {
     tmp.width = Math.max(1, Math.floor(rect.width * dpr));
     tmp.height = Math.max(1, Math.floor(rect.height * dpr));
     
-    console.log('🎨 Debug RetouchManager: временный canvas размер:', tmp.width, 'x', tmp.height);
+  if (DEBUG) console.log('RetouchManager: temp canvas:', tmp.width, 'x', tmp.height);
     
   const ctx = tmp.getContext('2d', { willReadFrequently: true });
     ctx.scale(dpr, dpr);
@@ -225,10 +223,10 @@ export default class RetouchManager {
     let drawnPolygons = 0;
     for (const poly of this._points) {
       if (!poly || poly.length < 2) {
-        console.log('🎨 Debug RetouchManager: пропускаем полигон:', poly ? poly.length : 'null');
+  if (DEBUG) console.log('RetouchManager: skip poly');
         continue;
       }
-      console.log('🎨 Debug RetouchManager: рисуем полигон с', poly.length, 'точками');
+  if (DEBUG) console.log('RetouchManager: draw poly');
       ctx.beginPath();
       ctx.moveTo(poly[0].x, poly[0].y);
       for (let i=1;i<poly.length;i++) ctx.lineTo(poly[i].x, poly[i].y);
@@ -237,9 +235,9 @@ export default class RetouchManager {
       drawnPolygons++;
     }
     
-    console.log('🎨 Debug RetouchManager: нарисовано полигонов:', drawnPolygons);
+  if (DEBUG) console.log('RetouchManager: polygons drawn:', drawnPolygons);
     const result = tmp.toDataURL('image/png');
-    console.log('🎨 Debug RetouchManager: результат DataURL длина:', result.length);
+  if (DEBUG) console.log('RetouchManager: mask dataURL ready');
     
     return result;
   }
@@ -266,7 +264,7 @@ export default class RetouchManager {
   }
 
   _teardownOverlay() {
-    console.log('🎨 Debug RetouchManager: _teardownOverlay вызван, _maskDataUrl перед очисткой:', !!this._maskDataUrl);
+  if (DEBUG) console.log('RetouchManager: teardown overlay');
     // Сохраним последние полигоны и геометрию ОПЕРЕЖАЮЩЕ, до удаления из DOM
     try {
       if (Array.isArray(this._points) && this._points.length) {
@@ -291,31 +289,31 @@ export default class RetouchManager {
     this._last = null;
     // НЕ очищаем _maskDataUrl здесь! Она нужна для applyRetouch()
     // this._maskDataUrl = null;
-    console.log('🎨 Debug RetouchManager: _teardownOverlay завершен, _maskDataUrl сохранен:', !!this._maskDataUrl);
+  if (DEBUG) console.log('RetouchManager: overlay removed');
   }
 
   async _getCurrentPanoramaBlob() {
     // Получаем src текущей сцены
     const currentScene = this.sceneManager.getCurrentScene();
   const src = (currentScene && currentScene.src ? currentScene.src : (this.viewerManager && this.viewerManager.currentPanorama ? this.viewerManager.currentPanorama : undefined));
-    console.log('🎨 Debug RetouchManager: _getCurrentPanoramaBlob src:', src ? src.substring(0, 50) + '...' : 'null');
+  if (DEBUG) console.log('RetouchManager: get panorama blob');
     if (!src) throw new Error('Источник панорамы не найден');
 
     if (src.startsWith('data:')) {
       // Конвертируем data: URL напрямую в blob
-      console.log('🎨 Debug RetouchManager: конвертируем data: URL напрямую в blob');
+  if (DEBUG) console.log('RetouchManager: convert dataURL->blob');
       return this._dataURLtoBlob(src);
     }
     
     if (src.startsWith('blob:') || src.startsWith('http')) {
       // Для blob: и http: URLs делаем fetch
-      console.log('🎨 Debug RetouchManager: делаем fetch для blob/http URL');
+  if (DEBUG) console.log('RetouchManager: fetch blob/http');
       const response = await fetch(src);
       return await response.blob();
     }
     
     // Локальный относительный путь - делаем fetch к серверу
-    console.log('🎨 Debug RetouchManager: делаем fetch для относительного пути');
+  if (DEBUG) console.log('RetouchManager: fetch relative');
     const response = await fetch(src);
     return await response.blob();
   }
