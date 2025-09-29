@@ -645,6 +645,17 @@ export default class RetouchManager {
       } catch(_){ }
   console.log('✅ HeavyMask: вычисление завершено успешно');
 
+      // --- DEBUG: автоматическое сохранение маски для визуального контроля ---
+      if (window && window.__DEBUG_SAVE_MASK) {
+        try {
+          const link = document.createElement('a');
+          link.href = mask.toDataURL('image/png');
+          link.download = 'debug_mask.png';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch(e) { console.warn('Не удалось сохранить debug_mask:', e); }
+      }
       return mask.toDataURL('image/png');
     } catch (e) {
   console.warn('🎨 Warning RetouchManager: _exportMaskEquirect failed:', e && e.message);
@@ -658,6 +669,17 @@ export default class RetouchManager {
 
   async applyRetouch(scene) {
     console.log('🎨 Debug RetouchManager: applyRetouch вызван');
+    // --- DEBUG: автоматическое сохранение исходного изображения для контроля ---
+    if (window && window.__DEBUG_SAVE_IMAGE && scene && scene.src && scene.src.startsWith('data:image')) {
+      try {
+        const link = document.createElement('a');
+        link.href = scene.src;
+        link.download = 'debug_image.jpg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch(e) { console.warn('Не удалось сохранить debug_image:', e); }
+    }
     if (!this.__versionLogged) {
       try {
         const buildMeta = document.querySelector('meta[name="x-build-version"]');
