@@ -12,7 +12,7 @@ const cookieParser = require('cookie-parser');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const axios = require('axios');
-const { spawn } = require('child_process');
+const { spawn } = require('child_process'); // optional dev spawn
 const app = express();
 const PORT = process.env.PORT || 3000;
 // Доверяем первому прокси (nginx) для корректного req.ip и заголовков X-Forwarded-For
@@ -21,25 +21,16 @@ app.set('trust proxy', 1);
 // JWT Secret Key
 const JWT_SECRET = process.env.JWT_SECRET || 'color360-super-secure-jwt-secret-key-2025';
 
-// LaMa Inpainting Service Configuration
+// LaMa Inpainting Service Configuration (в проде управляется systemd)
 const LAMA_PORT = process.env.LAMA_PORT || 8080;
 const LAMA_HOST = process.env.LAMA_HOST || '127.0.0.1';
 const LAMA_URL = `http://${LAMA_HOST}:${LAMA_PORT}`;
 const LAMA_ENABLED = process.env.LAMA_ENABLED !== 'false';
+const LAMA_SPAWN_INTERNAL = process.env.LAMA_INTERNAL_SPAWN === 'true';
 let lamaProcess = null;
 let lamaServiceReady = false;
 
-// Backward compatibility
-const AI_PORT = LAMA_PORT;
-const AI_HOST = LAMA_HOST;
-const AI_URL = LAMA_URL;
-const SD_PORT = LAMA_PORT;
-const SD_HOST = LAMA_HOST; 
-const SD_URL = LAMA_URL;
-let aiProcess = null;
-let aiServiceReady = false;
-let sdProcess = null;
-let sdServiceReady = false;
+// (удалено: backward compatibility слои SD/AI)
 
 // Environment check
 const isProduction = process.env.NODE_ENV === 'production';
@@ -290,26 +281,18 @@ async function checkLamaHealth() {
 }
 
 // Backward compatibility functions
-async function startStableDiffusionService() {
-  console.log('🔄 Backward compatibility: запуск LaMa как SD');
-  return startLamaService();
-}
-
-async function checkStableDiffusionHealth() {
-  return checkLamaHealth();
-}
+// (удалено: функции backward compatibility SD)
 
 // Запуск LaMa сервиса при старте
-if (LAMA_ENABLED && process.env.NODE_ENV !== 'production') {
-  console.log('🎯 Запуск LaMa сервиса...');
-  startLamaService().catch(error => {
-    console.error('⚠️ LaMa сервис не запустился:', error.message);
-    console.log('🔄 Продолжаем без AI...');
-  });
-} else if (process.env.NODE_ENV === 'production') {
-  console.log('🎯 Production: LaMa через systemctl');
+if (LAMA_ENABLED) {
+  if (LAMA_SPAWN_INTERNAL) {
+    console.log('🎯 DEV/SPAWN MODE: локальный запуск LaMa (LAMA_INTERNAL_SPAWN=true)');
+    startLamaService().catch(err => console.warn('⚠️ Не удалось локально запустить LaMa:', err.message));
+  } else {
+    console.log('🎯 External LaMa mode (systemd / docker)');
+  }
 } else {
-  console.log('🎯 LaMa отключён');
+  console.log('🎯 LaMa отключена (LAMA_ENABLED=false)');
 }
 
 // ==================== File Upload Configuration ====================
@@ -351,132 +334,9 @@ app.get('/api/lama-health', async (req, res) => {
   }
 });
 
-app.get('/api/sd-health', async (req, res) => {
-  try {
-    const health = await checkLamaHealth();
-    res.json({
-      status: health.healthy ? 'ok' : 'error',
-      service: 'lama-inpainting',
-      compatibility: 'sd-api',
-      error: health.error || null
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      service: 'lama-inpainting',
-      error: error.message
-    });
-  }
-});
+// (удалены sd-health / ai-health; оставлен lama-health как основной)
 
-app.get('/api/ai-health', async (req, res) => {
-  try {
-    const health = await checkLamaHealth();
-    res.json({
-      status: health.healthy ? 'ok' : 'degraded',
-      services: {
-        'lama-inpainting': {
-          status: health.healthy ? 'ok' : 'error',
-          error: health.error || null
-        }
-      }
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      error: error.message
-    });
-  }
-});
-
-// ==================== Inpainting Endpoints ====================
-
-app.post('/api/inpaint', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'mask', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    if (!req.files || !req.files.image || !req.files.mask) {
-      return res.status(400).json({
-        error: 'Требуются файлы image и mask'
-      });
-    }
-
-    const imageFile = req.files.image[0];
-    const maskFile = req.files.mask[0];
-
-    console.log('🎨 Запрос inpainting через LaMa');
-
-    if (!lamaServiceReady) {
-      const health = await checkLamaHealth();
-      if (!health.healthy) {
-        return res.status(503).json({
-          error: 'LaMa сервис недоступен',
-          details: health.error
-        });
-      }
-    }
-
-    // Создаём FormData для Node.js
-    const FormDataNode = require('form-data');
-    const formData = new FormDataNode();
-    
-    formData.append('image', imageFile.buffer, {
-      filename: 'image.jpg',
-      contentType: imageFile.mimetype
-    });
-    
-    formData.append('mask', maskFile.buffer, {
-      filename: 'mask.jpg', 
-      contentType: maskFile.mimetype
-    });
-    
-    // Добавляем параметры для лучшего качества
-    formData.append('prompt', req.body.prompt || 'remove object completely, natural background');
-    formData.append('negative_prompt', req.body.negative_prompt || 'artifacts, blurry, seams');
-    formData.append('num_inference_steps', req.body.num_inference_steps || '25');
-    formData.append('guidance_scale', req.body.guidance_scale || '7.5');
-    formData.append('strength', req.body.strength || '1.0');
-
-    const response = await axios.post(`${LAMA_URL}/inpaint`, formData, {
-      headers: {
-        ...formData.getHeaders(),
-      },
-      responseType: 'arraybuffer',
-      timeout: 120000, // 2 минуты
-    });
-
-    res.set({
-      'Content-Type': 'image/jpeg',
-      'X-Inpaint-Method': response.headers['x-inpaint-method'] || 'lama',
-      'X-Inpaint-Status': response.headers['x-inpaint-status'] || 'success',
-      'X-Processing-Time': response.headers['x-processing-time'] || 'unknown'
-    });
-
-    res.send(response.data);
-    console.log('✅ Inpainting выполнен успешно');
-
-  } catch (error) {
-    console.error('❌ Ошибка inpainting:', error.message);
-    
-    if (error.response) {
-      res.status(error.response.status).json({
-        error: 'Ошибка AI сервиса',
-        details: error.response.data?.detail || error.message
-      });
-    } else if (error.code === 'ECONNREFUSED') {
-      res.status(503).json({
-        error: 'AI сервис недоступен',
-        details: 'Подключение отклонено'
-      });
-    } else {
-      res.status(500).json({
-        error: 'Внутренняя ошибка сервера',
-        details: error.message
-      });
-    }
-  }
-});
+// (удалён отдельный общий inpaint endpoint; используем только /api/retouch)
 
 // Temporary file endpoint for data URL conversion
 app.post('/api/temp-file-from-data', express.text({ limit: '200mb', type: '*/*' }), async (req, res) => {
@@ -740,14 +600,7 @@ app.post('/api/retouch-json', express.json({limit:'220mb'}), async (req, res) =>
   }
 });
 
-// Backward compatibility endpoint
-app.post('/api/sd-inpaint', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'mask', maxCount: 1 }
-]), async (req, res) => {
-  console.log('🔄 SD compatibility redirect to LaMa');
-  return app._router.handle(Object.assign(req, { url: '/api/inpaint' }), res);
-});
+// (удалён sd-inpaint endpoint)
 
 // ==================== User Management (Simplified) ====================
 

@@ -796,8 +796,7 @@ export default class RetouchManager {
       // Отправка на backend, который проксирует в AI
   // Первичным делаем /api/retouch (Node proxy), т.к. в проде отсутствует /api/lama/inpaint → 405
   const preferredEndpoint = (window && window.__RETOUCH_ENDPOINT) ? window.__RETOUCH_ENDPOINT : '/api/retouch';
-  const fallbackEndpoint = '/api/lama/inpaint';
-      let endpointUsed = preferredEndpoint;
+  let endpointUsed = preferredEndpoint;
       // 🔐 Автокоррекция схемы: если страница по HTTPS, а endpoint http:// — переписываем во избежание Mixed Content
       try {
         if (window.location && window.location.protocol === 'https:' && /^http:\/\//i.test(endpointUsed)) {
@@ -806,7 +805,7 @@ export default class RetouchManager {
           endpointUsed = httpsEndpoint;
         }
       } catch(_){}
-      console.log('🎨 Debug RetouchManager: отправляем запрос на', endpointUsed, '(fallback:', fallbackEndpoint, ')');
+  if (DEBUG) console.log('RetouchManager: POST', endpointUsed);
       
       const applyStartTs = performance.now();
       try {
@@ -822,11 +821,7 @@ export default class RetouchManager {
       let originalRespStatus = null;
       let resp = await fetch(endpointUsed, { method: 'POST', body: fd, timeout: 300000 });
       originalRespStatus = resp.status;
-      if (!resp.ok && endpointUsed !== fallbackEndpoint) {
-        console.warn('🎨 Warning RetouchManager: основной endpoint вернул', resp.status, '- пробуем fallback', fallbackEndpoint);
-        endpointUsed = fallbackEndpoint;
-        resp = await fetch(endpointUsed, { method: 'POST', body: fd, timeout:300000 });
-      }
+      if (DEBUG) console.log('RetouchManager: response status', resp.status);
       console.log('🎨 Debug RetouchManager: получен ответ:', resp.status, resp.statusText);
       clearTimeout(stallTimer);
       console.log('⏱️ Timing RetouchManager: total fetch duration ms=', Math.round(performance.now()-applyStartTs));
