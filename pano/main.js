@@ -8,6 +8,7 @@ import SceneList from './ui/scene_list.js';
 // Добавлено версионирование для принудительного сброса кеша при обновлениях ретуши
 import RetouchManager from './ui/retouch_manager.js?v=cbbd8db-jsonfb1';
 import './ui/retouch_watchdog.js';
+import { TRIAL_CONFIG } from './config/trial_features.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const viewerContainer = document.getElementById('viewer-container');
@@ -167,9 +168,10 @@ document.addEventListener('DOMContentLoaded', () => {
             toggle.textContent = sidebar.classList.contains('show') ? '✕' : '☰';
           } else {
             // Десктопное меню
-            sidebar.classList.toggle('hide');
-            const isHidden = sidebar.classList.contains('hide');
-            toggle.textContent = isHidden ? '⮜' : '⮜';
+              sidebar.classList.toggle('hide');
+              const isHidden = sidebar.classList.contains('hide');
+              // Показать стрелку в сторону разворачивания панели
+              toggle.textContent = isHidden ? '⮞' : '⮜';
 
             // Прямое управление позицией кнопки
             if (isHidden) {
@@ -210,7 +212,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('resize', () => {
           if (window.innerWidth > 768) {
             sidebar.classList.remove('show');
-            toggle.textContent = sidebar.classList.contains('hide') ? '⮜' : '⮜';
+            // При ресайзе корректно выставляем иконку: если скрыта — показать вправо для разворачивания
+            toggle.textContent = sidebar.classList.contains('hide') ? '⮞' : '⮜';
           } else {
             sidebar.classList.remove('hide');
             toggle.textContent = sidebar.classList.contains('show') ? '✕' : '☰';
@@ -319,9 +322,25 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Нет активной сцены для добавления хотспота');
             return;
           }
-          // Создаем хотспот в центре экрана
-          const position = '0 0 -5'; // По умолчанию в центре на расстоянии 5 единиц
-          hotspotManager.addHotspot(currentScene.id, 'hotspot', position);
+
+          // Вычисляем позицию в центре текущего вида камеры
+          try {
+            const cam = viewerManager && typeof viewerManager.getCameraPosition === 'function' ? viewerManager.getCameraPosition() : null;
+            let posObj = { x: 0, y: 0, z: -5 };
+            if (cam && viewerManager && viewerManager.coordinateManager && typeof viewerManager.coordinateManager.sphericalToCartesian === 'function') {
+              const deg2rad = Math.PI / 180;
+              const yaw = (cam.rotation && (cam.rotation.y != null)) ? cam.rotation.y * deg2rad : 0;
+              const pitch = (cam.rotation && (cam.rotation.x != null)) ? cam.rotation.x * deg2rad : 0;
+              const radius = viewerManager.coordinateManager.sphereRadius || 10;
+              posObj = viewerManager.coordinateManager.sphericalToCartesian(yaw, pitch, radius);
+            }
+
+            hotspotManager.addHotspot(currentScene, { type: 'hotspot', position: posObj });
+          } catch (err) {
+            console.error('Ошибка при добавлении хотспота в центре вида:', err);
+            // fallback
+            hotspotManager.addHotspot(currentScene, { type: 'hotspot', position: { x: 0, y: 0, z: -5 } });
+          }
         };
       }
       
@@ -332,9 +351,25 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Нет активной сцены для добавления инфоточки');
             return;
           }
-          // Создаем инфоточку в центре экрана
-          const position = '0 0 -5'; // По умолчанию в центре на расстоянии 5 единиц
-          hotspotManager.addHotspot(currentScene.id, 'info-point', position);
+
+          // Вычисляем позицию в центре текущего вида камеры
+          try {
+            const cam = viewerManager && typeof viewerManager.getCameraPosition === 'function' ? viewerManager.getCameraPosition() : null;
+            let posObj = { x: 0, y: 0, z: -5 };
+            if (cam && viewerManager && viewerManager.coordinateManager && typeof viewerManager.coordinateManager.sphericalToCartesian === 'function') {
+              const deg2rad = Math.PI / 180;
+              const yaw = (cam.rotation && (cam.rotation.y != null)) ? cam.rotation.y * deg2rad : 0;
+              const pitch = (cam.rotation && (cam.rotation.x != null)) ? cam.rotation.x * deg2rad : 0;
+              const radius = viewerManager.coordinateManager.sphereRadius || 10;
+              posObj = viewerManager.coordinateManager.sphericalToCartesian(yaw, pitch, radius);
+            }
+
+            hotspotManager.addHotspot(currentScene, { type: 'info-point', position: posObj });
+          } catch (err) {
+            console.error('Ошибка при добавлении инфоточки в центре вида:', err);
+            // fallback
+            hotspotManager.addHotspot(currentScene, { type: 'info-point', position: { x: 0, y: 0, z: -5 } });
+          }
         };
       }
 
@@ -413,6 +448,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const saveProjectBtn = document.getElementById('save-project');
       if (saveProjectBtn) {
         saveProjectBtn.onclick = () => {
+          // Если триальная версия — показываем уведомление и не сохраняем
+          if (TRIAL_CONFIG?.isTrialVersion) {
+            window.app?.showNotification?.('Функция сохранения проекта будет доступна в следующей версии редактора панорамных туров ColoR.', 'info');
+            return;
+          }
+
           saveLocalProject();
         };
       }
@@ -1019,9 +1060,17 @@ function updateFloatingUserMenu() {
     `;
     
     // Add event listeners for menu items
-  document.getElementById('new-project-btn')?.addEventListener('click', createNewProject);
-  document.getElementById('save-server-project-btn')?.addEventListener('click', async () => { await createNewServerProject(); floatingUserDropdown.classList.remove('open'); });
-  document.getElementById('save-local-project-logged-btn')?.addEventListener('click', () => { saveLocalProject(); floatingUserDropdown.classList.remove('open'); });
+    document.getElementById('new-project-btn')?.addEventListener('click', createNewProject);
+        // Guard server-side saving in trial mode
+        if (TRIAL_CONFIG?.isTrialVersion) {
+          document.getElementById('save-server-project-btn')?.addEventListener('click', async () => { window.app?.showNotification?.('Функция сохранения проекта на сервере будет доступна в следующей версии редактора панорамных туров ColoR.', 'info'); floatingUserDropdown.classList.remove('open'); });
+        } else {
+          document.getElementById('save-server-project-btn')?.addEventListener('click', async () => { await createNewServerProject(); floatingUserDropdown.classList.remove('open'); });
+        }
+  document.getElementById('save-local-project-logged-btn')?.addEventListener('click', () => { 
+    if (TRIAL_CONFIG?.isTrialVersion) { window.app?.showNotification?.('Функция сохранения проекта будет доступна в следующей версии редактора панорамных туров ColoR.', 'info'); floatingUserDropdown.classList.remove('open'); return; }
+    saveLocalProject(); floatingUserDropdown.classList.remove('open');
+  });
   document.getElementById('load-local-project-logged-btn')?.addEventListener('click', () => { loadLocalProject(); floatingUserDropdown.classList.remove('open'); });
   document.getElementById('load-server-project-btn')?.addEventListener('click', loadServerProjects);
   document.getElementById('logout-btn')?.addEventListener('click', logoutUser);
@@ -1039,7 +1088,10 @@ function updateFloatingUserMenu() {
     // Add event listeners for menu items
     document.getElementById('login-btn')?.addEventListener('click', showLoginModal);
     document.getElementById('register-btn')?.addEventListener('click', showRegisterModal);
-    document.getElementById('save-local-project-btn')?.addEventListener('click', () => { saveLocalProject(); floatingUserDropdown.classList.remove('open'); });
+    document.getElementById('save-local-project-btn')?.addEventListener('click', () => { 
+      if (TRIAL_CONFIG?.isTrialVersion) { window.app?.showNotification?.('Функция сохранения проекта будет доступна в следующей версии редактора панорамных туров ColoR.', 'info'); floatingUserDropdown.classList.remove('open'); return; }
+      saveLocalProject(); floatingUserDropdown.classList.remove('open');
+    });
     document.getElementById('load-local-project-btn')?.addEventListener('click', () => { loadLocalProject(); floatingUserDropdown.classList.remove('open'); });
     document.getElementById('export-tour-btn')?.addEventListener('click', () => { exportTour(); floatingUserDropdown.classList.remove('open'); });
   }
