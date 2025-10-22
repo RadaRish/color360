@@ -1,6 +1,7 @@
 import CoordinateManager from './coordinate_manager.js';
 import ModernMarkerGenerator from './modern_marker_generator.js';
 import { integrateCameraRollProtection } from './camera_roll_protection.js';
+import TRIAL_CONFIG from '../config/trial_features.js';
 
 export default class ViewerManager {
   constructor(containerId, hotspotManager) {
@@ -468,7 +469,12 @@ export default class ViewerManager {
                 // НЕ ВЫЗЫВАЕМ switchToScene здесь - это делает DOM обработчик с защитой!
                 // window.sceneManager.switchToScene(hotspot.targetSceneId);
               } else if (hotspot.type === 'info-point') {
-
+                // В триальной версии отключаем всплывающее окно инфоточки
+                try {
+                  if (typeof TRIAL_CONFIG !== 'undefined' && TRIAL_CONFIG?.markers?.infoPointPopup === false) {
+                    return;
+                  }
+                } catch {}
                 window.viewerManager.showInfoPointModal(hotspot);
               } else if (hotspot.type === 'video-area') {
                 // Обработка уже выполнена в блоке выше для data.hotspotType === 'video-area'
@@ -2007,6 +2013,13 @@ export default class ViewerManager {
     // Обработка правого клика для контекстного меню
     this.container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      
+      // Проверяем, включено ли контекстное меню в триальной версии
+      if (!TRIAL_CONFIG.ui.contextMenu) {
+        // В триальной версии контекстное меню отключено
+        return;
+      }
+      
       this.showContextMenu(e.clientX, e.clientY, e);
     });
 

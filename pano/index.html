@@ -182,6 +182,13 @@
         background: #000;
         overflow: hidden;
         z-index: 1;
+        transition: left 0.3s ease, width 0.3s ease;
+      }
+
+      /* Когда панель скрыта, viewer занимает всю ширину */
+      #sidebar.hide ~ #viewer-container {
+        left: 0;
+        width: 100vw;
       }
 
       .custom-context-menu {
@@ -332,6 +339,12 @@
         display: flex;
         flex-direction: column;
         transform: translateX(0);
+        transition: transform 0.3s ease;
+      }
+
+      /* Скрываем панель влево при добавлении класса hide */
+      #sidebar.hide {
+        transform: translateX(-100%);
       }
 
   /* debug overlay removed */
@@ -1828,12 +1841,17 @@
       #floating-user-dropdown .divider { height:1px; background:rgba(255,255,255,0.04); margin:8px 0; }
       #floating-user-dropdown button { width:100%; margin:6px 0; padding:8px 10px; border-radius:6px; background:transparent; border:1px solid rgba(255,255,255,0.04); color:#fff; cursor:pointer; }
       #floating-user-dropdown a { color:#9fb1ff; text-decoration:none; display:block; margin:6px 0; }
+
+      /* Стили для триальной версии */
+      .trial-hidden {
+        display: none !important;
+      }
     </style>
   </head>
   <body>
     <div class="app-container">
 
-      <div id="floating-user-button" title="Пользователь">
+      <div id="floating-user-button" title="Пользователь" class="trial-hidden">
         <!-- портретная фигура человечка -->
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1841,7 +1859,7 @@
         </svg>
       </div>
 
-  <div id="floating-user-dropdown" role="menu"></div>
+  <div id="floating-user-dropdown" role="menu" class="trial-hidden"></div>
   <!-- скрытый input для загрузки аватара -->
   <!-- ВРЕМЕННО ОТКЛЮЧЕНО: возможность загрузки пользовательской иконки на аватар -->
   <!-- <input type="file" id="avatar-input" accept="image/*" class="hidden" /> -->
@@ -1968,7 +1986,7 @@
               id="fullscreen-btn"
               type="button"
               title="Полный экран"
-              class="icon-btn modern-icon-btn"
+              class="icon-btn modern-icon-btn trial-hidden"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path
@@ -2012,7 +2030,7 @@
             <button
               id="clear-camera-view-btn"
               type="button"
-              class="icon-btn modern-icon-btn"
+              class="icon-btn modern-icon-btn trial-hidden"
               title="Очистить вид камеры для сцены"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -2083,7 +2101,7 @@
             <button
               id="retouch-btn"
               type="button"
-              class="icon-btn modern-icon-btn"
+              class="icon-btn modern-icon-btn trial-hidden"
               title="Удалить объект (ретушь)"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -2094,13 +2112,39 @@
             <button
               id="retouch-undo-btn"
               type="button"
-              class="icon-btn modern-icon-btn"
+              class="icon-btn modern-icon-btn trial-hidden"
               title="Отменить последнюю ретушь"
               disabled
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path d="M9 14H5l4-4l4 4H9z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>
                 <path d="M20 20a8 8 0 1 0-6-13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            
+            <!-- Кнопки добавления маркеров (для триальной версии) -->
+            <button
+              id="add-hotspot-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Добавить хотспот"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button
+              id="add-infopoint-btn"
+              type="button"
+              class="icon-btn modern-icon-btn"
+              title="Добавить инфоточку"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="8" r="0.5" fill="currentColor" stroke="currentColor" stroke-width="1"/>
               </svg>
             </button>
 
@@ -2198,8 +2242,8 @@
             </svg>
             Выбрать панорамы
           </button>
-          <div class="upload-divider"></div>
-          <button id="load-project-btn" type="button" class="btn-secondary">
+          <div class="upload-divider trial-hidden"></div>
+          <button id="load-project-btn" type="button" class="btn-secondary trial-hidden">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path
                 d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
@@ -2293,8 +2337,10 @@
                   id="hotspot-title"
                   name="title"
                   required
+                  maxlength="25"
                   placeholder="Введите название..."
                 />
+                <div class="help-text">Максимум 25 символов</div>
               </div>
 
               <div class="form-group form-group-description">
@@ -2303,8 +2349,10 @@
                   id="hotspot-description"
                   name="description"
                   rows="3"
+                  maxlength="250"
                   placeholder="Опишите точку..."
                 ></textarea>
+                <div class="help-text">Максимум 250 символов (автоматический перенос строк через каждые 36 символов)</div>
               </div>
 
               <div class="form-group form-group-target-scene">
@@ -2412,7 +2460,7 @@
                 <select id="hotspot-marker-icon" name="markerIcon">
                   <option value="arrow">🔺 Переход между сценами</option>
                   <option value="sphere">ℹ️ Инфоточка</option>
-                  <option value="custom">🖼️ Собственная иконка</option>
+                  <option value="custom" class="trial-hidden">🖼️ Собственная иконка</option>
                 </select>
               </div>
 
@@ -2430,7 +2478,7 @@
               </div>
 
               <div
-                class="form-group form-group-custom-icon"
+                class="form-group form-group-custom-icon trial-hidden"
                 id="custom-icon-group"
                 style="display: none"
               >

@@ -308,6 +308,36 @@ document.addEventListener('DOMContentLoaded', () => {
         };
       }
 
+      // Кнопки добавления маркеров (для триальной версии)
+      const addHotspotBtn = document.getElementById('add-hotspot-btn');
+      const addInfopointBtn = document.getElementById('add-infopoint-btn');
+      
+      if (addHotspotBtn) {
+        addHotspotBtn.onclick = () => {
+          const currentScene = sceneManager.getCurrentScene();
+          if (!currentScene) {
+            alert('Нет активной сцены для добавления хотспота');
+            return;
+          }
+          // Создаем хотспот в центре экрана
+          const position = '0 0 -5'; // По умолчанию в центре на расстоянии 5 единиц
+          hotspotManager.addHotspot(currentScene.id, 'hotspot', position);
+        };
+      }
+      
+      if (addInfopointBtn) {
+        addInfopointBtn.onclick = () => {
+          const currentScene = sceneManager.getCurrentScene();
+          if (!currentScene) {
+            alert('Нет активной сцены для добавления инфоточки');
+            return;
+          }
+          // Создаем инфоточку в центре экрана
+          const position = '0 0 -5'; // По умолчанию в центре на расстоянии 5 единиц
+          hotspotManager.addHotspot(currentScene.id, 'info-point', position);
+        };
+      }
+
       // Кнопка установки вида камеры
       const setCameraViewBtn = document.getElementById('set-camera-view-btn');
       if (setCameraViewBtn) {

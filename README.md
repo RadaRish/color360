@@ -59,10 +59,19 @@ curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps-r
 ```
 
 ### 📚 Подробная документация
-- [INSTALL-UPDATE-GUIDE.md](INSTALL-UPDATE-GUIDE.md) — полная инструкция по установке и обновлению
-- [README-DEPLOY.md](README-DEPLOY.md) — подробные инструкции по развертыванию (English)
-- [INSTALL-RU.md](INSTALL-RU.md) — инструкции на русском языке
-- [INSTALL-REG-RU.md](INSTALL-REG-RU.md) — развертывание на reg.ru хостинге
+
+Основная документация находится в каталоге [`docs/`](docs/):
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — развёртывание на VPS
+- [docs/DEPLOYMENT-PRODUCTION.md](docs/DEPLOYMENT-PRODUCTION.md) — production deployment
+- [docs/PRODUCTION-INSTALL-GUIDE.md](docs/PRODUCTION-INSTALL-GUIDE.md) — production install guide
+- [docs/LAMA-SETUP.md](docs/LAMA-SETUP.md) — настройка LaMa AI для ретуши
+- [docs/AI-SETUP-GUIDE.md](docs/AI-SETUP-GUIDE.md) — AI setup guide
+- [docs/TRIAL-VERSION-GUIDE.md](docs/TRIAL-VERSION-GUIDE.md) — настройка триальной версии
+- [docs/INSTALL.md](docs/INSTALL.md) — установка панорамного редактора
+- [docs/DEPLOY.md](docs/DEPLOY.md) — развёртывание редактора
+- [docs/ARCHITECTURE_PLAN.md](docs/ARCHITECTURE_PLAN.md) — архитектура приложения
+
+Устаревшие версии и справочные материалы → [`docs/legacy/`](docs/legacy/)
 
 ### ⚡ Обновления
 ```bash
@@ -71,10 +80,9 @@ curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/update-vps.s
 
 # Быстрое обновление (только код)
 curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/quick-update.sh | sudo bash
-
-# Диагностика системы
-curl -fsSL https://raw.githubusercontent.com/RadaRish/color360/main/diagnostic-system.sh | bash
 ```
+
+**Примечание:** диагностические и emergency-скрипты перемещены в `archive/2025-10-22-extended/` для сохранения порядка. Актуальные установочные скрипты остаются в корне репозитория.
 
 **Особенности развертывания:**
 - Docker конфигурация для основного сайта и панорамного редактора

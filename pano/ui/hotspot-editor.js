@@ -1,4 +1,6 @@
 // UI-компонент: редактор хотспотов
+import TRIAL_CONFIG from '../config/trial_features.js';
+
 export default class HotspotEditor {
   constructor(modalId) {
     this.modalId = modalId;
@@ -82,6 +84,33 @@ export default class HotspotEditor {
     // Удален слайдер для размера текста — используется select
 
     // Удален слайдер для размера маркера — используется select
+    
+    // Обработчик для автоматического переноса строк в описании (триальная версия)
+    const descriptionField = this.form.querySelector('#hotspot-description');
+    if (descriptionField && TRIAL_CONFIG.isTrialVersion) {
+      descriptionField.addEventListener('input', (e) => {
+        this.formatDescription(e.target);
+      });
+    }
+  }
+
+  /**
+   * Форматирует описание с автоматическим переносом строк через каждые 36 символов
+   */
+  formatDescription(textarea) {
+    const maxLineLength = TRIAL_CONFIG.markers.limits.descriptionLineMaxLength || 36;
+    const maxTotal = TRIAL_CONFIG.markers.limits.descriptionMaxLength || 250;
+    
+    let text = textarea.value;
+    
+    // Ограничиваем общее количество символов
+    if (text.length > maxTotal) {
+      text = text.substring(0, maxTotal);
+      textarea.value = text;
+    }
+    
+    // Примечание: автоматический перенос строк будет обрабатываться при отображении
+    // В поле ввода пользователь может вводить текст свободно
   }
 
   /**
@@ -389,6 +418,12 @@ export default class HotspotEditor {
       icon: formData.get('markerIcon') || (this.currentType === 'hotspot' ? 'arrow' : 'sphere'),
       noFill: !!formData.get('markerNoFill')
     };
+
+    // Проверка: для хотспота обязательно должна быть выбрана сцена для перехода
+    if (this.currentType === 'hotspot' && (!data.targetSceneId || data.targetSceneId === '' || data.targetSceneId === 'null')) {
+      alert('Выберите сцену для перехода! Хотспот не будет создан.');
+      return;
+    }
 
     console.log('📝 Payload формы хотспота:', {
       type: this.currentType,

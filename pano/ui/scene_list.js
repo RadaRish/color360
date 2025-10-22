@@ -1,4 +1,6 @@
 // UI-компонент: список сцен с поддержкой drag&drop и контекстного меню
+import TRIAL_CONFIG from '../config/trial_features.js';
+
 export default class SceneList {
   constructor(sceneManager, listElement) {
     this.sceneManager = sceneManager;
@@ -140,9 +142,11 @@ export default class SceneList {
     menu.style.left = (rect.right + 5) + 'px';
     menu.style.top = rect.top + 'px';
 
+    // Формируем пункты меню с учетом триального режима (скрываем "Дублировать")
+    const duplicateItem = (TRIAL_CONFIG && TRIAL_CONFIG.isTrialVersion) ? '' : '<button data-action="duplicate">Дублировать</button>';
     menu.innerHTML = `
       <button data-action="rename">Переименовать</button>
-      <button data-action="duplicate">Дублировать</button>
+      ${duplicateItem}
       <button data-action="delete" class="danger">Удалить</button>
     `;
 
@@ -161,10 +165,14 @@ export default class SceneList {
       this.hideSceneMenu();
     });
 
-    menu.querySelector('[data-action="duplicate"]').addEventListener('click', () => {
-      this.duplicateScene(scene);
-      this.hideSceneMenu();
-    });
+    // Обработчик дублирования только если пункт существует (не триальная версия)
+    const dupBtn = menu.querySelector('[data-action="duplicate"]');
+    if (dupBtn) {
+      dupBtn.addEventListener('click', () => {
+        this.duplicateScene(scene);
+        this.hideSceneMenu();
+      });
+    }
 
     menu.querySelector('[data-action="delete"]').addEventListener('click', () => {
       this.deleteScene(scene);
