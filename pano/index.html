@@ -418,7 +418,7 @@
         transform: scale(1.05);
       }
 
-      .letter-c {
+      .letter-p {
         color: #ff6b6b;
         animation-delay: 0s;
         background: linear-gradient(45deg, #ff4757, #ff3838, #ff6b6b);
@@ -429,29 +429,40 @@
         animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite;
       }
 
-      .letter-o {
+      .letter-a {
         color: #4ecdc4;
-        animation-delay: 0.2s;
+        animation-delay: 0.15s;
         background: linear-gradient(45deg, #00d2d3, #01a3a4, #4ecdc4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
         background-size: 200% 200%;
-        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 0.8s;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 0.6s;
       }
 
-      .letter-l {
+      .letter-n {
         color: #45b7d1;
-        animation-delay: 0.4s;
+        animation-delay: 0.3s;
         background: linear-gradient(45deg, #3742fa, #2f3542, #45b7d1);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
         background-size: 200% 200%;
-        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 1.6s;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 1.2s;
       }
 
-      .letter-o2 {
+      .letter-o {
+        color: #4ecdc4;
+        animation-delay: 0.45s;
+        background: linear-gradient(45deg, #00d2d3, #01a3a4, #4ecdc4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        background-size: 200% 200%;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 1.8s;
+      }
+
+      .letter-b {
         color: #f093fb;
         animation-delay: 0.6s;
         background: linear-gradient(45deg, #f093fb, #f5576c, #ff9ff3);
@@ -464,13 +475,24 @@
 
       .letter-r {
         color: #feca57;
-        animation-delay: 0.8s;
+        animation-delay: 0.75s;
         background: linear-gradient(45deg, #feca57, #ff9ff3, #48cae4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
         background-size: 200% 200%;
-        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 3.2s;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 3s;
+      }
+
+      .letter-o2 {
+        color: #f093fb;
+        animation-delay: 0.9s;
+        background: linear-gradient(45deg, #f093fb, #f5576c, #ff9ff3);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        background-size: 200% 200%;
+        animation: letterFloat 3s ease-in-out infinite, colorShift 4s ease-in-out infinite 3.6s;
       }
 
       @keyframes colorShift {
@@ -2307,11 +2329,13 @@
     <!-- Прогресс-бар -->
     <div id="futuristic-progress">
       <div class="color-logo">
-        <span class="logo-letter letter-c" data-letter="C">C</span>
+        <span class="logo-letter letter-p" data-letter="P">P</span>
+        <span class="logo-letter letter-a" data-letter="a">a</span>
+        <span class="logo-letter letter-n" data-letter="n">n</span>
         <span class="logo-letter letter-o" data-letter="o">o</span>
-        <span class="logo-letter letter-l" data-letter="l">l</span>
+        <span class="logo-letter letter-b" data-letter="B">B</span>
+        <span class="logo-letter letter-r" data-letter="r">r</span>
         <span class="logo-letter letter-o2" data-letter="o">o</span>
-        <span class="logo-letter letter-r" data-letter="R">R</span>
       </div>
       <span class="label" data-text="Загрузка панорам..."
         >Загрузка панорам...</span
@@ -2446,9 +2470,9 @@
                 <div class="form-group">
                   <label for="hotspot-marker-size">Размер маркера</label>
                   <select id="hotspot-marker-size" name="markerSize">
-                    <option value="0.4">Маленький</option>
-                    <option value="0.6" selected>Обычный</option>
-                    <option value="0.8">Крупный</option>
+                    <option value="0.2">Маленький</option>
+                    <option value="0.3" selected>Обычный</option>
+                    <option value="0.4">Крупный</option>
                     <option value="1.0">Очень крупный</option>
                     <option value="1.4">Гигант</option>
                   </select>

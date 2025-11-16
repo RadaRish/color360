@@ -66,10 +66,11 @@ export default class CoordinateManager {
 
   /**
    * Конвертирует 3D координаты в сферические (как в PSV)
+   * ВАЖНО: учитываем инверсию Z для A-Frame системы координат
    */
   cartesianToSpherical(x, y, z) {
     const radius = Math.sqrt(x * x + y * y + z * z);
-    const yaw = Math.atan2(x, z);
+    const yaw = Math.atan2(x, -z);  // Инверсия Z для A-Frame
     const pitch = Math.asin(y / radius);
 
     return {
@@ -81,11 +82,13 @@ export default class CoordinateManager {
 
   /**
    * Конвертирует сферические координаты в 3D
+   * ВАЖНО: в A-Frame камера по умолчанию смотрит на -Z (назад),
+   * поэтому инвертируем Z чтобы маркер появлялся там куда смотрит камера
    */
   sphericalToCartesian(yaw, pitch, radius = this.sphereRadius) {
     const x = radius * Math.sin(yaw) * Math.cos(pitch);
     const y = radius * Math.sin(pitch);
-    const z = radius * Math.cos(yaw) * Math.cos(pitch);
+    const z = -radius * Math.cos(yaw) * Math.cos(pitch);  // Инверсия Z для A-Frame
 
     return { x, y, z };
   }

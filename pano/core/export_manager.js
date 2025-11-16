@@ -1738,39 +1738,38 @@ class TourViewer {
             hotspotEl.appendChild(collider);
             // Idle-анимация убрана для 1:1 с редактором; оставляем только hover-скейл в обработчике
         } else if (hotspot.icon === 'sphere' || hotspot.type === 'info-point' || hotspot.type === 'infopoint') {
-            // Информационная точка - создаем SVG маркер с "i" иконкой
+            // Информационная точка - используем PNG иконку БЕЗ ПЕРЕКРАСКИ
             shape = document.createElement('a-plane');
-            const svgData = this.createModernInfoSVG(hotspot.color || '#0099ff', size, { noFill: !!hotspot.noFill });
-            const svgHover = this.createModernInfoSVGHover(hotspot.color || '#0099ff', size, { noFill: !!hotspot.noFill });
             const assets = document.querySelector('a-assets') || (function(){ const a=document.createElement('a-assets'); document.querySelector('a-scene').appendChild(a); return a; })();
-            const imgId = 'svg-info-' + hotspot.id;
+            const imgId = 'png-info-' + hotspot.id;
             let img = document.getElementById(imgId);
             if (!img) {
                 img = document.createElement('img');
                 img.id = imgId;
                 img.crossOrigin = 'anonymous';
-                img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+                // В имени файла есть пробел — используем percent-encoding
+                img.src = './icons/icon%20500.png';
                 assets.appendChild(img);
             }
-            const imgHoverId = 'svg-infoH-' + hotspot.id;
-            let imgH = document.getElementById(imgHoverId);
-            if (!imgH) {
-                imgH = document.createElement('img');
-                imgH.id = imgHoverId;
-                imgH.crossOrigin = 'anonymous';
-                imgH.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgHover);
-                assets.appendChild(imgH);
-            }
-            shape.setAttribute('material', { shader: 'flat', src: '#' + imgId, transparent: true, alphaTest: 0.1, side: 'double' });
+            shape.setAttribute('material', { 
+                shader: 'flat', 
+                src: '#' + imgId, 
+                transparent: true, 
+                alphaTest: 0.01,  // Минимальный порог для деталей
+                side: 'double',
+                color: '#FFFFFF', // Белый = без перекраски оригинальных цветов PNG
+                opacity: 1.0      // Полная непрозрачность
+            });
             shape.setAttribute('width', size * 3);
+            shape.setAttribute('height', size * 3);
             shape.setAttribute('height', size * 3);
             shape.setAttribute('billboard', '');
             // Анимации как в редакторе
             shape.setAttribute('animation__float', 'property: position; to: 0 0.3 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine');
             shape.setAttribute('animation__hover_on', 'property: scale; to: 1.3 1.3 1.3; startEvents: hover-on; dur: 300; easing: easeOutElastic');
             shape.setAttribute('animation__hover_off', 'property: scale; to: 1 1 1; startEvents: hover-off; dur: 200; easing: easeInOutQuad');
-            hotspotEl.addEventListener('mouseenter', function(){ shape.setAttribute('material', { shader: 'flat', src: '#' + imgHoverId, transparent: true, alphaTest: 0.1, side: 'double' }); shape.emit('hover-on'); });
-            hotspotEl.addEventListener('mouseleave', function(){ shape.setAttribute('material', { shader: 'flat', src: '#' + imgId, transparent: true, alphaTest: 0.1, side: 'double' }); shape.emit('hover-off'); });
+            hotspotEl.addEventListener('mouseenter', function(){ shape.emit('hover-on'); });
+            hotspotEl.addEventListener('mouseleave', function(){ shape.emit('hover-off'); });
             // Точный коллайдер
             const collider2 = document.createElement('a-circle');
             collider2.setAttribute('radius', Math.max(0.2, size * 0.6));
@@ -1778,7 +1777,6 @@ class TourViewer {
             collider2.setAttribute('material', 'color: #ffffff; opacity: 0; transparent: true; side: double');
             collider2.setAttribute('data-raycastable', '');
             hotspotEl.appendChild(collider2);
-            // Idle-анимация убрана для 1:1 с редактором; оставляем только hover-скейл
         } else {
             // Плоский круглый маркер по умолчанию
             shape = document.createElement('a-circle');
@@ -2435,8 +2433,20 @@ a-scene {
      * Обрабатывает кастомные иконки хотспотов
      */
     async processCustomIcons(projectData, packageFiles) {
-
         const processedIcons = new Set();
+
+        // Всегда добавляем стандартную PNG-иконку инфоточки в пакет экспорта
+        try {
+            const resp = await fetch('styles/icon%20500.png');
+            if (resp && resp.ok) {
+                const blob = await resp.blob();
+                packageFiles['icons/icon 500.png'] = blob;
+            } else {
+                console.warn('Не удалось загрузить styles/icon 500.png для экспорта инфоточек');
+            }
+        } catch (e) {
+            console.warn('Ошибка при добавлении иконки инфоточки в экспорт:', e);
+        }
         for (const scene of projectData.scenes) {
             for (const hotspot of scene.hotspots) {
                 // Поддержка как customIconData (оригинал), так и уже присвоенного пути customIcon

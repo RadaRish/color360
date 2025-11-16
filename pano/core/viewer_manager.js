@@ -1314,9 +1314,10 @@ export default class ViewerManager {
       this._lastHoveredMarker = null;
     }
 
-    // Если мы дошли до сюда, то это клик на пустом месте - показываем обычное контекстное меню
-
-    this.showContextMenu(event.clientX, event.clientY);
+    // Если мы дошли до сюда, то это клик на пустом месте.
+    // ВРЕМЕННО ОТКЛЮЧЕНО по требованию: не показываем меню создания маркеров на сцене по ПКМ
+    // this.showContextMenu(event.clientX, event.clientY);
+    return; // ← временная заглушка: меню по сцене отключено
 
   }
 
@@ -2013,14 +2014,8 @@ export default class ViewerManager {
     // Обработка правого клика для контекстного меню
     this.container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      
-      // Проверяем, включено ли контекстное меню в триальной версии
-      if (!TRIAL_CONFIG.ui.contextMenu) {
-        // В триальной версии контекстное меню отключено
-        return;
-      }
-      
-      this.showContextMenu(e.clientX, e.clientY, e);
+      // ВРЕМЕННО ОТКЛЮЧЕНО по требованию: меню создания маркеров по сцене не открываем
+      return; // ← убрать return для возврата прежнего поведения
     });
 
     // Закрытие контекстного меню при обычном клике
@@ -2070,8 +2065,10 @@ export default class ViewerManager {
         }
 
         // Вызываем событие для main.js
+        // Коррекция 180°: разворачиваем точку клика по Y (x,z -> -x,-z), чтобы маркер появлялся в направлении камеры
+        const corrected = { x: -intersection.x, y: intersection.y, z: -intersection.z };
         const customEvent = new CustomEvent('context-menu-add-hotspot', {
-          detail: { type, position: `${intersection.x} ${intersection.y} ${intersection.z}` }
+          detail: { type, position: `${corrected.x} ${corrected.y} ${corrected.z}` }
         });
         this.container.dispatchEvent(customEvent);
 
@@ -2660,12 +2657,60 @@ export default class ViewerManager {
         try { shape.setAttribute('radius', Math.max(0.01, radius * 0.05)); } catch (_) {}
       }
 
+    } else if (icon === 'sphere' && (hotspot.type === 'info-point' || hotspot.type === 'infopoint')) {
+      // Специальный случай: инфоточка должна использовать точное PNG изображение из styles/icon 500.png
+      // БЕЗ ПЕРЕКРАСКИ — только оригинальные цвета из PNG (серый фон, белая буква "i")
+      shape = document.createElement('a-plane');
+
+      // Создаем уникальный ID для текстуры
+      const textureId = `infopoint-icon-${hotspot.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`;
+
+      // Создаем элемент img для текстуры и добавляем в a-assets
+      let assets = this.aframeScene.querySelector('a-assets');
+      if (!assets) {
+        assets = document.createElement('a-assets');
+        this.aframeScene.appendChild(assets);
+      }
+
+      const img = document.createElement('img');
+      img.id = textureId;
+      // В имени файла есть пробел — кодируем его в %20, чтобы избежать 404
+      img.src = 'styles/icon%20500.png';
+      img.crossOrigin = 'anonymous';
+      img.style.display = 'none';
+      assets.appendChild(img);
+
+      // Настраиваем материал с текстурой после загрузки
+      img.onload = () => {
+        shape.setAttribute('material', {
+          src: `#${textureId}`,
+          transparent: true,
+          alphaTest: 0.01,   // Минимальный порог для максимального сохранения деталей
+          side: 'double',
+          shader: 'flat',    // Flat shader — без освещения и без перекраски
+          color: '#FFFFFF',  // Белый цвет = без изменения оригинальных цветов PNG
+          opacity: 1.0       // Полная непрозрачность
+        });
+      };
+      
+      img.onerror = () => {
+        console.error('❌ Не удалось загрузить icon 500.png для инфоточки:', img.src);
+      };
+
+      // Запоминаем ID ассета для корректной очистки
+      markerEl._assetIds.push(textureId);
+
+      // Размер маркера: делаем чуть больше для лучшей видимости
+      const markerSize = radius * 2.5;  // Увеличен с 2.0 до 2.5
+      shape.setAttribute('width', markerSize);
+      shape.setAttribute('height', markerSize);
     } else {
-      // Создаем современный SVG маркер высокого разрешения
-      // Особый случай: иконка "Круг" (sphere) должна быть стилизованным кругом как в PNG — рисуем специальный круглый маркер
-      const modernMarkerSvg = (icon === 'sphere')
-        ? this.modernMarkerGenerator.createCircleOnlyMarker(1024, { color, noFill: !!hotspot.noFill })
-        : this.modernMarkerGenerator.createModernMarker(hotspot.type, 1024, { color, hotspot, noFill: !!hotspot.noFill });
+      // Создаем современный SVG маркер высокого разрешения (по умолчанию)
+      const modernMarkerSvg = this.modernMarkerGenerator.createModernMarker(
+        hotspot.type,
+        1024,
+        { color, hotspot, noFill: !!hotspot.noFill }
+      );
 
       // Создаем плоскость для SVG маркера
       shape = document.createElement('a-plane');
@@ -2704,12 +2749,12 @@ export default class ViewerManager {
         });
       };
 
-      // Запоминаем ID ассета и blob URL для очистки при удалении
+      // Запоминаем ID ассета и blob URL для последующей очистки
       markerEl._assetIds.push(textureId);
       markerEl._assetUrls.push(url);
 
-  // Устанавливаем размер (скорректированный множитель для соответствия пресетам UI)
-  const markerSize = radius * 2.0;
+      // Размер
+      const markerSize = radius * 2.0;
       shape.setAttribute('width', markerSize);
       shape.setAttribute('height', markerSize);
     }
@@ -2907,8 +2952,8 @@ export default class ViewerManager {
           window._lastTransitionTime = Date.now();
           window.sceneManager.switchToScene(hotspot.targetSceneId);
         } else if (hotspot.type === 'info-point') {
-
-          this.showInfoPointModal(hotspot);
+          // ВРЕМЕННО ОТКЛЮЧЕНО: информационное окно при клике по инфоточке
+          // this.showInfoPointModal(hotspot);
         } else if (hotspot.type === 'video-area') {
           // Клик по видео-области обрабатывается строго внутри createVisualMarker() на самой плоскости.
           // Здесь не дублируем, чтобы избежать двойного play/pause и AbortError.
@@ -4878,7 +4923,7 @@ export default class ViewerManager {
   // Базовые размеры: "Обычный" теперь 0.6 (в 2 раза больше прежнего 0.3)
   hotspotSize: 0.6,
   hotspotColor: '#ffffff',
-  infopointSize: 0.6,
+  infopointSize: 0.3,  // В 2 раза меньше хотспота
   infopointColor: '#ffffff'
     };
   }
@@ -7380,7 +7425,45 @@ export default class ViewerManager {
       console.error('❌ Ошибка получения позиции камеры:', error);
       return null;
     }
-  }  /**
+  }
+
+  /**
+   * Вычисляет позицию для нового маркера в центре видимой области камеры
+   * Использует реальное направление взгляда камеры через THREE.js
+   */
+  getMarkerPositionInCameraView() {
+    try {
+      const camera = this.aframeCamera || 
+        (this.aframeScene && this.aframeScene.querySelector('a-camera')) ||
+        document.querySelector('a-camera');
+      
+      if (!camera || !camera.object3D) {
+        console.warn('Камера не найдена, используем позицию по умолчанию');
+        return { x: 0, y: 0, z: -5 };
+      }
+
+      // Получаем направление взгляда камеры через THREE.js
+      const direction = new THREE.Vector3();
+      camera.object3D.getWorldDirection(direction);
+      
+      // Инвертируем направление (*-1) чтобы маркер появился ПЕРЕД камерой
+      // (т.к. getWorldDirection возвращает направление ИЗ камеры в мир, а нам нужно на сферу)
+      const radius = this.coordinateManager?.sphereRadius || 10;
+      const position = {
+        x: -direction.x * radius,
+        y: -direction.y * radius,
+        z: -direction.z * radius
+      };
+
+      console.log('📍 Позиция маркера в направлении камеры:', position);
+      return position;
+    } catch (error) {
+      console.error('❌ Ошибка вычисления позиции маркера:', error);
+      return { x: 0, y: 0, z: -5 };
+    }
+  }
+
+  /**
    * Устанавливает позицию камеры
    */
   setCameraPosition(cameraData) {

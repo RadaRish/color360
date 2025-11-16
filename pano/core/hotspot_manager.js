@@ -64,9 +64,17 @@ export default class HotspotManager {
       } catch { return t; }
     };
 
-  // Иконка по умолчанию: для хотспотов используем стрелку (современный маркер), если пользователь не выбрал
-  const icon = hotspotData.icon || 'arrow';
-    const customIconData = hotspotData.customIconData || null;
+  // Иконка по умолчанию: для хотспотов - стрелка, для инфоточек - сфера (icon 500.png)
+  let icon = hotspotData.icon;
+  if (!icon) {
+    // Определяем иконку по типу маркера
+    if (hotspotData.type === 'info-point' || hotspotData.type === 'infopoint') {
+      icon = 'sphere';  // Инфоточка использует PNG icon 500.png
+    } else {
+      icon = 'arrow';   // Хотспот использует современную стрелку
+    }
+  }
+  const customIconData = hotspotData.customIconData || null;
 
     const newHotspot = {
       id,

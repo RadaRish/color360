@@ -364,6 +364,10 @@ export default class HotspotEditor {
     const videoSizeSections = this.form.querySelectorAll('.form-section.form-group-video-size');
     const chromaSections = this.form.querySelectorAll('.form-section.form-group-chroma');
     const iframeSections = this.form.querySelectorAll('.form-section.form-group-iframe');
+    
+    // Находим поля иконки и "Без контура" для скрытия в info-point
+    const markerIconGroup = this.form.querySelector('#hotspot-marker-icon')?.closest('.form-group');
+    const markerNoFillGroup = this.form.querySelector('#hotspot-marker-no-fill')?.closest('.form-group');
 
     if (targetSceneGroup) {
       targetSceneGroup.style.display = type === 'hotspot' ? 'block' : 'none';
@@ -372,6 +376,14 @@ export default class HotspotEditor {
     textStyleSections.forEach(section => {
       section.style.display = (type === 'info-point' || type === 'hotspot') ? 'block' : 'none';
     });
+    
+    // СКРЫВАЕМ "Иконка маркера" и "Без контура" для инфоточки
+    if (markerIconGroup) {
+      markerIconGroup.style.display = type === 'info-point' ? 'none' : 'block';
+    }
+    if (markerNoFillGroup) {
+      markerNoFillGroup.style.display = type === 'info-point' ? 'none' : 'block';
+    }
 
     // Видео поля показываем для video-area и animated-object
     const showVideo = (type === 'video-area' || type === 'animated-object');

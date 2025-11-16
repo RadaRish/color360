@@ -316,59 +316,69 @@ document.addEventListener('DOMContentLoaded', () => {
       const addInfopointBtn = document.getElementById('add-infopoint-btn');
       
       if (addHotspotBtn) {
-        addHotspotBtn.onclick = () => {
+        addHotspotBtn.onclick = async () => {
           const currentScene = sceneManager.getCurrentScene();
           if (!currentScene) {
             alert('Нет активной сцены для добавления хотспота');
             return;
           }
 
-          // Вычисляем позицию в центре текущего вида камеры
+          // Показываем панель настроек ПЕРЕД созданием маркера
+          const scenes = sceneManager.getAllScenes();
+          let editorData = null;
           try {
-            const cam = viewerManager && typeof viewerManager.getCameraPosition === 'function' ? viewerManager.getCameraPosition() : null;
-            let posObj = { x: 0, y: 0, z: -5 };
-            if (cam && viewerManager && viewerManager.coordinateManager && typeof viewerManager.coordinateManager.sphericalToCartesian === 'function') {
-              const deg2rad = Math.PI / 180;
-              const yaw = (cam.rotation && (cam.rotation.y != null)) ? cam.rotation.y * deg2rad : 0;
-              const pitch = (cam.rotation && (cam.rotation.x != null)) ? cam.rotation.x * deg2rad : 0;
-              const radius = viewerManager.coordinateManager.sphereRadius || 10;
-              posObj = viewerManager.coordinateManager.sphericalToCartesian(yaw, pitch, radius);
-            }
+            editorData = await hotspotEditor.show({
+              type: 'hotspot',
+              scenes: scenes.filter(s => s.id !== currentScene.id)
+            });
+          } catch (e) {
+            console.error('Ошибка открытия редактора хотспота:', e);
+          }
+          
+          // Если пользователь отменил редактирование - не создаем маркер
+          if (!editorData) return;
 
-            hotspotManager.addHotspot(currentScene, { type: 'hotspot', position: posObj });
+          // Вычисляем позицию в центре видимой области камеры
+          try {
+            const posObj = viewerManager.getMarkerPositionInCameraView();
+            hotspotManager.addHotspot(currentScene, { ...editorData, type: 'hotspot', position: posObj });
           } catch (err) {
             console.error('Ошибка при добавлении хотспота в центре вида:', err);
-            // fallback
-            hotspotManager.addHotspot(currentScene, { type: 'hotspot', position: { x: 0, y: 0, z: -5 } });
+            hotspotManager.addHotspot(currentScene, { ...editorData, type: 'hotspot', position: { x: 0, y: 0, z: -5 } });
           }
         };
       }
-      
+
       if (addInfopointBtn) {
-        addInfopointBtn.onclick = () => {
+        addInfopointBtn.onclick = async () => {
           const currentScene = sceneManager.getCurrentScene();
           if (!currentScene) {
             alert('Нет активной сцены для добавления инфоточки');
             return;
           }
 
-          // Вычисляем позицию в центре текущего вида камеры
+          // Показываем панель настроек ПЕРЕД созданием маркера
+          const scenes = sceneManager.getAllScenes();
+          let editorData = null;
           try {
-            const cam = viewerManager && typeof viewerManager.getCameraPosition === 'function' ? viewerManager.getCameraPosition() : null;
-            let posObj = { x: 0, y: 0, z: -5 };
-            if (cam && viewerManager && viewerManager.coordinateManager && typeof viewerManager.coordinateManager.sphericalToCartesian === 'function') {
-              const deg2rad = Math.PI / 180;
-              const yaw = (cam.rotation && (cam.rotation.y != null)) ? cam.rotation.y * deg2rad : 0;
-              const pitch = (cam.rotation && (cam.rotation.x != null)) ? cam.rotation.x * deg2rad : 0;
-              const radius = viewerManager.coordinateManager.sphereRadius || 10;
-              posObj = viewerManager.coordinateManager.sphericalToCartesian(yaw, pitch, radius);
-            }
+            editorData = await hotspotEditor.show({
+              type: 'info-point',
+              scenes: scenes.filter(s => s.id !== currentScene.id)
+            });
+          } catch (e) {
+            console.error('Ошибка открытия редактора инфоточки:', e);
+          }
+          
+          // Если пользователь отменил редактирование - не создаем маркер
+          if (!editorData) return;
 
-            hotspotManager.addHotspot(currentScene, { type: 'info-point', position: posObj });
+          // Вычисляем позицию в центре видимой области камеры
+          try {
+            const posObj = viewerManager.getMarkerPositionInCameraView();
+            hotspotManager.addHotspot(currentScene, { ...editorData, type: 'info-point', position: posObj });
           } catch (err) {
             console.error('Ошибка при добавлении инфоточки в центре вида:', err);
-            // fallback
-            hotspotManager.addHotspot(currentScene, { type: 'info-point', position: { x: 0, y: 0, z: -5 } });
+            hotspotManager.addHotspot(currentScene, { ...editorData, type: 'info-point', position: { x: 0, y: 0, z: -5 } });
           }
         };
       }
